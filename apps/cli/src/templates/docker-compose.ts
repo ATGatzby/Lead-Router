@@ -52,7 +52,7 @@ export function renderDockerCompose(c: ComposeConfig): string {
 
   const webService = `
   web:
-    image: ghcr.io/lead-routing/web:latest
+    image: ghcr.io/atgatzby/lead-routing-web:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:${webPort}:3000"
@@ -66,7 +66,7 @@ export function renderDockerCompose(c: ComposeConfig): string {
 
   const engineService = `
   engine:
-    image: ghcr.io/lead-routing/engine:latest
+    image: ghcr.io/atgatzby/lead-routing-engine:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:${enginePort}:3001"

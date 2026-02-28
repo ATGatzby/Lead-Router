@@ -1127,7 +1127,24 @@ apps/cli/
 
 ## 16. Docker Images
 
-Production Docker images are built for `apps/web` and `apps/engine`. They are published to `ghcr.io/lead-routing/` and pulled by the CLI's Docker Compose configuration.
+Production Docker images are built for `apps/web` and `apps/engine`. They are published to GitHub Container Registry (ghcr.io) and pulled automatically by the CLI-generated Docker Compose configuration. Customers do not need a GitHub account or credentials — the packages are public.
+
+### Registry & Image Names
+
+| Image | Registry URL |
+|---|---|
+| Web (Next.js) | `ghcr.io/atgatzby/lead-routing-web:latest` |
+| Engine (Fastify) | `ghcr.io/atgatzby/lead-routing-engine:latest` |
+
+### CI/CD — GitHub Actions
+
+Workflow file: `.github/workflows/publish-images.yml`
+
+Triggers:
+- Push to `main` → publishes `:latest` and `:<branch>` tags
+- Push of a `v*` tag → publishes `:<version>` and `:<major>.<minor>` tags
+
+Uses `GITHUB_TOKEN` (no extra secrets required). Packages must be set to **Public** in GitHub UI after the first push (`github.com/<owner> → Packages → lead-routing-web/engine → Package settings → Change visibility → Public`). Caches Docker layers with `type=gha` for faster subsequent builds.
 
 ### Key Design Decisions
 
