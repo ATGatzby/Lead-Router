@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, cpSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { intro, outro, text, spinner, log, note } from '@clack/prompts'
 import chalk from 'chalk'
@@ -17,21 +18,35 @@ function patchXml(content: string, tag: string, value: string): string {
 export async function runSfdcDeploy(): Promise<void> {
   intro('Lead Routing — Deploy Salesforce Package')
 
-  // ── 1. Find install dir ────────────────────────────────────────────────────
+  // ── 1. Resolve appUrl + engineUrl ──────────────────────────────────────────
+  // Prefer lead-routing.json if found; otherwise prompt (supports running sfdc
+  // deploy from a laptop after init ran on a remote VPS).
+  let appUrl: string
+  let engineUrl: string
+
   const dir = findInstallDir()
-  if (!dir) {
-    log.error('No lead-routing installation found in the current directory.')
-    log.info('Run `lead-routing init` first, or cd into your installation directory.')
-    process.exit(1)
-  }
+  const config = dir ? readConfig(dir) : null
 
-  const config = readConfig(dir)
-  if (!config) {
-    log.error('Could not read lead-routing.json — please re-run `lead-routing init`.')
-    process.exit(1)
-  }
+  if (config?.appUrl && config?.engineUrl) {
+    appUrl = config.appUrl
+    engineUrl = config.engineUrl
+    log.info(`Using config from ${dir}/lead-routing.json`)
+  } else {
+    log.warn('No lead-routing.json found — enter the URLs from your installation.')
+    const rawApp = await text({
+      message: 'App URL (e.g. https://leads.acme.com)',
+      validate: (v) => (!v ? 'Required' : undefined),
+    })
+    if (typeof rawApp === 'symbol') process.exit(0)
+    appUrl = (rawApp as string).trim()
 
-  const { engineUrl, appUrl } = config
+    const rawEngine = await text({
+      message: 'Engine URL (e.g. https://engine.acme.com or https://acme.com:3001)',
+      validate: (v) => (!v ? 'Required' : undefined),
+    })
+    if (typeof rawEngine === 'symbol') process.exit(0)
+    engineUrl = (rawEngine as string).trim()
+  }
 
   // ── 2. Check sf CLI ────────────────────────────────────────────────────────
   const s = spinner()
@@ -80,7 +95,7 @@ export async function runSfdcDeploy(): Promise<void> {
 
   // Source: bundled inside the CLI dist (dist/sfdc-package)
   const bundledPkg = join(__dirname, '..', 'sfdc-package')
-  const destPkg = join(dir, 'sfdc-package')
+  const destPkg = join(dir ?? tmpdir(), 'lead-routing-sfdc-package')
 
   if (!existsSync(bundledPkg)) {
     s.stop('sfdc-package not found in CLI bundle')

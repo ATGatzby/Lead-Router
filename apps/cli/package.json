@@ -13,8 +13,7 @@
     "type-check": "tsc --noEmit"
   },
   "files": [
-    "dist/",
-    "sfdc-package/"
+    "dist/"
   ],
   "dependencies": {
     "@clack/prompts": "^0.9.1",

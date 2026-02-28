@@ -48,8 +48,7 @@ Lead Routing automatically assigns incoming Salesforce records (Leads, Contacts,
 │  LeadTrigger (after insert/update)                              │
 │       ↓ @future(callout=true)                                   │
 │  RoutingEngineCallout → HMAC sign → POST /route                 │
-│       ↑                                                          │
-│  Named Credential: callout:RoutingEngine                        │
+│       ↑  (endpoint read from Routing_Settings__c.Engine_Endpoint__c) │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ HTTPS (via ngrok in dev, direct in prod)
                            ↓
@@ -618,7 +617,8 @@ trigger LeadTrigger on Lead (after insert, after update) {
 - Queries all fields for each record dynamically (Schema.getGlobalDescribe)
 - Calls `RoutingPayloadBuilder.build()` to construct JSON payload
 - Signs payload with HMAC-SHA256 using `Webhook_Secret__c`
-- Sends `POST callout:RoutingEngine/route` with header `X-Signature-256: sha256=<hex>`
+- Reads `Engine_Endpoint__c` from `Routing_Settings__c` and posts to `{engineEndpoint}/route` directly (no Named Credential URL dependency)
+- Sends header `X-Signature-256: sha256=<hex>`
 - Any non-200/202 response → inserts `Routing_Error_Log__c` record
 
 ### Payload Schema (JSON sent from Apex to Engine)
@@ -652,8 +652,7 @@ trigger LeadTrigger on Lead (after insert, after update) {
 | Update Enabled | Lead_Update_Enabled__c | Checkbox | Route on Lead updates (⚠️ can loop — see §17) |
 | Webhook Secret | Webhook_Secret__c | Text(255) | Must match `Organization.webhookSecret` in DB |
 | App URL | App_Url__c | Text(255) | Web app base URL — read by `OnboardingController` and `onboardingWizard` LWC; written by `lead-routing sfdc deploy` and `pushSettings()` |
-| Engine Endpoint | Engine_Endpoint__c | Text(255) | Routing engine URL — written by `lead-routing sfdc deploy` and `pushSettings()` |
-| Engine Endpoint | Engine_Endpoint__c | Text(255) | Informational — actual endpoint is in Named Credential |
+| Engine Endpoint | Engine_Endpoint__c | Text(255) | Routing engine public URL — written by `lead-routing sfdc deploy`; read at callout time by `RoutingEngineCallout` and `OnboardingController.sendTestEvent()` |
 
 Configure via: Setup → Custom Settings → Routing Settings → Manage → **New** (Org Default)
 
@@ -677,9 +676,9 @@ Captures all non-200 responses from the routing engine for debugging:
 <protocol>NoAuthentication</protocol>
 ```
 
-Used in Apex as: `req.setEndpoint('callout:RoutingEngine/route')`
+**Note:** The Named Credential is no longer used for HTTP callouts. `RoutingEngineCallout` and `OnboardingController.sendTestEvent()` now read the engine URL directly from `Routing_Settings__c.Engine_Endpoint__c` (set by `lead-routing sfdc deploy` via `sf data update record`). This avoids the Salesforce Metadata API reliability issue where `<endpoint>` changes in Named Credential XML were silently ignored on re-deploy.
 
-The `<endpoint>` is set to a placeholder in the committed XML. `lead-routing sfdc deploy` patches it to the customer's actual `engineUrl` before running `sf project deploy start`. Additionally, `pushSettings()` (called after OAuth connect) re-syncs the Named Credential via jsforce Metadata API.
+The Named Credential XML is still deployed (and its `<endpoint>` patched) for completeness, but it is not used in the callout path.
 
 ### Remote Site Settings
 
@@ -1263,7 +1262,8 @@ Paste into SFDC Setup → Custom Settings → Routing Settings → Manage → `W
 - **PKCE**: Salesforce Connected Apps with "Require Proof Key for Code Exchange" enabled reject auth requests without `code_challenge`. `getSfdcAuthUrl(codeChallenge?)` in `packages/sfdc/src/client.ts` now accepts an optional challenge; `generatePkceVerifier()` / `generatePkceChallenge()` generate the pair. The login route stores `codeVerifier` in `session.sfdcCodeVerifier` (iron-session); the callback reads it, clears it, and passes it to `exchangeCodeForTokens(code, codeVerifier?)`. Token exchange is now done via raw `fetch` to `/services/oauth2/token` (jsforce's `conn.authorize()` doesn't support `code_verifier`).
 - **`POST /api/fields/sync` auth**: This endpoint is called by Apex (server-to-server callout), not from a browser — there is no iron-session cookie. The route now authenticates via `X-Sfdc-Org-Id` header (sent by `OnboardingController.syncFieldSchema`) and looks up the org by `sfdcOrgId`. Previously it used `getActorFromHeaders()` (which reads `x-org-id` injected by middleware), causing a "Missing auth headers" 500 on every sync attempt.
 - **Apex callout endpoints must be in `PUBLIC_PREFIXES`**: `proxy.ts` (Next.js middleware) blocks all unauthenticated requests. Salesforce Apex callouts carry no iron-session cookie. Any endpoint called from Apex must be listed in `PUBLIC_PREFIXES`. Currently: `/api/setup/` (status + onboarding-done) and `/api/fields/sync`.
-- **Engine MUST be on a public URL**: The Apex trigger calls `callout:RoutingEngine/route` via Named Credential. Salesforce cannot reach `localhost:3001`. For local dev, use `ssh -R 80:localhost:3001 localhost.run` to get a public HTTPS tunnel (URL changes on restart — update `lead-routing.json` `engineUrl` and re-run `sf data update record` + metadata deploy for the Named Credential and Remote Site Setting). For production, the engine should be on a stable public URL.
+- **Engine MUST be on a public URL**: The Apex trigger reads `Engine_Endpoint__c` from `Routing_Settings__c` and calls the engine directly. Salesforce cannot reach `localhost:3001`. For local dev, use `ssh -R 80:localhost:3001 localhost.run` to get a public HTTPS tunnel (URL changes on restart — update `lead-routing.json` `engineUrl` and re-run `lead-routing sfdc deploy` to update `Engine_Endpoint__c` and the Remote Site Setting). For production, the engine should be on a stable public URL.
+- **Named Credential URL not updated by Metadata API re-deploy**: Salesforce's Metadata API silently ignores `<endpoint>` changes in Named Credential XML when the credential already exists. This is why `RoutingEngineCallout` was migrated to read the engine URL from `Routing_Settings__c.Engine_Endpoint__c` (updated reliably via `sf data update record`) rather than using `callout:RoutingEngine/route`.
 - **`appUrl` leading space**: `@clack/prompts text()` does not trim input. A pasted URL with a leading space propagates to `.env.web` `APP_URL` / `SFDC_REDIRECT_URI` and `lead-routing.json`. Fixed in `collect-config.ts` with `.trim()` on `appUrl`.
 
 ### Engine Dev Command

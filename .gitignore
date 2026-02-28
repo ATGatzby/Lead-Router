@@ -5,3 +5,10 @@ dist
 *.env
 *.env.local
 .DS_Store
+
+# Salesforce source tracking state
+.sf/
+
+# CLI intermediate + pack artifacts
+apps/cli/sfdc-package/
+apps/cli/*.tgz

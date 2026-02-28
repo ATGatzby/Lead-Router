@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
-    <customSettingsType>Hierarchy</customSettingsType>
-    <description>Controls which objects and events are routed by the Lead Router engine.</description>
-    <enableFeeds>false</enableFeeds>
-    <label>Routing Settings</label>
-    <visibility>Public</visibility>
-</CustomObject>
