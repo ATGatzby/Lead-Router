@@ -1,0 +1,30 @@
+{
+  "name": "@lead-routing/cli",
+  "version": "0.1.0",
+  "description": "Self-hosted deployment CLI for Lead Routing",
+  "type": "module",
+  "bin": {
+    "lead-routing": "./dist/index.js"
+  },
+  "scripts": {
+    "prepare": "node -e \"const{cpSync,existsSync,rmSync}=require('fs');const src='../../sfdc-package';if(existsSync(src)){rmSync('sfdc-package',{recursive:true,force:true});cpSync(src,'sfdc-package',{recursive:true})}\"",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "files": [
+    "dist/",
+    "sfdc-package/"
+  ],
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "execa": "^9.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.9.3"
+  }
+}

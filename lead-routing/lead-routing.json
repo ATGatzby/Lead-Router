@@ -1,0 +1,11 @@
+{
+  "appUrl": "https://jalen-cultured-madden.ngrok-free.dev",
+  "engineUrl": "https://396ac1b8f51d21.lhr.life",
+  "installDir": "/Users/aruntyagi/Claude Code Projects/Lead Routing CLI/lead-routing",
+  "dockerManaged": {
+    "db": true,
+    "redis": true
+  },
+  "installedAt": "2026-02-28T15:54:04.106Z",
+  "version": "0.1.0"
+}

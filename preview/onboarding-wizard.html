@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Router — Setup Wizard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8fafc;--surface:#ffffff;--border:#e2e8f0;--border-subtle:#f1f5f9;
+  --text-primary:#0f172a;--text-secondary:#64748b;--text-tertiary:#94a3b8;
+  --accent:#2563eb;--accent-hover:#1d4ed8;--accent-light:#eff6ff;
+  --green:#22c55e;--green-light:#f0fdf4;--green-dark:#15803d;
+  --destructive:#ef4444;--amber:#f59e0b;
+  --radius:8px;--radius-sm:6px;--radius-full:9999px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.08),0 1px 3px rgba(0,0,0,0.06);
+  --shadow-lg:0 8px 32px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);
+  --font:'DM Sans',sans-serif;
+  --transition:150ms cubic-bezier(0.4,0,0.2,1);
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text-primary);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── Nav header ── */
+.nav-header{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:10}
+.nav-logo{display:flex;align-items:center;gap:9px}
+.logo-icon{width:28px;height:28px;background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);border-radius:7px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:14px;height:14px}
+.logo-name{font-weight:600;font-size:15px;letter-spacing:-0.01em;color:var(--text-primary)}
+.nav-center{position:absolute;left:50%;transform:translateX(-50%);font-size:13.5px;font-weight:500;color:var(--text-secondary)}
+.nav-skip{font-size:13px;color:var(--text-tertiary);cursor:pointer;transition:color var(--transition);text-decoration:none}
+.nav-skip:hover{color:var(--text-primary)}
+
+/* ── Page ── */
+.page{min-height:calc(100vh - 56px);display:flex;align-items:center;justify-content:center;padding:40px 20px}
+
+/* ── Wizard card ── */
+.wizard{width:100%;max-width:600px;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg);overflow:hidden}
+.wizard-header{padding:28px 32px 0}
+
+/* ── Progress steps ── */
+.steps-wrap{position:relative;margin-bottom:32px}
+.steps-track{position:absolute;top:14px;left:24px;right:24px;height:2px;background:var(--border)}
+.steps-progress{position:absolute;top:14px;left:24px;height:2px;background:var(--accent);transition:width 0.5s cubic-bezier(0.4,0,0.2,1)}
+.steps-row{display:flex;justify-content:space-between;position:relative}
+.step-item{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1}
+.step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:2px solid var(--border);background:var(--surface);position:relative;z-index:1;transition:all 0.3s}
+.step-dot.done{background:var(--accent);border-color:var(--accent);color:white}
+.step-dot.active{background:var(--surface);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px rgba(37,99,235,0.12)}
+.step-dot.upcoming{background:var(--surface);border-color:var(--border);color:var(--text-tertiary)}
+.step-label{font-size:11.5px;font-weight:500;color:var(--text-tertiary);text-align:center;white-space:nowrap}
+.step-label.done,.step-label.active{color:var(--text-primary)}
+
+/* ── Divider ── */
+.step-divider{height:1px;background:var(--border);margin:0 32px}
+
+/* ── Step panels ── */
+.step-panel{padding:28px 32px 32px;display:none}
+.step-panel.active{display:block}
+
+/* ── Section labels ── */
+.step-num{font-size:11.5px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
+.step-title{font-size:19px;font-weight:600;letter-spacing:-0.01em;margin-bottom:4px}
+.step-desc{font-size:13.5px;color:var(--text-secondary);margin-bottom:20px}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:0 18px;height:38px;border-radius:var(--radius);font-family:var(--font);font-size:13.5px;font-weight:500;cursor:pointer;transition:all var(--transition);border:1px solid transparent;white-space:nowrap;line-height:1}
+.btn svg{width:14px;height:14px;flex-shrink:0}
+.btn-primary{background:var(--accent);color:white;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-outline{background:var(--surface);color:var(--text-primary);border-color:var(--border);box-shadow:var(--shadow-sm)}
+.btn-outline:hover{background:var(--bg)}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:transparent}
+.btn-ghost:hover{color:var(--text-primary)}
+.btn-sm{height:32px;padding:0 12px;font-size:13px}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-row{display:flex;align-items:center;gap:10px;margin-top:24px}
+.btn-row.centered{justify-content:center}
+
+/* ── Step 1 — Connect ── */
+.connect-btn-wrap{display:flex;justify-content:center;margin-bottom:20px}
+.polling-state{display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 0}
+.spinner{width:24px;height:24px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+.polling-text{font-size:13.5px;color:var(--text-secondary)}
+.success-banner{display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:10px;border:1px solid #bbf7d0;background:var(--green-light);margin-bottom:20px}
+.success-icon{width:22px;height:22px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.success-icon svg{color:white}
+.success-msg{font-size:13.5px;font-weight:500;color:var(--green-dark)}
+.success-sub{font-size:12px;color:#166534;margin-top:1px;font-family:'DM Mono',monospace}
+
+/* ── Step 2 — Objects ── */
+.objects-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px}
+.obj-card{border:1.5px solid var(--border);border-radius:10px;padding:14px;transition:border-color var(--transition),background var(--transition)}
+.obj-card.enabled{border-color:#bfdbfe;background:#f0f6ff}
+.obj-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.obj-name{font-size:13.5px;font-weight:600}
+.toggle{width:34px;height:19px;border-radius:var(--radius-full);background:#e2e8f0;position:relative;cursor:pointer;transition:background var(--transition);border:none;flex-shrink:0;padding:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform var(--transition)}
+.toggle.on::after{transform:translateX(15px)}
+.obj-events{display:flex;flex-direction:column;gap:6px}
+.event-check{display:flex;align-items:center;gap:7px;cursor:pointer;opacity:1;transition:opacity var(--transition)}
+.event-check.disabled{opacity:0.35;pointer-events:none}
+.checkbox{width:15px;height:15px;border:1.5px solid #cbd5e1;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);flex-shrink:0}
+.checkbox.checked{background:var(--accent);border-color:var(--accent)}
+.checkbox svg{width:9px;height:9px;color:white;display:none}
+.checkbox.checked svg{display:block}
+.event-label{font-size:12.5px;color:var(--text-secondary)}
+.save-note{font-size:12.5px;color:var(--green-dark);display:flex;align-items:center;gap:5px}
+
+/* ── Step 3 — Sync ── */
+.sync-results{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.sync-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg)}
+.sync-item.success{border-color:#bbf7d0;background:var(--green-light)}
+.sync-item.loading{border-color:var(--border);background:var(--surface)}
+.sync-item.skipped{border-color:var(--border);background:var(--surface);opacity:0.55}
+.sync-left{display:flex;align-items:center;gap:10px}
+.sync-obj-name{font-size:13.5px;font-weight:500}
+.sync-status{font-size:12.5px;color:var(--text-tertiary)}
+.sync-status.green{color:var(--green-dark)}
+.sync-check{width:18px;height:18px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sync-check svg{color:white}
+.shimmer{display:inline-block;width:80px;height:12px;border-radius:4px;background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sync-btn-row{display:flex;align-items:center;gap:12px;margin-bottom:0}
+
+/* ── Step 4 — Done ── */
+.done-content{display:flex;flex-direction:column;align-items:center;text-align:center;padding:12px 0 8px}
+.done-icon{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 8px 24px rgba(34,197,94,0.3)}
+.done-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin-bottom:8px}
+.done-desc{font-size:14px;color:var(--text-secondary);max-width:340px;line-height:1.6;margin-bottom:24px}
+.done-pills{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:24px}
+.done-pill{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-full);background:var(--bg);border:1px solid var(--border);font-size:12px;font-weight:500;color:var(--text-secondary)}
+.done-pill svg{color:var(--green)}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;z-index:100;background:var(--text-primary);color:white;padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow-lg);transition:opacity 0.25s,transform 0.25s;opacity:1}
+.toast.hidden{opacity:0;transform:translateY(6px);pointer-events:none}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin-sm{animation:spin 0.8s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+
+<!-- Nav header -->
+<div class="nav-header">
+  <div class="nav-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+        <path d="M2 4h5M2 8h8M2 12h5M11 7l3 1-3 1"/>
+      </svg>
+    </div>
+    <span class="logo-name">Lead Router</span>
+  </div>
+  <div class="nav-center">Setup Wizard</div>
+  <a class="nav-skip" href="#">Skip Setup →</a>
+</div>
+
+<!-- Page -->
+<div class="page">
+  <div class="wizard">
+    <!-- Progress steps -->
+    <div class="wizard-header">
+      <div class="steps-wrap">
+        <div class="steps-track"></div>
+        <div class="steps-progress" id="steps-progress" style="width:0%"></div>
+        <div class="steps-row">
+          <div class="step-item">
+            <div class="step-dot upcoming" id="dot-1"><span id="dot-label-1">1</span></div>
+            <div class="step-label upcoming" id="label-1">Connect Org</div>
+          </div>
+          <div class="step-item">
+            <div class="step-dot upcoming" id="dot-2"><span id="dot-label-2">2</span></div>
+            <div class="step-label upcoming" id="label-2">Activate Objects</div>
+          </div>
+          <div class="step-item">
+            <div class="step-dot upcoming" id="dot-3"><span id="dot-label-3">3</span></div>
+            <div class="step-label upcoming" id="label-3">Sync Fields</div>
+          </div>
+          <div class="step-item">
+            <div class="step-dot upcoming" id="dot-4"><span id="dot-label-4">4</span></div>
+            <div class="step-label upcoming" id="label-4">Done</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-divider"></div>
+
+    <!-- ─── Step 1: Connect Org ─────────────────────────── -->
+    <div class="step-panel active" id="panel-1">
+      <div class="step-num">Step 1 of 4</div>
+      <h2 class="step-title">Connect Your Org</h2>
+      <p class="step-desc">Authorise Lead Router to access your Salesforce org via OAuth 2.0.</p>
+
+      <!-- Initial state -->
+      <div id="connect-initial">
+        <div class="connect-btn-wrap">
+          <button class="btn btn-primary" onclick="startConnect()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:15px;height:15px"><rect x="2" y="5" width="12" height="9" rx="2"/><path d="M5 5V4a3 3 0 0 1 6 0v1"/></svg>
+            Connect to Lead Router
+          </button>
+        </div>
+        <p style="text-align:center;font-size:12.5px;color:var(--text-tertiary)">Opens Salesforce OAuth in a new window</p>
+      </div>
+
+      <!-- Polling state -->
+      <div id="connect-polling" style="display:none">
+        <div class="polling-state">
+          <div class="spinner"></div>
+          <p class="polling-text">Waiting for authorisation… (checking every 3s)</p>
+          <p style="font-size:12px;color:var(--text-tertiary)">Complete the OAuth flow in the window that opened.</p>
+        </div>
+      </div>
+
+      <!-- Connected state -->
+      <div id="connect-success" style="display:none">
+        <div class="success-banner">
+          <div class="success-icon">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+          </div>
+          <div>
+            <div class="success-msg">Salesforce org connected successfully</div>
+            <div class="success-sub">Acme Corp · 00D5g000001XyZEAAA</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="goToStep(2)">
+            Next: Activate Objects
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Step 2: Activate Objects ───────────────────── -->
+    <div class="step-panel" id="panel-2">
+      <div class="step-num">Step 2 of 4</div>
+      <h2 class="step-title">Activate Objects &amp; Triggers</h2>
+      <p class="step-desc">Select which objects and events should trigger routing in your org.</p>
+
+      <div class="objects-grid" id="objects-grid">
+        <!-- Lead -->
+        <div class="obj-card enabled" id="card-lead">
+          <div class="obj-card-header">
+            <span class="obj-name">Lead</span>
+            <button class="toggle on" id="toggle-lead" onclick="toggleObj('lead')"></button>
+          </div>
+          <div class="obj-events" id="events-lead">
+            <label class="event-check">
+              <div class="checkbox checked" id="cb-lead-insert"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Insert</span>
+            </label>
+            <label class="event-check">
+              <div class="checkbox checked" id="cb-lead-update"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Update</span>
+            </label>
+          </div>
+        </div>
+        <!-- Contact -->
+        <div class="obj-card enabled" id="card-contact">
+          <div class="obj-card-header">
+            <span class="obj-name">Contact</span>
+            <button class="toggle on" id="toggle-contact" onclick="toggleObj('contact')"></button>
+          </div>
+          <div class="obj-events" id="events-contact">
+            <label class="event-check">
+              <div class="checkbox checked" id="cb-contact-insert"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Insert</span>
+            </label>
+            <label class="event-check">
+              <div class="checkbox" id="cb-contact-update"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Update</span>
+            </label>
+          </div>
+        </div>
+        <!-- Account -->
+        <div class="obj-card" id="card-account">
+          <div class="obj-card-header">
+            <span class="obj-name">Account</span>
+            <button class="toggle" id="toggle-account" onclick="toggleObj('account')"></button>
+          </div>
+          <div class="obj-events disabled" id="events-account">
+            <label class="event-check disabled">
+              <div class="checkbox" id="cb-account-insert"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Insert</span>
+            </label>
+            <label class="event-check disabled">
+              <div class="checkbox" id="cb-account-update"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 5l2.5 2.5L8 3"/></svg></div>
+              <span class="event-label">On Update</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="step2-msg" style="display:none;margin-bottom:16px">
+        <span class="save-note">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+          Settings saved
+        </span>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-sm" onclick="goToStep(1)">← Back</button>
+        <button class="btn btn-outline btn-sm" onclick="sendTestEvent()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8l10-5-5 10-1.5-4.5L2 8z"/></svg>
+          Send Test Event
+        </button>
+        <button class="btn btn-primary" onclick="saveSettings()">
+          Save &amp; Next
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── Step 3: Sync Fields ────────────────────────── -->
+    <div class="step-panel" id="panel-3">
+      <div class="step-num">Step 3 of 4</div>
+      <h2 class="step-title">Sync Field Schema</h2>
+      <p class="step-desc">Pull your Salesforce field definitions into Lead Router so you can build routing conditions.</p>
+
+      <div class="sync-results" id="sync-results">
+        <!-- populated by JS -->
+      </div>
+
+      <div class="sync-btn-row">
+        <button class="btn btn-primary" id="sync-btn" onclick="startSync()">
+          <svg id="sync-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13.5 3.5A6.5 6.5 0 0 0 2 8"/><path d="M2.5 12.5A6.5 6.5 0 0 0 14 8"/><path d="M2 5.5V2.5H5"/><path d="M14 10.5v3H11"/></svg>
+          Sync Fields
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="goToStep(2)">← Back</button>
+      </div>
+
+      <div id="sync-next" style="display:none;margin-top:16px">
+        <button class="btn btn-primary" onclick="goToStep(4)">
+          Next: Finish Setup
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── Step 4: Done ────────────────────────────────── -->
+    <div class="step-panel" id="panel-4">
+      <div class="done-content">
+        <div class="done-icon">
+          <svg width="30" height="30" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+        </div>
+        <h2 class="done-title">You're all set!</h2>
+        <p class="done-desc">Lead Router is connected to your Salesforce org and ready to route records automatically.</p>
+
+        <div class="done-pills">
+          <div class="done-pill">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+            Org connected
+          </div>
+          <div class="done-pill">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+            Triggers active
+          </div>
+          <div class="done-pill">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+            216 fields synced
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="openApp()" style="font-size:14.5px;height:42px;padding:0 24px">
+          Open Lead Router
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 3H3v10h10V9M9 2h5v5M14 2L7 9"/></svg>
+        </button>
+
+        <p style="margin-top:16px;font-size:12.5px;color:var(--text-tertiary)">Start by building your first routing rule →</p>
+      </div>
+    </div>
+
+  </div><!-- /wizard -->
+</div><!-- /page -->
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let currentStep = 1;
+const objState = {
+  lead:    { on: true,  insert: true,  update: true  },
+  contact: { on: true,  insert: true,  update: false },
+  account: { on: false, insert: false, update: false }
+};
+const syncState = {
+  LEAD:    { status: 'pending', synced: 0 },
+  CONTACT: { status: 'pending', synced: 0 },
+  ACCOUNT: { status: 'skipped', synced: 0 }
+};
+
+// ─── Step navigation ─────────────────────────────────────────────────────────
+function goToStep(n) {
+  // Hide current, show new
+  document.getElementById('panel-'+currentStep).classList.remove('active');
+  document.getElementById('panel-'+n).classList.add('active');
+  currentStep = n;
+  updateProgress();
+  window.scrollTo({top:0,behavior:'smooth'});
+  if (n === 3) initSyncResults();
+}
+
+function updateProgress() {
+  const n = currentStep;
+  const pct = [0, 0, 33.3, 66.6, 100][n];
+  document.getElementById('steps-progress').style.width = pct + '%';
+
+  for (let i = 1; i <= 4; i++) {
+    const dot = document.getElementById('dot-'+i);
+    const lbl = document.getElementById('label-'+i);
+    const dotLabel = document.getElementById('dot-label-'+i);
+    dot.className = 'step-dot ' + (i < n ? 'done' : i === n ? 'active' : 'upcoming');
+    lbl.className = 'step-label ' + (i < n ? 'done' : i === n ? 'active' : 'upcoming');
+    if (i < n) {
+      dotLabel.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>`;
+    } else {
+      dotLabel.textContent = i;
+    }
+  }
+}
+
+// ─── Step 1 ───────────────────────────────────────────────────────────────────
+function startConnect() {
+  document.getElementById('connect-initial').style.display = 'none';
+  document.getElementById('connect-polling').style.display = 'block';
+  // Simulate OAuth polling — resolves after 2.5s
+  setTimeout(() => {
+    document.getElementById('connect-polling').style.display = 'none';
+    document.getElementById('connect-success').style.display = 'block';
+  }, 2500);
+}
+
+// ─── Step 2 ───────────────────────────────────────────────────────────────────
+function toggleObj(obj) {
+  objState[obj].on = !objState[obj].on;
+  const card = document.getElementById('card-'+obj);
+  const toggle = document.getElementById('toggle-'+obj);
+  const events = document.getElementById('events-'+obj);
+  card.classList.toggle('enabled', objState[obj].on);
+  toggle.classList.toggle('on', objState[obj].on);
+  events.querySelectorAll('.event-check').forEach(ec => {
+    ec.classList.toggle('disabled', !objState[obj].on);
+  });
+  // Update sync state
+  syncState[obj.toUpperCase()].status = objState[obj].on ? 'pending' : 'skipped';
+}
+
+function toggleCheck(obj, event) {
+  objState[obj][event] = !objState[obj][event];
+  const cb = document.getElementById(`cb-${obj}-${event}`);
+  cb.classList.toggle('checked', objState[obj][event]);
+}
+
+// Make checkboxes interactive
+document.querySelectorAll('.event-check').forEach(ec => {
+  ec.addEventListener('click', function(e) {
+    const cb = this.querySelector('.checkbox');
+    if (!cb || !this.closest('.obj-card')) return;
+    cb.classList.toggle('checked');
+  });
+});
+
+function sendTestEvent() {
+  showToast('Test event sent — check routing history');
+}
+
+function saveSettings() {
+  const msg = document.getElementById('step2-msg');
+  msg.style.display = 'block';
+  setTimeout(() => goToStep(3), 400);
+}
+
+// ─── Step 3 ───────────────────────────────────────────────────────────────────
+function initSyncResults() {
+  // Reset state
+  Object.values(syncState).forEach(s => {
+    if (s.status !== 'skipped') { s.status = 'pending'; s.synced = 0; }
+  });
+  renderSyncResults();
+  document.getElementById('sync-next').style.display = 'none';
+  document.getElementById('sync-btn').disabled = false;
+}
+
+function renderSyncResults() {
+  const items = [
+    { obj: 'LEAD',    label: 'Lead',    key: 'LEAD' },
+    { obj: 'CONTACT', label: 'Contact', key: 'CONTACT' },
+    { obj: 'ACCOUNT', label: 'Account', key: 'ACCOUNT' },
+  ];
+  document.getElementById('sync-results').innerHTML = items.map(({ label, key }) => {
+    const s = syncState[key];
+    if (s.status === 'done') return `
+      <div class="sync-item success">
+        <div class="sync-left">
+          <div class="sync-check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg></div>
+          <span class="sync-obj-name">${label}</span>
+        </div>
+        <span class="sync-status green">${s.synced} fields synced</span>
+      </div>`;
+    if (s.status === 'loading') return `
+      <div class="sync-item loading">
+        <div class="sync-left">
+          <div class="spinner" style="width:18px;height:18px;border-width:2px"></div>
+          <span class="sync-obj-name">${label}</span>
+        </div>
+        <span class="sync-status"><span class="shimmer"></span></span>
+      </div>`;
+    if (s.status === 'skipped') return `
+      <div class="sync-item skipped">
+        <div class="sync-left">
+          <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface)"></div>
+          <span class="sync-obj-name">${label}</span>
+        </div>
+        <span class="sync-status">Skipped (routing disabled)</span>
+      </div>`;
+    return `
+      <div class="sync-item">
+        <div class="sync-left">
+          <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface)"></div>
+          <span class="sync-obj-name">${label}</span>
+        </div>
+        <span class="sync-status">—</span>
+      </div>`;
+  }).join('');
+}
+
+function startSync() {
+  const btn = document.getElementById('sync-btn');
+  const icon = document.getElementById('sync-icon');
+  btn.disabled = true;
+  icon.classList.add('spin-sm');
+
+  const sequence = [
+    { key: 'LEAD',    delay: 0,    doneAfter: 1400, synced: 127 },
+    { key: 'CONTACT', delay: 1400, doneAfter: 1200, synced: 89  },
+  ];
+
+  sequence.forEach(({ key, delay, doneAfter, synced }) => {
+    setTimeout(() => {
+      syncState[key].status = 'loading';
+      renderSyncResults();
+      setTimeout(() => {
+        syncState[key].status = 'done';
+        syncState[key].synced = synced;
+        renderSyncResults();
+      }, doneAfter);
+    }, delay);
+  });
+
+  const total = sequence.reduce((s, i) => s + i.delay + i.doneAfter, 0);
+  setTimeout(() => {
+    btn.disabled = false;
+    icon.classList.remove('spin-sm');
+    document.getElementById('sync-next').style.display = 'block';
+    showToast('216 fields synced from Salesforce');
+  }, total + 200);
+}
+
+// ─── Step 4 ───────────────────────────────────────────────────────────────────
+function openApp() {
+  showToast('Opening Lead Router dashboard…');
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 2800);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+updateProgress();
+initSyncResults();
+</script>
+</body>
+</html>

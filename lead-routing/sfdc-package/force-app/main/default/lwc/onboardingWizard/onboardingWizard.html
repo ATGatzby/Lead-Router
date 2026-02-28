@@ -1,0 +1,230 @@
+<template>
+    <div class="slds-card slds-p-around_large" style="max-width: 640px; margin: 0 auto;">
+
+        <!-- Loading state while connectedCallback initialises -->
+        <template lwc:if={isLoading}>
+            <div class="slds-align_absolute-center slds-p-around_large">
+                <lightning-spinner alternative-text="Loading Lead Router Setup…" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <!-- Error state (App URL not configured, or Apex error) -->
+        <template lwc:elseif={initError}>
+            <div class="slds-align_absolute-center slds-p-around_large">
+                <div class="slds-notify slds-notify_alert slds-theme_error" role="alert">
+                    <span class="slds-assistive-text">Error</span>
+                    <lightning-icon icon-name="utility:error" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                    {initError}
+                </div>
+            </div>
+        </template>
+
+        <!-- Main wizard content -->
+        <template lwc:else>
+
+            <!-- Header -->
+            <div class="slds-align_absolute-center slds-m-bottom_large">
+                <div>
+                    <h1 class="slds-text-heading_large slds-text-align_center">Lead Router Setup</h1>
+                    <p class="slds-text-color_weak slds-text-align_center slds-m-top_x-small">
+                        Connect your Salesforce org to the routing engine in 4 steps.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Progress indicator -->
+            <div class="slds-progress slds-progress_shade slds-m-bottom_large">
+                <ol class="slds-progress__list">
+                    <template for:each={steps} for:item="step">
+                        <li key={step.index}
+                            class={step.cssClass}
+                            aria-label={step.label}>
+                            <button class="slds-progress__marker" title={step.label}>
+                                <span class="slds-assistive-text">{step.label}</span>
+                            </button>
+                        </li>
+                    </template>
+                </ol>
+                <div class="slds-progress-bar slds-progress-bar_x-small" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent} role="progressbar">
+                    <span class="slds-progress-bar__value" style={progressStyle}></span>
+                </div>
+            </div>
+
+            <!-- ─── Step 1: Connect Your Org ──────────────────────────────────────── -->
+            <template if:true={isStep1}>
+                <div class="slds-card__body">
+                    <div class="slds-align_absolute-center slds-m-bottom_medium">
+                        <lightning-icon icon-name="utility:connected_apps" size="large" class="slds-m-bottom_small"></lightning-icon>
+                    </div>
+                    <h2 class="slds-text-heading_medium slds-text-align_center slds-m-bottom_small">Step 1: Connect Your Org</h2>
+                    <p class="slds-text-color_weak slds-text-align_center slds-m-bottom_large">
+                        Authorise Lead Router to access your Salesforce org via OAuth.
+                    </p>
+
+                    <template if:false={isConnected}>
+                        <div class="slds-align_absolute-center">
+                            <lightning-button
+                                variant="brand"
+                                label="Connect to Lead Router"
+                                icon-name="utility:salesforce1"
+                                onclick={handleConnect}>
+                            </lightning-button>
+                        </div>
+                        <template if:true={isPolling}>
+                            <div class="slds-align_absolute-center slds-m-top_medium">
+                                <lightning-spinner alternative-text="Waiting for connection..." size="small"></lightning-spinner>
+                                <p class="slds-m-top_small slds-text-color_weak">Waiting for authorisation…</p>
+                            </div>
+                        </template>
+                    </template>
+
+                    <template if:true={isConnected}>
+                        <div class="slds-notify slds-notify_alert slds-theme_success slds-m-bottom_medium" role="alert">
+                            <span class="slds-assistive-text">success</span>
+                            <span class="slds-icon_container slds-icon-utility-success slds-m-right_x-small">
+                                <lightning-icon icon-name="utility:success" size="x-small" variant="inverse"></lightning-icon>
+                            </span>
+                            Org connected successfully!
+                        </div>
+                        <div class="slds-align_absolute-center">
+                            <lightning-button variant="brand" label="Next: Activate Objects" onclick={goToStep2}></lightning-button>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- ─── Step 2: Activate Objects & Triggers ───────────────────────────── -->
+            <template if:true={isStep2}>
+                <div class="slds-card__body">
+                    <h2 class="slds-text-heading_medium slds-text-align_center slds-m-bottom_small">Step 2: Activate Objects &amp; Triggers</h2>
+                    <p class="slds-text-color_weak slds-text-align_center slds-m-bottom_large">
+                        Select which objects and events should trigger routing.
+                    </p>
+
+                    <div class="slds-grid slds-gutters slds-wrap">
+                        <!-- Lead -->
+                        <div class="slds-col slds-size_1-of-3">
+                            <div class="slds-card slds-p-around_medium">
+                                <p class="slds-text-heading_small slds-m-bottom_small">Lead</p>
+                                <lightning-input type="toggle" label="Enable Lead Routing"
+                                    checked={leadEnabled} onchange={handleLeadEnabledChange}></lightning-input>
+                                <template if:true={leadEnabled}>
+                                    <lightning-input type="checkbox" label="On Insert"
+                                        checked={leadInsert} onchange={handleLeadInsertChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                    <lightning-input type="checkbox" label="On Update"
+                                        checked={leadUpdate} onchange={handleLeadUpdateChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- Contact -->
+                        <div class="slds-col slds-size_1-of-3">
+                            <div class="slds-card slds-p-around_medium">
+                                <p class="slds-text-heading_small slds-m-bottom_small">Contact</p>
+                                <lightning-input type="toggle" label="Enable Contact Routing"
+                                    checked={contactEnabled} onchange={handleContactEnabledChange}></lightning-input>
+                                <template if:true={contactEnabled}>
+                                    <lightning-input type="checkbox" label="On Insert"
+                                        checked={contactInsert} onchange={handleContactInsertChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                    <lightning-input type="checkbox" label="On Update"
+                                        checked={contactUpdate} onchange={handleContactUpdateChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- Account -->
+                        <div class="slds-col slds-size_1-of-3">
+                            <div class="slds-card slds-p-around_medium">
+                                <p class="slds-text-heading_small slds-m-bottom_small">Account</p>
+                                <lightning-input type="toggle" label="Enable Account Routing"
+                                    checked={accountEnabled} onchange={handleAccountEnabledChange}></lightning-input>
+                                <template if:true={accountEnabled}>
+                                    <lightning-input type="checkbox" label="On Insert"
+                                        checked={accountInsert} onchange={handleAccountInsertChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                    <lightning-input type="checkbox" label="On Update"
+                                        checked={accountUpdate} onchange={handleAccountUpdateChange}
+                                        class="slds-m-top_x-small"></lightning-input>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="slds-align_absolute-center slds-m-top_large slds-grid slds-gutters">
+                        <div class="slds-col">
+                            <lightning-button variant="neutral" label="Send Test Event"
+                                icon-name="utility:send" onclick={handleTestEvent}
+                                disabled={isSaving}></lightning-button>
+                        </div>
+                        <div class="slds-col">
+                            <lightning-button variant="brand" label="Save &amp; Next"
+                                onclick={handleSaveSettings} disabled={isSaving}>
+                            </lightning-button>
+                        </div>
+                    </div>
+
+                    <template if:true={step2Message}>
+                        <p class={step2MessageClass}>{step2Message}</p>
+                    </template>
+                </div>
+            </template>
+
+            <!-- ─── Step 3: Sync Field Schema ─────────────────────────────────────── -->
+            <template if:true={isStep3}>
+                <div class="slds-card__body">
+                    <div class="slds-align_absolute-center slds-m-bottom_medium">
+                        <lightning-icon icon-name="utility:sync" size="large"></lightning-icon>
+                    </div>
+                    <h2 class="slds-text-heading_medium slds-text-align_center slds-m-bottom_small">Step 3: Sync Field Schema</h2>
+                    <p class="slds-text-color_weak slds-text-align_center slds-m-bottom_large">
+                        Pull your Salesforce field definitions into Lead Router so you can build routing conditions.
+                    </p>
+
+                    <div class="slds-align_absolute-center">
+                        <lightning-button variant="brand" label="Sync Fields"
+                            icon-name="utility:refresh" onclick={handleSyncFields}
+                            disabled={isSyncing}></lightning-button>
+                    </div>
+
+                    <template if:true={isSyncing}>
+                        <div class="slds-align_absolute-center slds-m-top_medium">
+                            <lightning-spinner alternative-text="Syncing..." size="small"></lightning-spinner>
+                        </div>
+                    </template>
+
+                    <template for:each={syncResults} for:item="result">
+                        <div key={result.object} class="slds-notify slds-notify_alert slds-theme_success slds-m-top_small" role="status">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                            {result.object}: {result.synced} fields synced
+                        </div>
+                    </template>
+
+                    <template if:true={allSynced}>
+                        <div class="slds-align_absolute-center slds-m-top_large">
+                            <lightning-button variant="brand" label="Next: Finish Setup" onclick={goToStep4}></lightning-button>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- ─── Step 4: Done ──────────────────────────────────────────────────── -->
+            <template if:true={isStep4}>
+                <div class="slds-card__body slds-align_absolute-center">
+                    <lightning-icon icon-name="utility:success" size="xx-large" variant="success"
+                        class="slds-m-bottom_medium"></lightning-icon>
+                    <h2 class="slds-text-heading_large slds-text-align_center slds-m-bottom_small">You&apos;re all set!</h2>
+                    <p class="slds-text-color_weak slds-text-align_center slds-m-bottom_large">
+                        Lead Router is connected and ready to route records.
+                        Go to the dashboard to build your routing rules.
+                    </p>
+                    <lightning-button variant="brand" label="Open Lead Router →"
+                        icon-name="utility:new_window" onclick={handleOpenApp}></lightning-button>
+                </div>
+            </template>
+
+        </template><!-- end lwc:else (main content) -->
+
+    </div>
+</template>

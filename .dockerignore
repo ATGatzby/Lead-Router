@@ -1,0 +1,37 @@
+# Dependencies — reinstalled in each Docker build stage
+**/node_modules
+
+# Next.js build cache and output
+**/.next
+
+# Engine compiled output
+**/dist
+
+# Test and load-testing files
+load-test/
+
+# Local environment files — never bake secrets into images
+**/.env
+**/.env.*
+!**/.env.example
+
+# Customer install directory created by `lead-routing init`
+lead-routing/
+
+# Editor and OS artefacts
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+
+# Git history
+.git/
+.gitignore
+
+# Docs and plans (not needed at runtime)
+*.md
+plans/
+preview/
+
+# pnpm store (if local)
+.pnpm-store/

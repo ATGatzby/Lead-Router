@@ -1,0 +1,25 @@
+{
+  "name": "@lead-routing/engine",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node --env-file=.env --import tsx --watch src/server.ts",
+    "build": "tsc",
+    "build:prod": "tsup",
+    "start": "node dist/server.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lead-routing/db": "workspace:*",
+    "@lead-routing/sfdc": "workspace:*",
+    "bullmq": "^5.51.0",
+    "fastify": "^5.3.2",
+    "ioredis": "^5.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.9.3"
+  }
+}

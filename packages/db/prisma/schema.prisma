@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum SfdcObjectType {
+  LEAD
+  CONTACT
+  ACCOUNT
+}
+
+enum TriggerEvent {
+  INSERT
+  UPDATE
+  BOTH
+}
+
+enum RuleStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssignmentType {
+  USER
+  ROUND_ROBIN
+  QUEUE
+}
+
+enum TeamMemberStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum RoutingStatus {
+  SUCCESS
+  FAILED
+  UNMATCHED
+  RETRY
+}
+
+enum Plan {
+  FREE
+  PAID
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Organization {
+  id                String   @id @default(cuid())
+  sfdcOrgId         String?  @unique   // null until CRM is connected in onboarding
+  sfdcInstanceUrl   String?            // null until CRM is connected
+  oauthAccessToken  String?            // null until CRM is connected
+  oauthRefreshToken String?            // null until CRM is connected
+  webhookSecret     String   // HMAC secret for verifying Apex trigger payloads
+  plan             Plan     @default(FREE)
+  isActive         Boolean  @default(true)
+  seatsPurchased    Int      @default(5)
+  seatsUsed         Int      @default(0)
+  routingQuotaUsed Int      @default(0)
+  quotaResetAt     DateTime @default(now())
+  onboardingDone           Boolean  @default(false)
+  notificationWebhookUrl   String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  users        User[]
+  appUsers     AppUser[]
+  invites      Invite[]
+  teams        RoundRobinTeam[]
+  routingRules RoutingRule[]
+  routingLogs  RoutingLog[]
+  auditLogs    AuditLog[]
+  sfdcQueues   SfdcQueue[]
+  fieldSchemas FieldSchema[]
+  billingInfo  BillingInfo?
+
+  @@map("organizations")
+}
+
+model AppUser {
+  id           String   @id @default(cuid())
+  orgId        String
+  email        String
+  name         String
+  passwordHash String   // PBKDF2: "salt:hash" (salt=16-byte hex, 310000 iterations, sha256)
+  role         String   @default("ADMIN") // ADMIN | MEMBER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, email])
+  @@map("app_users")
+}
+
+model Invite {
+  id         String    @id @default(cuid())
+  orgId      String
+  email      String
+  token      String    @unique // 48-char hex (crypto.randomBytes(24))
+  expiresAt  DateTime           // 72 hours from creation
+  acceptedAt DateTime?          // null until invite is used
+  createdAt  DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("invites")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  orgId        String
+  sfdcUserId   String
+  name         String
+  email        String
+  role         String?
+  profile      String?
+  department   String?
+  isLicensed   Boolean   @default(false)
+  isActive     Boolean   @default(true) // false if no longer in SFDC
+  lastRoutedAt DateTime?
+  syncedAt     DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teamMemberships TeamMember[]
+
+  @@unique([orgId, sfdcUserId])
+  @@map("users")
+}
+
+model RoundRobinTeam {
+  id           String   @id @default(cuid())
+  orgId        String
+  name         String
+  description  String?
+  pointerIndex Int      @default(0) // kept in sync with Redis; Redis is authoritative
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+  routingRules RoutingRule[] @relation("TeamRules")
+
+  @@map("round_robin_teams")
+}
+
+model TeamMember {
+  id              String           @id @default(cuid())
+  teamId          String
+  userId          String
+  status          TeamMemberStatus @default(ACTIVE)
+  weight          Int              @default(1) // P2 weighted round robin
+  assignmentCount Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  team RoundRobinTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model RoutingRule {
+  id               String         @id @default(cuid())
+  orgId            String
+  objectType       SfdcObjectType
+  triggerEvent     TriggerEvent
+  name             String
+  priority         Int
+  status           RuleStatus     @default(ACTIVE)
+  assignmentType   AssignmentType
+  assigneeUserId   String?        // references User.id (individual user)
+  assigneeTeamId   String?        // references RoundRobinTeam.id
+  assigneeQueueId  String?        // references SfdcQueue.id
+  isDryRun         Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  org        Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team       RoundRobinTeam? @relation("TeamRules", fields: [assigneeTeamId], references: [id])
+  queue      SfdcQueue?      @relation(fields: [assigneeQueueId], references: [id])
+  conditions RuleCondition[]
+
+  @@map("routing_rules")
+}
+
+model RuleCondition {
+  id          String @id @default(cuid())
+  ruleId      String
+  groupId     String // conditions in same group share AND logic; groups are joined with OR
+  fieldName   String // SFDC field API name (e.g., "LeadSource")
+  operator    String // e.g., "equals", "contains", "gt"
+  value       String? // null for is_blank / is_not_blank / is_true / is_false
+  sortOrder   Int    @default(0)
+
+  rule RoutingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@map("rule_conditions")
+}
+
+model RoutingLog {
+  id             String          @id @default(cuid())
+  orgId          String
+  sfdcRecordId   String
+  objectType     SfdcObjectType
+  eventType      TriggerEvent
+  ruleId         String?
+  ruleName       String?
+  assigneeId     String?  // SFDC user/queue ID
+  assigneeName   String?
+  assignmentType AssignmentType?
+  isDryRun        Boolean         @default(false)
+  status          RoutingStatus
+  errorMessage    String?
+  retryCount      Int             @default(0)
+  dismissed       Boolean         @default(false)
+  recordSnapshot  Json?           // full field payload from SFDC at time of routing
+  createdAt       DateTime        @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@index([orgId, status])
+  @@map("routing_logs")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  actorId     String   // User.id
+  actorName   String
+  action      String   // e.g., "USER_LICENSED", "RULE_CREATED"
+  entityType  String   // e.g., "User", "RoutingRule"
+  entityId    String
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@map("audit_logs")
+}
+
+model SfdcQueue {
+  id          String   @id @default(cuid())
+  orgId       String
+  sfdcQueueId String   // SFDC Queue ID (00G...)
+  name        String
+  syncedAt    DateTime @default(now())
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  routingRules RoutingRule[]
+
+  @@unique([orgId, sfdcQueueId])
+  @@map("sfdc_queues")
+}
+
+model FieldSchema {
+  id             String         @id @default(cuid())
+  orgId          String
+  objectType     SfdcObjectType
+  fieldApiName   String
+  fieldLabel     String
+  fieldType      String // TEXT | NUMBER | DATE | DATETIME | BOOLEAN | PICKLIST | MULTI_PICKLIST | LOOKUP
+  picklistValues Json?  // string[] for picklist/multi-picklist fields
+  syncedAt       DateTime       @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, objectType, fieldApiName])
+  @@map("field_schemas")
+}
+
+model BillingInfo {
+  id           String   @id @default(cuid())
+  orgId        String   @unique
+  entityName   String?
+  gstin        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  pinCode      String?
+  invoiceEmail String?
+  updatedAt    DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("billing_info")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String   // SFDC User ID of the logged-in admin
+  userName  String
+  userEmail String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@map("sessions")
+}

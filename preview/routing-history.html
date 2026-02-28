@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Router — Routing History</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sidebar-w:220px;--sidebar-bg:#0d1117;--sidebar-border:rgba(255,255,255,0.06);
+  --sidebar-text:#8b949e;--sidebar-text-active:#f0f6fc;
+  --sidebar-active-bg:rgba(255,255,255,0.08);--sidebar-hover-bg:rgba(255,255,255,0.04);
+  --bg:#f8fafc;--surface:#ffffff;--border:#e2e8f0;--border-subtle:#f1f5f9;
+  --text-primary:#0f172a;--text-secondary:#64748b;--text-tertiary:#94a3b8;
+  --accent:#2563eb;--accent-hover:#1d4ed8;
+  --green:#22c55e;--destructive:#ef4444;--amber:#f59e0b;
+  --radius:8px;--radius-sm:6px;--radius-full:9999px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.08),0 1px 3px rgba(0,0,0,0.06);
+  --shadow-lg:0 8px 32px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);
+  --font:'DM Sans',sans-serif;--font-mono:'DM Mono',monospace;
+  --transition:150ms cubic-bezier(0.4,0,0.2,1);
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text-primary);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.layout{display:flex;height:100vh;overflow:hidden}
+
+/* ── Sidebar ── */
+.sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--sidebar-bg);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-logo{padding:18px 16px 14px;border-bottom:1px solid var(--sidebar-border);display:flex;align-items:center;gap:8px;color:#f0f6fc;font-weight:600;font-size:15px;letter-spacing:-0.01em}
+.logo-icon{width:26px;height:26px;background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon svg{width:14px;height:14px}
+.sidebar-nav{padding:12px 8px;flex:1;overflow-y:auto}
+.nav-section-label{font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:rgba(139,148,158,0.6);padding:8px 8px 4px;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--radius-sm);color:var(--sidebar-text);cursor:pointer;font-size:13.5px;font-weight:400;transition:background var(--transition),color var(--transition);user-select:none;text-decoration:none}
+.nav-item:hover{background:var(--sidebar-hover-bg);color:#c9d1d9}
+.nav-item.active{background:var(--sidebar-active-bg);color:var(--sidebar-text-active);font-weight:500}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:0.8}
+.nav-item.active svg{opacity:1}
+.sidebar-footer{padding:12px 8px;border-top:1px solid var(--sidebar-border)}
+.user-chip{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background var(--transition)}
+.user-chip:hover{background:var(--sidebar-hover-bg)}
+.avatar{width:26px;height:26px;border-radius:var(--radius-full);background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:white;flex-shrink:0}
+.user-name{font-size:12.5px;font-weight:500;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-org{font-size:11px;color:var(--sidebar-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Main ── */
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.topbar{height:52px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;position:sticky;top:0;z-index:10}
+.breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)}
+.breadcrumb-sep{color:var(--text-tertiary)}
+.breadcrumb-current{color:var(--text-primary);font-weight:500}
+.content{padding:28px 28px 80px;max-width:1160px}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:0 14px;height:34px;border-radius:var(--radius);font-family:var(--font);font-size:13.5px;font-weight:500;cursor:pointer;transition:all var(--transition);border:1px solid transparent;white-space:nowrap;line-height:1}
+.btn svg{width:14px;height:14px;flex-shrink:0}
+.btn-primary{background:var(--accent);color:white;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-outline{background:var(--surface);color:var(--text-primary);border-color:var(--border);box-shadow:var(--shadow-sm)}
+.btn-outline:hover{background:var(--bg)}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:transparent}
+.btn-ghost:hover{background:var(--bg);color:var(--text-primary)}
+.btn-sm{height:30px;padding:0 10px;font-size:13px}
+.btn-xs{height:26px;padding:0 8px;font-size:12px}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-icon{padding:0;width:30px;justify-content:center}
+
+/* ── Sub-tabs ── */
+.sub-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px}
+.sub-tab{padding:10px 18px;font-size:13.5px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;color:var(--text-secondary);transition:color var(--transition),border-color var(--transition);user-select:none;white-space:nowrap}
+.sub-tab:hover{color:var(--text-primary)}
+.sub-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-badge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:var(--radius-full);background:var(--destructive);color:white;font-size:10px;font-weight:600;margin-left:5px}
+
+/* ── Page header ── */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:16px}
+.page-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.2}
+.page-subtitle{font-size:13.5px;color:var(--text-secondary);margin-top:3px}
+.header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+/* ── Filters ── */
+.filter-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.input{height:32px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:var(--font);font-size:13px;color:var(--text-primary);outline:none;transition:border-color var(--transition),box-shadow var(--transition);box-shadow:var(--shadow-sm)}
+.input::placeholder{color:var(--text-tertiary)}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.1)}
+.input-w44{width:176px}
+.select-wrap{position:relative}
+.select-wrap svg{position:absolute;right:8px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-tertiary);width:12px;height:12px}
+select.select{appearance:none;-webkit-appearance:none;height:32px;padding:0 28px 0 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:var(--font);font-size:13px;color:var(--text-primary);outline:none;cursor:pointer;box-shadow:var(--shadow-sm)}
+select.select:focus{border-color:var(--accent)}
+input[type="date"].input{padding:0 8px}
+
+/* ── Table ── */
+.table-wrap{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)}
+.tbl-header{display:grid;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border)}
+.tbl-header span{font-size:11.5px;font-weight:500;color:var(--text-secondary);letter-spacing:0.02em;text-transform:uppercase}
+.tbl-row{display:grid;padding:13px 16px;border-bottom:1px solid var(--border-subtle);transition:background var(--transition);align-items:center}
+.tbl-row:last-child{border-bottom:none}
+.tbl-row:hover{background:#fafbfd}
+.cols-history{grid-template-columns:160px 90px 80px 1.4fr 1.3fr 110px 110px}
+.col-gap{gap:14px}
+
+/* ── Status badges ── */
+.badge-status{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:var(--radius-full);border:1px solid;font-size:11.5px;font-weight:500;white-space:nowrap}
+.badge-success{background:#f0fdf4;color:#15803d;border-color:#bbf7d0}
+.badge-failed{background:#fef2f2;color:#dc2626;border-color:#fecaca}
+.badge-unmatched{background:#fffbeb;color:#b45309;border-color:#fde68a}
+.badge-retry{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.badge-dot{width:5px;height:5px;border-radius:50%}
+.badge-success .badge-dot{background:#22c55e}
+.badge-failed .badge-dot{background:#ef4444}
+.badge-unmatched .badge-dot{background:#f59e0b}
+.badge-retry .badge-dot{background:#3b82f6}
+
+.obj-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.obj-lead{background:#eff6ff;color:#1d4ed8}
+.obj-contact{background:#f5f3ff;color:#6d28d9}
+.obj-account{background:#ecfdf5;color:#065f46}
+
+.rec-id{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary)}
+.ext-link{display:inline-flex;align-items:center;gap:3px;color:var(--text-tertiary);cursor:pointer;transition:color var(--transition);margin-left:4px;vertical-align:middle}
+.ext-link:hover{color:var(--accent)}
+.assignee-name{font-size:13.5px;font-weight:500}
+.assignee-mode{font-size:11.5px;color:var(--text-tertiary);margin-top:1px}
+.time-cell{font-size:12.5px;color:var(--text-secondary);white-space:nowrap}
+
+/* ── Pagination ── */
+.pagination{display:flex;align-items:center;justify-content:space-between;margin-top:16px}
+.pag-info{font-size:13px;color:var(--text-secondary)}
+.pag-controls{display:flex;align-items:center;gap:8px}
+.pag-page{font-size:13px;color:var(--text-secondary);padding:0 8px}
+
+/* ── Stats table ── */
+.period-switcher{display:flex;align-items:center;gap:0;background:var(--border);border-radius:8px;padding:2px}
+.period-btn{padding:5px 12px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--text-secondary);transition:all var(--transition);border:none;background:transparent;font-family:var(--font)}
+.period-btn.active{background:var(--surface);color:var(--text-primary);box-shadow:var(--shadow-sm)}
+.cols-stats{grid-template-columns:1fr 72px 84px 84px 72px}
+.stat-bar-wrap{height:3px;border-radius:2px;background:var(--border-subtle);margin-top:4px;overflow:hidden}
+.stat-bar{height:100%;border-radius:2px;background:rgba(37,99,235,0.6);transition:width 0.5s ease}
+.stat-num{font-size:13.5px;color:var(--text-secondary);text-align:right;font-variant-numeric:tabular-nums}
+.stat-total{font-size:13.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.totals-row{background:var(--bg) !important;border-top:1px solid var(--border) !important}
+.totals-row span{font-size:12px;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.03em}
+.totals-row .stat-num,.totals-row .stat-total{color:var(--text-primary);font-weight:600;font-size:13px}
+
+/* ── Failed routings ── */
+.alert-banner{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;margin-bottom:16px}
+.alert-banner svg{color:#d97706;flex-shrink:0}
+.alert-msg{font-size:13.5px;font-weight:500;color:#92400e}
+.cols-failed{grid-template-columns:160px 90px 90px 2fr 160px}
+.error-text{font-size:13px;color:var(--destructive);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 0;gap:12px}
+.empty-icon{width:48px;height:48px;border-radius:50%;background:#f0fdf4;display:flex;align-items:center;justify-content:center}
+.empty-icon svg{color:#22c55e}
+.empty-text{font-size:14px;color:var(--text-secondary)}
+
+/* ── Audit log ── */
+.cols-audit{grid-template-columns:28px 130px 160px 1fr 1fr}
+.expand-icon{color:var(--text-tertiary);transition:transform 0.15s;cursor:pointer;display:flex;align-items:center}
+.expand-icon.open{transform:rotate(90deg)}
+.audit-action{font-size:13.5px;color:var(--text-primary)}
+.audit-entity-type{font-size:11.5px;color:var(--text-tertiary)}
+.audit-entity{font-size:13.5px;color:var(--text-secondary)}
+.diff-panel{padding:12px 16px 16px 42px;border-bottom:1px solid var(--border-subtle);background:#fafbff;display:none}
+.diff-panel.open{display:block}
+.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.diff-label{font-size:11px;font-weight:500;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
+.diff-code{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--font-mono);font-size:12px;color:var(--text-primary);white-space:pre;overflow-x:auto;line-height:1.6}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;z-index:100;background:var(--text-primary);color:white;padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow-lg);transition:opacity 0.25s,transform 0.25s;max-width:320px;opacity:1}
+.toast.hidden{opacity:0;transform:translateY(6px);pointer-events:none}
+.toast.error{background:var(--destructive)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin 0.9s linear infinite}
+.tab-content{display:none}
+.tab-content.active{display:block}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+        <path d="M2 4h5M2 8h8M2 12h5M11 7l3 1-3 1"/>
+      </svg>
+    </div>
+    Lead Router
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Setup</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="5" r="3"/><path d="M2 13.5c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5"/></svg>
+      License Users
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="5" cy="8" r="2"/><circle cx="11" cy="5" r="2"/><circle cx="11" cy="11" r="2"/><path d="M7 8h2M7 6l2-1M7 10l2 1"/></svg>
+      Round Robins
+    </a>
+    <div class="nav-section-label" style="margin-top:8px">Routing</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5h9M2 11h9M9 3l3 2-3 2M7 9l3 2-3 2"/></svg>
+      Routing Rules
+    </a>
+    <a class="nav-item active" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2.5 1.5"/></svg>
+      History
+    </a>
+    <div class="nav-section-label" style="margin-top:8px">Reports</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 13V8M6 13V5M10 13V3M14 13V7"/></svg>
+      Analytics
+    </a>
+    <div class="nav-section-label" style="margin-top:8px">Settings</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.2M8 13.3v1.2M1.5 8h1.2M13.3 8h1.2M3.4 3.4l.85.85M11.75 11.75l.85.85M3.4 12.6l.85-.85M11.75 4.25l.85-.85"/></svg>
+      Settings
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-chip">
+      <div class="avatar">AT</div>
+      <div>
+        <div class="user-name">Arun Tyagi</div>
+        <div class="user-org">Acme Corp</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb">
+      <span>Routing</span>
+      <span class="breadcrumb-sep">›</span>
+      <span class="breadcrumb-current">History</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Sub-tabs -->
+    <div class="sub-tabs">
+      <div class="sub-tab active" onclick="switchTab('history', this)">Routing History</div>
+      <div class="sub-tab" onclick="switchTab('stats', this)">Assignment Stats</div>
+      <div class="sub-tab" onclick="switchTab('failed', this)">Failed Routings <span class="tab-badge" id="failedBadge">3</span></div>
+      <div class="sub-tab" onclick="switchTab('audit', this)">Audit Log</div>
+    </div>
+
+    <!-- ─── TAB 1: Routing History ──────────────────────── -->
+    <div class="tab-content active" id="tab-history">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Routing History</h1>
+          <p class="page-subtitle">Every routing decision made by the engine.</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-outline" onclick="exportCSV()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2v8M5 7l3 3 3-3M3 12h10"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <input type="date" class="input" id="fromDate" value="2026-02-23">
+        <input type="date" class="input" id="toDate" value="2026-02-23">
+        <div class="select-wrap">
+          <select class="select" id="objFilter" onchange="renderHistory()">
+            <option value="">All Objects</option>
+            <option value="LEAD">Lead</option>
+            <option value="CONTACT">Contact</option>
+            <option value="ACCOUNT">Account</option>
+          </select>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+        </div>
+        <div class="select-wrap">
+          <select class="select" id="statusFilter" onchange="renderHistory()">
+            <option value="">All Statuses</option>
+            <option value="SUCCESS">Success</option>
+            <option value="FAILED">Failed</option>
+            <option value="UNMATCHED">Unmatched</option>
+            <option value="RETRY">Retry</option>
+          </select>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+        </div>
+        <input type="text" class="input input-w44" placeholder="Search assignee…" oninput="renderHistory()" id="assigneeSearch">
+      </div>
+
+      <div class="table-wrap">
+        <div class="tbl-header cols-history col-gap">
+          <span>Record ID</span><span>Object</span><span>Event</span>
+          <span>Rule</span><span>Assignee</span><span>Time</span><span>Status</span>
+        </div>
+        <div id="history-body"></div>
+      </div>
+
+      <div class="pagination">
+        <span class="pag-info" id="pag-info"></span>
+        <div class="pag-controls">
+          <button class="btn btn-outline btn-sm" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+          <span class="pag-page" id="pag-label"></span>
+          <button class="btn btn-outline btn-sm" id="next-btn" onclick="changePage(1)">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 2: Assignment Stats ──────────────────────── -->
+    <div class="tab-content" id="tab-stats">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Assignment Stats</h1>
+          <p class="page-subtitle" id="stats-subtitle">Feb 1 – Feb 23, 2026</p>
+        </div>
+        <div class="period-switcher">
+          <button class="period-btn" onclick="setPeriod('today',this)">Today</button>
+          <button class="period-btn" onclick="setPeriod('week',this)">This Week</button>
+          <button class="period-btn active" onclick="setPeriod('month',this)">This Month</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="tbl-header cols-stats col-gap">
+          <span>Rep</span><span style="text-align:right">Leads</span>
+          <span style="text-align:right">Contacts</span><span style="text-align:right">Accounts</span>
+          <span style="text-align:right">Total</span>
+        </div>
+        <div id="stats-body"></div>
+        <div class="tbl-row cols-stats col-gap totals-row">
+          <span>Totals</span>
+          <span class="stat-num" id="total-leads"></span>
+          <span class="stat-num" id="total-contacts"></span>
+          <span class="stat-num" id="total-accounts"></span>
+          <span class="stat-total" id="total-all"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 3: Failed Routings ──────────────────────── -->
+    <div class="tab-content" id="tab-failed">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Failed Routings</h1>
+          <p class="page-subtitle">Records that could not be routed after all retry attempts.</p>
+        </div>
+      </div>
+
+      <div id="alert-banner" class="alert-banner">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 1L1 14h14L8 1zM8 6v3M8 11h.01"/></svg>
+        <span class="alert-msg" id="alert-msg">3 routing failures need attention</span>
+      </div>
+
+      <div class="table-wrap" id="failed-table-wrap">
+        <div class="tbl-header cols-failed col-gap">
+          <span>Record ID</span><span>Object</span><span>Attempts</span>
+          <span>Error</span><span style="text-align:right">Actions</span>
+        </div>
+        <div id="failed-body"></div>
+      </div>
+
+      <div class="empty-state" id="failed-empty" style="display:none">
+        <div class="empty-icon">
+          <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 8l4 4 8-8"/></svg>
+        </div>
+        <p class="empty-text">No failed routings — everything looks good.</p>
+      </div>
+    </div>
+
+    <!-- ─── TAB 4: Audit Log ──────────────────────── -->
+    <div class="tab-content" id="tab-audit">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Config Audit Log</h1>
+          <p class="page-subtitle">All configuration changes made by admins.</p>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <input type="date" class="input" value="2026-02-22">
+        <input type="date" class="input" value="2026-02-23">
+        <div class="select-wrap">
+          <select class="select" id="entityFilter" onchange="renderAudit()">
+            <option value="">All Types</option>
+            <option value="User">User</option>
+            <option value="RoutingRule">RoutingRule</option>
+            <option value="RoundRobinTeam">RoundRobinTeam</option>
+            <option value="TeamMember">TeamMember</option>
+          </select>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+        </div>
+        <input type="text" class="input input-w44" placeholder="Search action…" oninput="renderAudit()" id="actionSearch">
+      </div>
+
+      <div class="table-wrap" id="audit-table">
+        <div class="tbl-header cols-audit col-gap">
+          <span></span><span>Date / Time</span><span>Actor</span>
+          <span>Action</span><span>Entity</span>
+        </div>
+        <div id="audit-body"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"></div>
+
+<script>
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const ALL_LOGS = [
+  {id:'L1',sfdcId:'00Q5g000001XyZE',obj:'LEAD',   evt:'INSERT',rule:'Enterprise Inbound',       assignee:'Priya Sharma',  mode:'User',       time:'Feb 23, 10:32',status:'SUCCESS'},
+  {id:'L2',sfdcId:'00Q5g000001XyZF',obj:'LEAD',   evt:'INSERT',rule:'SMB Web Leads',             assignee:'Rahul Mehta',   mode:'Round Robin',time:'Feb 23, 10:31',status:'SUCCESS'},
+  {id:'L3',sfdcId:'00Q5g000001XyZG',obj:'LEAD',   evt:'UPDATE',rule:null,                        assignee:null,            mode:null,         time:'Feb 23, 10:30',status:'UNMATCHED'},
+  {id:'L4',sfdcId:'00Q5g000001XyZH',obj:'CONTACT',evt:'INSERT',rule:'Contact Fallback',          assignee:'SDR Team B',    mode:'Queue',      time:'Feb 23, 10:28',status:'FAILED'},
+  {id:'L5',sfdcId:'003Ap000003BxCd',obj:'CONTACT',evt:'UPDATE',rule:'SaaS Inbound Contacts',     assignee:'Ananya Singh',  mode:'User',       time:'Feb 23, 10:26',status:'SUCCESS'},
+  {id:'L6',sfdcId:'001Kp000005QrWz',obj:'ACCOUNT',evt:'INSERT',rule:'Enterprise Accounts',       assignee:'Dev Kumar',     mode:'Round Robin',time:'Feb 23, 10:24',status:'SUCCESS'},
+  {id:'L7',sfdcId:'00Q5g000001XyZI',obj:'LEAD',   evt:'INSERT',rule:null,                        assignee:null,            mode:null,         time:'Feb 23, 10:22',status:'UNMATCHED'},
+  {id:'L8',sfdcId:'00Q5g000001XyZJ',obj:'LEAD',   evt:'UPDATE',rule:'SMB Web Leads',             assignee:'Vikram Patel',  mode:'User',       time:'Feb 23, 10:20',status:'RETRY'},
+  {id:'L9',sfdcId:'00Q5g000001XyZK',obj:'CONTACT',evt:'INSERT',rule:'Enterprise Inbound',        assignee:'Meera Joshi',   mode:'User',       time:'Feb 23, 10:18',status:'SUCCESS'},
+  {id:'L10',sfdcId:'001Kp000005QrWA',obj:'ACCOUNT',evt:'UPDATE',rule:'SMB Accounts',             assignee:'Kiran Rao',     mode:'User',       time:'Feb 23, 10:15',status:'SUCCESS'},
+  {id:'L11',sfdcId:'00Q5g000001XyZL',obj:'LEAD',  evt:'INSERT',rule:'SMB Web Leads',             assignee:'Suresh Babu',   mode:'Round Robin',time:'Feb 23, 10:12',status:'SUCCESS'},
+  {id:'L12',sfdcId:'003Ap000003BxCe',obj:'CONTACT',evt:'INSERT',rule:null,                       assignee:null,            mode:null,         time:'Feb 23, 10:10',status:'UNMATCHED'},
+];
+
+const STATS = {
+  month: [
+    {name:'Priya Sharma', leads:42,contacts:8, accounts:3, total:53},
+    {name:'Rahul Mehta',  leads:41,contacts:9, accounts:2, total:52},
+    {name:'Ananya Singh', leads:40,contacts:7, accounts:4, total:51},
+    {name:'Dev Kumar',    leads:38,contacts:6, accounts:3, total:47},
+    {name:'Vikram Patel', leads:35,contacts:5, accounts:2, total:42},
+    {name:'Meera Joshi',  leads:32,contacts:4, accounts:1, total:37},
+    {name:'Suresh Babu',  leads:28,contacts:6, accounts:2, total:36},
+    {name:'Deepa Nair',   leads:24,contacts:3, accounts:1, total:28},
+    {name:'Kiran Rao',    leads:18,contacts:2, accounts:0, total:20},
+    {name:'Arjun Sharma', leads:12,contacts:1, accounts:0, total:13},
+  ],
+  week: [
+    {name:'Priya Sharma', leads:12,contacts:2,accounts:1,total:15},
+    {name:'Rahul Mehta',  leads:11,contacts:3,accounts:1,total:15},
+    {name:'Ananya Singh', leads:10,contacts:2,accounts:1,total:13},
+    {name:'Dev Kumar',    leads:9, contacts:2,accounts:1,total:12},
+    {name:'Vikram Patel', leads:9, contacts:1,accounts:0,total:10},
+    {name:'Meera Joshi',  leads:8, contacts:1,accounts:0,total:9},
+    {name:'Suresh Babu',  leads:7, contacts:2,accounts:1,total:10},
+    {name:'Deepa Nair',   leads:6, contacts:1,accounts:0,total:7},
+    {name:'Kiran Rao',    leads:5, contacts:0,accounts:0,total:5},
+    {name:'Arjun Sharma', leads:3, contacts:0,accounts:0,total:3},
+  ],
+  today: [
+    {name:'Priya Sharma', leads:2,contacts:0,accounts:0,total:2},
+    {name:'Rahul Mehta',  leads:2,contacts:1,accounts:0,total:3},
+    {name:'Ananya Singh', leads:1,contacts:0,accounts:1,total:2},
+    {name:'Dev Kumar',    leads:2,contacts:0,accounts:0,total:2},
+    {name:'Vikram Patel', leads:1,contacts:0,accounts:0,total:1},
+    {name:'Meera Joshi',  leads:1,contacts:0,accounts:0,total:1},
+    {name:'Suresh Babu',  leads:1,contacts:1,accounts:0,total:2},
+    {name:'Deepa Nair',   leads:0,contacts:0,accounts:0,total:0},
+    {name:'Kiran Rao',    leads:1,contacts:0,accounts:0,total:1},
+    {name:'Arjun Sharma', leads:0,contacts:0,accounts:0,total:0},
+  ]
+};
+
+const FAILED_DATA = [
+  {id:'F1',sfdcId:'00Q5g000001XyZH',obj:'CONTACT',retries:3,error:'SFDC API timeout (HTTP 503)',dismissed:false},
+  {id:'F2',sfdcId:'00Q5g000001XyZK',obj:'LEAD',   retries:3,error:'Invalid OwnerId: 00G000000INVALID',dismissed:false},
+  {id:'F3',sfdcId:'003Ap000003BxCe',obj:'CONTACT',retries:3,error:'Token expired — re-auth required',dismissed:false},
+];
+
+const AUDIT_DATA = [
+  {id:'A1',time:'Feb 23, 10:42',actor:'Arun Tyagi', action:'Rule Activated',     entityType:'RoutingRule',    entity:'Enterprise Inbound Leads',  before:{status:'INACTIVE'},after:{status:'ACTIVE'}},
+  {id:'A2',time:'Feb 23, 10:38',actor:'Arun Tyagi', action:'User Licensed',      entityType:'User',           entity:'Priya Sharma',              before:{isLicensed:false}, after:{isLicensed:true}},
+  {id:'A3',time:'Feb 23, 10:35',actor:'Ravi Kumar', action:'Team Member Paused', entityType:'TeamMember',     entity:'West Coast SDRs / Dev Kumar',before:null,               after:null},
+  {id:'A4',time:'Feb 23, 10:20',actor:'Arun Tyagi', action:'Rule Created',       entityType:'RoutingRule',    entity:'SMB Web Leads',             before:null,               after:{name:'SMB Web Leads',objectType:'LEAD',priority:3,assignmentType:'ROUND_ROBIN'}},
+  {id:'A5',time:'Feb 23, 09:55',actor:'Ravi Kumar', action:'Rule Deactivated',   entityType:'RoutingRule',    entity:'Old Fallback Rule',         before:{status:'ACTIVE'},  after:{status:'INACTIVE'}},
+  {id:'A6',time:'Feb 23, 09:40',actor:'Arun Tyagi', action:'Team Created',       entityType:'RoundRobinTeam', entity:'SDR Team West',             before:null,               after:{name:'SDR Team West',memberCount:0}},
+  {id:'A7',time:'Feb 23, 09:12',actor:'Meera Joshi',action:'User De-licensed',   entityType:'User',           entity:'Suresh Babu',               before:{isLicensed:true},  after:{isLicensed:false}},
+  {id:'A8',time:'Feb 22, 17:30',actor:'Arun Tyagi', action:'Rule Updated',       entityType:'RoutingRule',    entity:'Contact Fallback',          before:{assignmentType:'USER'},after:{assignmentType:'ROUND_ROBIN'}},
+];
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  el.classList.add('active');
+}
+
+// ─── Routing History ─────────────────────────────────────────────────────────
+let historyPage = 1;
+const PAGE_SIZE = 8;
+
+function getStatusClass(s){ return {SUCCESS:'badge-success',FAILED:'badge-failed',UNMATCHED:'badge-unmatched',RETRY:'badge-retry'}[s]; }
+function getObjClass(o){ return {LEAD:'obj-lead',CONTACT:'obj-contact',ACCOUNT:'obj-account'}[o]; }
+function getStatusLabel(s){ return {SUCCESS:'Success',FAILED:'Failed',UNMATCHED:'Unmatched',RETRY:'Retry'}[s]; }
+
+function filteredLogs() {
+  const obj = document.getElementById('objFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const assignee = (document.getElementById('assigneeSearch').value||'').toLowerCase();
+  return ALL_LOGS.filter(l =>
+    (!obj || l.obj === obj) &&
+    (!status || l.status === status) &&
+    (!assignee || (l.assignee && l.assignee.toLowerCase().includes(assignee)))
+  );
+}
+
+function renderHistory() {
+  historyPage = 1;
+  _renderHistoryPage();
+}
+
+function changePage(dir) {
+  const logs = filteredLogs();
+  const pages = Math.ceil(logs.length / PAGE_SIZE);
+  historyPage = Math.max(1, Math.min(historyPage + dir, pages));
+  _renderHistoryPage();
+}
+
+function _renderHistoryPage() {
+  const logs = filteredLogs();
+  const total = logs.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const slice = logs.slice((historyPage-1)*PAGE_SIZE, historyPage*PAGE_SIZE);
+  const start = (historyPage-1)*PAGE_SIZE + 1;
+  const end = Math.min(historyPage*PAGE_SIZE, total);
+
+  const body = document.getElementById('history-body');
+  if (slice.length === 0) {
+    body.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-tertiary);font-size:13.5px">No routing events match your filters.</div>`;
+  } else {
+    body.innerHTML = slice.map(l => `
+      <div class="tbl-row cols-history col-gap">
+        <div>
+          <span class="rec-id">${l.sfdcId}</span>
+          <a href="#" class="ext-link" title="Open in Salesforce">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 3H3v10h10V9M9 2h5v5M14 2L7 9"/></svg>
+          </a>
+        </div>
+        <div><span class="obj-badge ${getObjClass(l.obj)}">${l.obj.charAt(0)+l.obj.slice(1).toLowerCase()}</span></div>
+        <div style="font-size:13px;color:var(--text-secondary)">${l.evt.charAt(0)+l.evt.slice(1).toLowerCase()}</div>
+        <div style="font-size:13.5px;${!l.rule?'color:var(--text-tertiary);font-style:italic':''}">${l.rule||'No match'}</div>
+        <div>
+          ${l.assignee
+            ? `<div class="assignee-name">${l.assignee}</div><div class="assignee-mode">${l.mode}</div>`
+            : `<span style="color:var(--text-tertiary)">—</span>`}
+        </div>
+        <div class="time-cell">${l.time}</div>
+        <div>
+          <span class="badge-status ${getStatusClass(l.status)}">
+            <span class="badge-dot"></span>${getStatusLabel(l.status)}
+          </span>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('pag-info').textContent = total > 0
+    ? `Showing ${start}–${end} of ${(total + 1235).toLocaleString()} events`
+    : 'No events found';
+  document.getElementById('pag-label').textContent = `Page ${historyPage} of ${pages}`;
+  document.getElementById('prev-btn').disabled = historyPage === 1;
+  document.getElementById('next-btn').disabled = historyPage === pages;
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+let currentPeriod = 'month';
+const PERIOD_LABELS = {
+  month:'Feb 1 – Feb 23, 2026',
+  week:'Feb 17 – Feb 23, 2026',
+  today:'Feb 23, 2026'
+};
+
+function setPeriod(p, el) {
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  currentPeriod = p;
+  document.getElementById('stats-subtitle').textContent = PERIOD_LABELS[p];
+  renderStats();
+}
+
+function renderStats() {
+  const data = STATS[currentPeriod];
+  const maxTotal = Math.max(...data.map(r => r.total), 1);
+  document.getElementById('stats-body').innerHTML = data.map(r => `
+    <div class="tbl-row cols-stats col-gap">
+      <div>
+        <div style="font-size:13.5px;font-weight:500">${r.name}</div>
+        <div class="stat-bar-wrap">
+          <div class="stat-bar" style="width:${(r.total/maxTotal)*100}%"></div>
+        </div>
+      </div>
+      <span class="stat-num">${r.leads}</span>
+      <span class="stat-num">${r.contacts}</span>
+      <span class="stat-num">${r.accounts}</span>
+      <span class="stat-total">${r.total}</span>
+    </div>`).join('');
+
+  const tl = data.reduce((s,r) => s+r.leads, 0);
+  const tc = data.reduce((s,r) => s+r.contacts, 0);
+  const ta = data.reduce((s,r) => s+r.accounts, 0);
+  document.getElementById('total-leads').textContent = tl;
+  document.getElementById('total-contacts').textContent = tc;
+  document.getElementById('total-accounts').textContent = ta;
+  document.getElementById('total-all').textContent = tl+tc+ta;
+}
+
+// ─── Failed ───────────────────────────────────────────────────────────────────
+function renderFailed() {
+  const active = FAILED_DATA.filter(f => !f.dismissed);
+  const badge = document.getElementById('failedBadge');
+  badge.textContent = active.length;
+  badge.style.display = active.length > 0 ? 'inline-flex' : 'none';
+
+  const banner = document.getElementById('alert-banner');
+  const tableWrap = document.getElementById('failed-table-wrap');
+  const empty = document.getElementById('failed-empty');
+  const alertMsg = document.getElementById('alert-msg');
+
+  if (active.length === 0) {
+    banner.style.display = 'none';
+    tableWrap.style.display = 'none';
+    empty.style.display = 'flex';
+  } else {
+    banner.style.display = 'flex';
+    tableWrap.style.display = 'block';
+    empty.style.display = 'none';
+    alertMsg.textContent = `${active.length} routing ${active.length===1?'failure needs':'failures need'} attention`;
+    document.getElementById('failed-body').innerHTML = active.map(f => `
+      <div class="tbl-row cols-failed col-gap" id="failed-row-${f.id}">
+        <span class="rec-id">${f.sfdcId}</span>
+        <span><span class="obj-badge ${getObjClass(f.obj)}">${f.obj.charAt(0)+f.obj.slice(1).toLowerCase()}</span></span>
+        <span style="font-size:13px;color:var(--text-secondary)">${f.retries} retries</span>
+        <span class="error-text" title="${f.error}">${f.error}</span>
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          <button class="btn btn-outline btn-xs" onclick="retryFailed('${f.id}')">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:12px;height:12px"><path d="M13.5 3.5A6.5 6.5 0 0 0 2 8"/><path d="M2 3.5V8H6.5"/></svg>
+            Retry
+          </button>
+          <button class="btn btn-ghost btn-icon btn-xs" onclick="dismissFailed('${f.id}')" title="Dismiss">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:12px;height:12px"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </button>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function retryFailed(id) {
+  const row = document.getElementById('failed-row-'+id);
+  const btn = row.querySelector('button');
+  btn.disabled = true;
+  btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="spin" style="width:12px;height:12px"><path d="M13.5 3.5A6.5 6.5 0 0 0 2 8"/><path d="M2 3.5V8H6.5"/></svg> Retrying…';
+  setTimeout(() => {
+    const item = FAILED_DATA.find(f => f.id === id);
+    if (item) item.dismissed = true;
+    renderFailed();
+    showToast('Re-enqueued for retry');
+  }, 1200);
+}
+
+function dismissFailed(id) {
+  const item = FAILED_DATA.find(f => f.id === id);
+  if (item) item.dismissed = true;
+  renderFailed();
+  showToast('Dismissed');
+}
+
+// ─── Audit ────────────────────────────────────────────────────────────────────
+const expandedRows = new Set();
+
+function renderAudit() {
+  const entityFilter = document.getElementById('entityFilter').value;
+  const actionSearch = (document.getElementById('actionSearch').value||'').toLowerCase();
+  const data = AUDIT_DATA.filter(a =>
+    (!entityFilter || a.entityType === entityFilter) &&
+    (!actionSearch || a.action.toLowerCase().includes(actionSearch))
+  );
+  document.getElementById('audit-body').innerHTML = data.map(a => {
+    const hasDiff = a.before !== null || a.after !== null;
+    const isOpen = expandedRows.has(a.id);
+    return `
+      <div>
+        <div class="tbl-row cols-audit col-gap" style="cursor:${hasDiff?'pointer':'default'}" onclick="${hasDiff?`toggleAudit('${a.id}')`:''}" id="audit-row-${a.id}">
+          <div class="expand-icon ${isOpen?'open':''}" id="expand-icon-${a.id}">
+            ${hasDiff?`<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>`:''}
+          </div>
+          <span class="time-cell">${a.time}</span>
+          <span style="font-size:13.5px;font-weight:500">${a.actor}</span>
+          <span class="audit-action">${a.action}</span>
+          <div>
+            <div class="audit-entity-type">${a.entityType}</div>
+            <div class="audit-entity">${a.entity}</div>
+          </div>
+        </div>
+        <div class="diff-panel ${isOpen?'open':''}" id="diff-${a.id}">
+          <div class="diff-grid">
+            <div>
+              <div class="diff-label">Before</div>
+              <pre class="diff-code">${a.before ? JSON.stringify(a.before, null, 2) : '—'}</pre>
+            </div>
+            <div>
+              <div class="diff-label">After</div>
+              <pre class="diff-code">${a.after ? JSON.stringify(a.after, null, 2) : '—'}</pre>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleAudit(id) {
+  if (expandedRows.has(id)) expandedRows.delete(id);
+  else expandedRows.add(id);
+  const panel = document.getElementById('diff-'+id);
+  const icon = document.getElementById('expand-icon-'+id);
+  panel.classList.toggle('open');
+  icon.classList.toggle('open');
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, error=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (error?' error':'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 2800);
+}
+
+function exportCSV() {
+  showToast('Downloading routing-history-2026-02-23.csv');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+renderHistory();
+renderStats();
+renderFailed();
+renderAudit();
+</script>
+</body>
+</html>
