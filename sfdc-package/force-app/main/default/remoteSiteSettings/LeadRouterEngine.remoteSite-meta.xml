@@ -3,5 +3,5 @@
     <description>Lead Router Engine endpoint — patched by lead-routing sfdc deploy</description>
     <disableProtocolSecurity>false</disableProtocolSecurity>
     <isActive>true</isActive>
-    <url>https://placeholder.example.com</url>
+    <url>https://engine.openedgeai.tech</url>
 </RemoteSiteSetting>

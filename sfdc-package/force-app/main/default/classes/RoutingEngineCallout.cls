@@ -14,12 +14,18 @@ public with sharing class RoutingEngineCallout {
     public static void sendAsync(String objectType, List<Id> recordIds, String eventType) {
         Routing_Settings__c settings = Routing_Settings__c.getOrgDefaults();
         String secret = settings.Webhook_Secret__c;
+        String engineEndpoint = settings.Engine_Endpoint__c;
+
+        if (String.isBlank(engineEndpoint)) {
+            System.debug('RoutingEngineCallout: Engine_Endpoint__c not configured. Run: lead-routing sfdc deploy');
+            return;
+        }
 
         List<SObject> records = queryRecords(objectType, recordIds);
 
         for (SObject record : records) {
             String payload = RoutingPayloadBuilder.build(objectType, eventType, record);
-            sendPayload(payload, secret);
+            sendPayload(payload, secret, engineEndpoint);
         }
     }
 
@@ -38,11 +44,11 @@ public with sharing class RoutingEngineCallout {
         return Database.query(soql);
     }
 
-    private static void sendPayload(String payload, String secret) {
+    private static void sendPayload(String payload, String secret, String engineEndpoint) {
         String signature = hmacSha256(payload, secret);
 
         HttpRequest req = new HttpRequest();
-        req.setEndpoint('callout:RoutingEngine/route');
+        req.setEndpoint(engineEndpoint.removeEnd('/') + '/route');
         req.setMethod('POST');
         req.setHeader('Content-Type', 'application/json');
         req.setHeader('X-Sfdc-Org-Id', UserInfo.getOrganizationId());
