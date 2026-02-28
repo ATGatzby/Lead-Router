@@ -77,16 +77,16 @@ export async function runSfdcDeploy(): Promise<void> {
   })
   if (typeof alias === 'symbol') process.exit(0)
 
-  // ── 4. Authenticate ────────────────────────────────────────────────────────
-  s.start('Opening Salesforce login in browser…')
+  // ── 4. Authenticate (device flow — no browser required on this machine) ────
+  log.info('Opening Salesforce login via device flow (no browser needed on this server)…')
+  log.info('You will be given a URL and a code — open the URL on any device (phone/laptop) and enter the code.')
   try {
-    await execa('sf', ['org', 'login', 'web', '--alias', alias as string], {
+    await execa('sf', ['org', 'login', 'device', '--alias', alias as string], {
       stdio: 'inherit',
     })
-    s.stop('Authenticated')
+    log.success('Authenticated')
   } catch (err) {
-    s.stop('Authentication failed')
-    log.error(String(err))
+    log.error('Authentication failed: ' + String(err))
     process.exit(1)
   }
 
