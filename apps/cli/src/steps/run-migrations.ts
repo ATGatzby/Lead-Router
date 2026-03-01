@@ -1,8 +1,13 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { execa } from 'execa'
 import { spinner } from '@clack/prompts'
+import type { SshConnection } from '../utils/ssh.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 /**
  * Read a single value from a generated .env file.
@@ -15,44 +20,80 @@ function readEnvVar(envFile: string, key: string): string {
 }
 
 /**
- * The generated DATABASE_URL uses the docker compose service name "postgres".
- * From the host machine the container is reachable on localhost:5432 instead.
+ * Build a DATABASE_URL pointing through the SSH tunnel.
+ * The generated URL uses the Docker service name "postgres" — we replace
+ * hostname and port with localhost + the local tunnel port.
  */
-function getHostDbUrl(dir: string): string {
-  return readEnvVar(path.join(dir, '.env.web'), 'DATABASE_URL').replace('@postgres:', '@localhost:')
+function getTunneledDbUrl(localDir: string, localPort: number): string {
+  const rawUrl = readEnvVar(path.join(localDir, '.env.web'), 'DATABASE_URL')
+  const parsed = new URL(rawUrl)
+  parsed.hostname = 'localhost'
+  parsed.port = String(localPort)
+  return parsed.toString()
 }
 
 /**
- * Run Prisma migrations from the host CLI process against the exposed postgres port.
- *
- * This avoids exec-ing into the web container (which requires a full image rebuild
- * every time a Prisma CLI fix is needed). The host machine already has the prisma
- * binary in the monorepo node_modules and the schema at packages/db/prisma/.
+ * Find the Prisma binary — bundled in the CLI's node_modules (global install)
+ * or in the monorepo (dev).
  */
-export async function runMigrations(dir: string, _adminEmail: string, _adminPassword: string): Promise<void> {
+function findPrismaBin(): string {
+  const candidates = [
+    path.join(__dirname, '../node_modules/.bin/prisma'),
+    path.join(__dirname, '../node_modules/prisma/bin/prisma.js'),
+    path.resolve('packages/db/node_modules/.bin/prisma'),
+    path.resolve('node_modules/.bin/prisma'),
+    path.resolve('node_modules/.pnpm/node_modules/.bin/prisma'),
+  ]
+  const found = candidates.find(fs.existsSync)
+  if (!found) throw new Error('Prisma binary not found — CLI may need to be reinstalled.')
+  return found
+}
+
+/**
+ * Run Prisma migrations via an SSH port-forward tunnel to the remote Postgres.
+ *
+ * Flow:
+ * 1. Open SSH tunnel: local random port → remote localhost:5432
+ * 2. prisma migrate deploy  (DATABASE_URL points at the tunnel)
+ * 3. prisma db execute seed (same tunnel URL)
+ * 4. Close the tunnel
+ */
+export async function runMigrations(
+  ssh: SshConnection,
+  localDir: string,
+  adminEmail: string,
+  adminPassword: string
+): Promise<void> {
+  const s = spinner()
+  s.start('Opening secure tunnel to database')
+
+  let tunnelClose: (() => void) | undefined
+
+  try {
+    const { localPort, close } = await ssh.tunnel(5432)
+    tunnelClose = close
+    s.stop(`Database tunnel open (local port ${localPort})`)
+
+    await applyMigrations(localDir, localPort)
+    await seedAdminUser(localDir, localPort, adminEmail, adminPassword)
+  } finally {
+    tunnelClose?.()
+  }
+}
+
+async function applyMigrations(localDir: string, localPort: number): Promise<void> {
   const s = spinner()
   s.start('Running database migrations')
 
   try {
-    const DATABASE_URL = getHostDbUrl(dir)
-    // pnpm puts prisma in the package that declares it as a dep, not the workspace root
-    const candidates = [
-      path.resolve('packages/db/node_modules/.bin/prisma'),
-      path.resolve('node_modules/.bin/prisma'),
-      path.resolve('node_modules/.pnpm/node_modules/.bin/prisma'),
-    ]
-    const prismaBin = candidates.find(fs.existsSync)
-    if (!prismaBin) {
-      throw new Error('Prisma binary not found — run lead-routing from the project root directory.')
-    }
-    const schemaPath = path.resolve('packages/db/prisma/schema.prisma')
+    const DATABASE_URL = getTunneledDbUrl(localDir, localPort)
+    const prismaBin = findPrismaBin()
 
-    // Generate the client on the host so the seed step can import @prisma/client
-    await execa(prismaBin, ['generate', '--schema', schemaPath], {
-      env: { ...process.env, DATABASE_URL },
-    })
+    // Schema: bundled in dist/prisma/ (global install) or monorepo fallback
+    const bundledSchema = path.join(__dirname, 'prisma/schema.prisma')
+    const monoSchema = path.resolve('packages/db/prisma/schema.prisma')
+    const schemaPath = fs.existsSync(bundledSchema) ? bundledSchema : monoSchema
 
-    // Apply all pending migrations
     await execa(prismaBin, ['migrate', 'deploy', '--schema', schemaPath], {
       env: { ...process.env, DATABASE_URL },
     })
@@ -66,13 +107,11 @@ export async function runMigrations(dir: string, _adminEmail: string, _adminPass
 
 /**
  * Seed the first admin AppUser using raw SQL via `prisma db execute`.
- *
- * This avoids any @prisma/client module resolution issues entirely.
- * The SQL creates the first Organisation (if none exists) then creates the
- * admin AppUser under it — both operations are idempotent.
+ * Password is PBKDF2 "salt:hash" format matching apps/web/lib/crypto.ts.
  */
-export async function seedAdminUser(
-  dir: string,
+async function seedAdminUser(
+  localDir: string,
+  localPort: number,
   adminEmail: string,
   adminPassword: string
 ): Promise<void> {
@@ -80,19 +119,16 @@ export async function seedAdminUser(
   s.start('Creating admin user')
 
   try {
-    const DATABASE_URL = getHostDbUrl(dir)
-    const webhookSecret = readEnvVar(path.join(dir, '.env.engine'), 'ENGINE_WEBHOOK_SECRET')
-    // Must match apps/web/lib/crypto.ts hashPassword() — PBKDF2, "salt:hash" format
+    const DATABASE_URL = getTunneledDbUrl(localDir, localPort)
+    const webhookSecret = readEnvVar(path.join(localDir, '.env.engine'), 'ENGINE_WEBHOOK_SECRET')
+
     const salt = crypto.randomBytes(16).toString('hex')
     const pbkdf2Hash = crypto.pbkdf2Sync(adminPassword, salt, 310000, 32, 'sha256').toString('hex')
     const passwordHash = `${salt}:${pbkdf2Hash}`
 
-    // Escape single quotes for SQL string literals
     const safeEmail = adminEmail.replace(/'/g, "''")
     const safeWebhookSecret = webhookSecret.replace(/'/g, "''")
 
-    // Create the first org if none exists, then insert the admin user under it.
-    // gen_random_uuid() is available in PostgreSQL 13+ (pgcrypto not needed).
     const sql = `
 -- Create initial organisation if none exists
 INSERT INTO organizations (id, "webhookSecret", "createdAt", "updatedAt")
@@ -107,16 +143,8 @@ LIMIT 1
 ON CONFLICT ("orgId", email) DO NOTHING;
 `
 
-    const candidates = [
-      path.resolve('packages/db/node_modules/.bin/prisma'),
-      path.resolve('node_modules/.bin/prisma'),
-    ]
-    const prismaBin = candidates.find(fs.existsSync)
-    if (!prismaBin) throw new Error('Prisma binary not found.')
-
-    await execa(prismaBin, ['db', 'execute', '--stdin', '--url', DATABASE_URL], {
-      input: sql,
-    })
+    const prismaBin = findPrismaBin()
+    await execa(prismaBin, ['db', 'execute', '--stdin', '--url', DATABASE_URL], { input: sql })
 
     s.stop('Admin user ready')
   } catch (err) {

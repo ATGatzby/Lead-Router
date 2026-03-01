@@ -27,7 +27,7 @@ export async function verifyHealth(appUrl: string, engineUrl: string): Promise<v
 async function pollHealth(
   service: string,
   url: string,
-  maxAttempts = 12,
+  maxAttempts = 24,  // 24 × 5s = 2 min — allows time for Caddy TLS cert provisioning
   intervalMs = 5000
 ): Promise<HealthResult> {
   const s = spinner()

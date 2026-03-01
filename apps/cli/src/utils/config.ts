@@ -1,14 +1,31 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
+export interface SshInstallConfig {
+  host: string
+  port: number
+  username: string
+  /** Absolute path to private key on local machine — not stored if password auth was used */
+  privateKeyPath?: string
+}
+
 export interface InstallConfig {
   appUrl: string
   engineUrl: string
+  /** Local directory where config files are written (./lead-routing/) */
   installDir: string
+  /** Absolute path on the remote server (e.g. /root/lead-routing) */
+  remoteDir: string
+  /** SSH connection details for subsequent commands */
+  ssh: SshInstallConfig
   dockerManaged: {
     db: boolean
     redis: boolean
   }
+  /** Salesforce Connected App client ID — stored so `sfdc deploy` can re-auth */
+  sfdcClientId?: string
+  /** Salesforce login URL (https://login.salesforce.com or https://test.salesforce.com) */
+  sfdcLoginUrl?: string
   installedAt: string
   version: string
 }

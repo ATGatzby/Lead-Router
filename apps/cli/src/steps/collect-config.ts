@@ -16,6 +16,7 @@ export interface CollectedConfig {
   sfdcClientId: string
   sfdcClientSecret: string
   sfdcLoginUrl: string
+  orgAlias: string
   managedDb: boolean
   databaseUrl: string
   dbPassword: string
@@ -87,7 +88,8 @@ export async function collectConfig(): Promise<CollectedConfig> {
       '  1. Go to Salesforce Setup → App Manager → New Connected App\n' +
       '  2. Connected App Name: Lead Routing\n' +
       '  3. Check "Enable OAuth Settings"\n' +
-      `  4. Callback URL: ${callbackUrl}\n` +
+      `  4. Callback URL:\n` +
+      `       ${callbackUrl}\n` +
       '  5. Selected Scopes: api  •  refresh_token, offline_access  •  openid\n' +
       '  6. Check "Require Secret for Web Server Flow"\n' +
       '  7. Save — wait ~2 min, then click "Manage Consumer Details"\n' +
@@ -117,6 +119,14 @@ export async function collectConfig(): Promise<CollectedConfig> {
   })
   if (isCancel(sfdcLoginUrlChoice)) bail(sfdcLoginUrlChoice)
   const sfdcLoginUrl = sfdcLoginUrlChoice as string
+
+  const orgAlias = await text({
+    message: 'Salesforce org alias (used by the sf CLI to identify this org)',
+    placeholder: 'lead-routing',
+    initialValue: 'lead-routing',
+    validate: (v) => (!v ? 'Required' : undefined),
+  })
+  if (isCancel(orgAlias)) bail(orgAlias)
 
   // ── Database ───────────────────────────────────────────────────────────────
   const managedDb = await confirm({
@@ -229,6 +239,7 @@ export async function collectConfig(): Promise<CollectedConfig> {
     sfdcClientId: sfdcClientId as string,
     sfdcClientSecret: sfdcClientSecret as string,
     sfdcLoginUrl,
+    orgAlias: orgAlias as string,
     managedDb: managedDb as boolean,
     databaseUrl,
     dbPassword,

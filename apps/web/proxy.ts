@@ -18,6 +18,7 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/register",
   "/api/auth/",
+  "/api/cli-auth/",    // CLI OAuth bridge — request + poll endpoints (no user session)
   "/api/health",
   "/api/setup/",       // /api/setup/status + /api/setup/onboarding-done (Apex callouts, no session)
   "/api/fields/sync",  // Called by OnboardingController.syncFieldSchema — X-Sfdc-Org-Id auth

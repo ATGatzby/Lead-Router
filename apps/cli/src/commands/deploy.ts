@@ -1,7 +1,7 @@
-import { intro, outro, log } from '@clack/prompts'
+import { intro, outro, log, password as promptPassword } from '@clack/prompts'
 import chalk from 'chalk'
 import { findInstallDir, readConfig } from '../utils/config.js'
-import { run } from '../utils/exec.js'
+import { SshConnection } from '../utils/ssh.js'
 import { runMigrations } from '../steps/run-migrations.js'
 
 export async function runDeploy(): Promise<void> {
@@ -18,26 +18,58 @@ export async function runDeploy(): Promise<void> {
 
   const cfg = readConfig(dir)!
 
-  try {
-    log.step('Pulling latest images')
-    await run('docker', ['compose', 'pull'], { label: 'Pulling images', cwd: dir })
+  // ── Connect via SSH ──────────────────────────────────────────────────────
+  const ssh = new SshConnection()
+  let sshPassword: string | undefined
 
-    log.step('Restarting services')
-    await run('docker', ['compose', 'up', '-d', '--remove-orphans'], {
-      label: 'Restarting containers',
-      cwd: dir,
+  if (!cfg.ssh.privateKeyPath) {
+    // Password auth — not persisted in lead-routing.json; prompt again
+    const pw = await promptPassword({
+      message: `SSH password for ${cfg.ssh.username}@${cfg.ssh.host}`,
     })
+    if (typeof pw === 'symbol') process.exit(0)
+    sshPassword = pw as string
+  }
 
-    log.step('Running migrations')
-    await runMigrations(dir, '', '') // email/password not needed for deploy
+  try {
+    await ssh.connect({
+      host: cfg.ssh.host,
+      port: cfg.ssh.port,
+      username: cfg.ssh.username,
+      privateKeyPath: cfg.ssh.privateKeyPath,
+      password: sshPassword,
+      remoteDir: cfg.remoteDir,
+    })
+    log.success(`Connected to ${cfg.ssh.host}`)
+  } catch (err) {
+    log.error(`SSH connection failed: ${String(err)}`)
+    process.exit(1)
+  }
+
+  try {
+    // ── Pull latest images ────────────────────────────────────────────────
+    log.step('Pulling latest Docker images')
+    await ssh.exec('docker compose pull', cfg.remoteDir)
+    log.success('Images pulled')
+
+    // ── Restart containers ────────────────────────────────────────────────
+    log.step('Restarting services')
+    await ssh.exec('docker compose up -d --remove-orphans', cfg.remoteDir)
+    log.success('Services restarted')
+
+    // ── Run migrations ────────────────────────────────────────────────────
+    log.step('Running database migrations')
+    await runMigrations(ssh, dir, '', '')
 
     outro(
       chalk.green('✔  Deployment complete!') +
-        `\n\n  ${chalk.cyan(cfg.appUrl)}`
+      `\n\n  ${chalk.cyan(cfg.appUrl)}`
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     log.error(`Deploy failed: ${message}`)
     process.exit(1)
+  } finally {
+    await ssh.disconnect()
   }
 }

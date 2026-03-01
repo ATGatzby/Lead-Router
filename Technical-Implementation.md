@@ -1018,10 +1018,10 @@ The project is distributed as a self-hosted product via an interactive CLI insta
 
 | Command | Description |
 |---|---|
-| `lead-routing init` | Full interactive setup wizard (6 steps) |
-| `lead-routing init --dry-run` | Wizard + file generation only — skips Docker start, migrations, health check |
-| `lead-routing sfdc deploy` | Bundle + patch + deploy the SFDC package to a Salesforce org (see below) |
-| `lead-routing deploy` | Pull latest images, restart containers, run migrations |
+| `lead-routing init` | Full interactive setup wizard (9 steps) — SSH remote deploy, inline SFDC deploy, App Launcher guide |
+| `lead-routing init --dry-run` | Wizard + local file generation only — connects nothing, deploys nothing |
+| `lead-routing sfdc deploy` | Standalone SFDC package deploy — re-deploy or use from a different machine |
+| `lead-routing deploy` | Pull latest images via SSH, restart containers on VPS, run migrations via SSH tunnel |
 | `lead-routing doctor` | Health check: Docker, containers, HTTP endpoints |
 | `lead-routing logs [service]` | Stream logs (web / engine / postgres / redis) |
 | `lead-routing status` | Show `docker compose ps` output |
@@ -1032,18 +1032,35 @@ The project is distributed as a self-hosted product via an interactive CLI insta
 
 `apps/cli/src/commands/sfdc.ts` — `runSfdcDeploy()`
 
+Thin orchestrator: resolves config, checks `sf` CLI, prompts for org alias, then delegates all deploy logic to `sfdcDeployInline()` (see below).
+
 Steps executed in order:
-1. Reads `lead-routing.json` via `findInstallDir()` / `readConfig()` — exits with error if not found
-2. Checks `sf --version` is installed; if missing, prints install URL + manual deploy command and exits
-3. Prompts for Salesforce org alias
-4. Runs `sf org login web --alias <alias>` (browser-based OAuth)
-5. Copies bundled `sfdc-package/` from CLI dist to `{installDir}/sfdc-package/`
-6. **Patches Named Credential XML** — replaces `<endpoint>` with `config.engineUrl` using regex
-7. **Patches Remote Site Setting XMLs** — replaces `<url>` in `LeadRouterEngine` with `config.engineUrl` and in `LeadRouterApp` with `config.appUrl`
-8. Runs `sf project deploy start --target-org <alias> --source-dir force-app` — deploys all metadata including the `LeadRouterAdmin` permission set
-8b. Runs `sf org assign permset --name LeadRouterAdmin --target-org <alias>` — assigns the permission set to the authenticated user so the "Lead Router Setup" app appears in the App Launcher immediately. Non-fatal: if the error contains `Duplicate PermissionSetAssignment` (already assigned on re-deploy), it is treated as success; any other error prints manual instructions.
-9. Writes `Routing_Settings__c` org settings — queries for an existing record first (`sf data query`); if found, updates it (`sf data update record --record-id <id>`); otherwise creates it (`sf data create record`). This avoids the `duplicate value found: SetupOwnerId` error on re-deploys (Hierarchy Custom Settings only allow one org-level record).
-10. Prints success + next steps (open Salesforce App Launcher → Lead Router Setup)
+1. Reads `lead-routing.json` via `findInstallDir()` / `readConfig()` — if not found, prompts for App URL and Engine URL directly (supports running from a different machine than where `init` ran)
+2. Checks `sf --version` is installed; if missing, prints install URL and exits
+3. Prompts for Salesforce org alias (default: `lead-routing`)
+4. Calls `sfdcDeployInline({ appUrl, engineUrl, orgAlias })`
+5. Prints success + next steps (open Salesforce App Launcher → Lead Router Setup)
+
+### `sfdc-deploy-inline` Step
+
+`apps/cli/src/steps/sfdc-deploy-inline.ts` — `sfdcDeployInline(params)`
+
+Shared deploy logic used by both `init` (step 7) and the standalone `sfdc deploy` command. Accepts `{ appUrl, engineUrl, orgAlias, sfdcClientId, sfdcLoginUrl, installDir? }`.
+
+Steps executed in order:
+1. **Auth check** — `sf org display --target-org <orgAlias>` — if exit 0, skip login (already authenticated). Otherwise, run the **web app OAuth bridge** (`loginViaAppBridge`):
+   - `POST {appUrl}/api/cli-auth/request` → receive `{ sessionId, authUrl }` (auth URL points to Salesforce OAuth with `state=cli:{sessionId}` and `redirect_uri={appUrl}/api/auth/callback`)
+   - Opens `authUrl` in the browser with the platform `open` / `xdg-open` command
+   - Polls `GET {appUrl}/api/cli-auth/poll/{sessionId}` every 2 s (up to 5 min)
+   - When browser completes auth, web app exchanges code and stores `{ accessToken, instanceUrl }` in the in-memory CLI auth store; poll returns them to the CLI
+   - CLI calls `sf org login access-token --instance-url {instanceUrl} --alias {orgAlias} --no-prompt` with the token piped via stdin to persist credentials in the sf CLI store
+   - **No extra Connected App callback URL needed** — uses only `{appUrl}/api/auth/callback`, which is the same URL already registered for the web app
+2. Copies bundled `sfdc-package/` from CLI dist to `{installDir ?? tmpdir()}/lead-routing-sfdc-package/`
+3. **Patches Named Credential XML** — replaces `<endpoint>` with `engineUrl`
+4. **Patches Remote Site Setting XMLs** — `LeadRouterEngine → engineUrl`, `LeadRouterApp → appUrl`
+5. Runs `sf project deploy start --target-org <alias> --source-dir force-app`
+6. Runs `sf org assign permset --name LeadRouterAdmin` — non-fatal; `Duplicate PermissionSetAssignment` treated as success
+7. Writes `Routing_Settings__c` — queries for existing record, updates if found, creates if not (avoids `duplicate SetupOwnerId` on re-deploy)
 
 **Why the permission set is needed**: Deploying a `CustomApplication` via SFDX does not automatically grant any user visibility — the App Launcher only shows apps the authenticated user's profile or a permission set has granted access to. `LeadRouterAdmin.permissionset-meta.xml` grants `applicationVisibilities` for `Lead_Router_Setup` and `Visible` visibility for the `Lead_Router_Setup` tab (`Visible` is required; `Available` only lets the user add it manually and does not satisfy the Lightning App nav bar).
 
@@ -1060,12 +1077,54 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
 
 ### `init` Wizard Steps
 
-1. **Prerequisites** — Checks Docker 24+, Docker Compose v2, Node 20+, ports 80 and 443 availability (blocks if in use — required by Caddy), Salesforce CLI `sf` (warning only — non-blocking, needed for `sfdc deploy`)
-2. **Configuration** — `@clack/prompts` interactive wizard collecting: App URL, **Engine URL** (public HTTPS URL Salesforce will call — new), SFDC Connected App credentials, DB choice (Docker-managed or BYO URL), Redis choice (Docker-managed or BYO URL), admin email/password, optional Resend API key
-3. **Generate files** — Writes to `./lead-routing/`: `docker-compose.yml`, `Caddyfile`, `.env.web`, `.env.engine`, `lead-routing.json`
-4. **Start services** — `docker compose pull && docker compose up -d`, then polls PostgreSQL readiness (60s timeout)
-5. **Migrations** — Runs Prisma migrate from host against `localhost:5432`, then seeds the first admin `AppUser` via raw SQL
-6. **Verify health** — Polls `GET http://localhost:3000/api/health` (web) and `GET http://localhost:3001/health` (engine) via localhost ports (SSL not yet provisioned at this point)
+`init` is the single command a customer runs from their **local machine**. The CLI SSHes into their server, transfers files, runs Docker remotely, tunnels Postgres for migrations, and runs `sf` locally. The customer never SSHes into their server manually.
+
+1. **Local prerequisites** — Checks Node 20+ and Salesforce CLI `sf` on the local machine (hard failure). Docker/port checks have moved to step 5 (remote).
+2. **Server connection** — Prompts for VPS hostname, SSH port (default 22), username (default root), auth method (key file or password), key path (validated against `~/.ssh/id_rsa`), remote install directory (default `~/lead-routing`). No connection made yet — prompt-only so dry-run works.
+3. **Configuration** — App URL, Engine URL, SFDC Connected App credentials (CLI prints exact setup instructions with callback URL pre-filled), Salesforce org alias, DB choice, Redis choice, admin email/password, optional Resend API key.
+4. **Generate config files** — Writes locally to `./lead-routing/`: `docker-compose.yml`, `Caddyfile`, `.env.web`, `.env.engine`, `lead-routing.json` (includes `ssh` and `remoteDir` fields). Dry-run exits here.
+5. **Connect to server** — SSH connect via `node-ssh`, resolves `~` via remote `$HOME`, checks remote Docker 24+ and Docker Compose v2 (hard failure), checks ports 80/443 (warn only), uploads all 5 config files via SFTP.
+6. **Start services** — First checks for a stale `{dirName}_postgres_data` volume via `docker volume inspect`; if found runs `docker compose down -v --remove-orphans` to wipe it (prevents POSTGRES_PASSWORD being silently ignored on re-init, which causes Prisma P1000 auth failure). Then SSH exec: `docker compose pull` → `docker compose up -d --remove-orphans`. **Two-phase postgres readiness**: Phase 1 polls `docker compose exec -T postgres pg_isready` (container-internal, up to 60s). Phase 2 polls `bash -c 'echo > /dev/tcp/127.0.0.1/5432'` (host TCP port, up to 8s) — this is what the SSH tunnel actually forwards to; Docker's host-port binding can lag behind container-internal readiness on fresh starts, causing P1001.
+7. **Database migrations** — Opens SSH port-forward tunnel: local random port → remote `localhost:5432`. Runs `prisma migrate deploy` and `prisma db execute` seed SQL from local machine using tunneled DATABASE_URL. Closes tunnel when done.
+8. **Verify health** — Polls `GET https://{appUrl}/api/health` and `GET https://{engineUrl}/health` (public HTTPS URLs — not localhost). `maxAttempts` raised to 24 (2 min) to allow Caddy TLS cert provisioning (~30s).
+9. **Deploy Salesforce package** — Calls `sfdcDeployInline()` locally. First checks if already authenticated (`sf org display --target-org {alias}`) — skips login if so. If not authenticated, uses the **web app OAuth bridge** (`loginViaAppBridge`): requests a sessionId from `POST {appUrl}/api/cli-auth/request`, opens the Salesforce auth URL in the browser, polls `GET {appUrl}/api/cli-auth/poll/{sessionId}` until the token arrives, then stores credentials with `sf org login access-token`. **Only one Connected App callback URL required** — `{appUrl}/api/auth/callback` (already registered; no `localhost:1717` URL needed). Then patches + deploys SFDC package → assigns `LeadRouterAdmin` permission set → writes `Routing_Settings__c`.
++ **App Launcher wizard guide** — Prints 4-step wizard instructions, waits for customer confirm.
+
+### SSH Architecture
+
+| Component | Location |
+|-----------|----------|
+| `src/utils/ssh.ts` | `SshConnection` class wrapping `node-ssh` — provides `exec`, `execSilent`, `upload` (SFTP), `mkdir`, `resolveHome`, `tunnel`, `disconnect` |
+| `src/steps/collect-ssh-config.ts` | Prompts for host, port, username, auth method, key path, remote dir |
+| `src/steps/check-remote-prerequisites.ts` | SSH exec: Docker version, Compose version, port availability |
+| `src/steps/upload-files.ts` | SFTP upload of 5 generated files to `remoteDir` |
+| `src/steps/start-services.ts` | SSH exec: docker compose pull + up + pg_isready polling |
+| `src/steps/run-migrations.ts` | SSH tunnel to port 5432, prisma commands run locally via tunnel |
+
+### SSH Tunnel (Postgres Migrations)
+
+`ssh.tunnel(5432)` creates a local `net.Server` on a random port. Each incoming socket is piped through `ssh2.Client.forwardOut` to `localhost:5432` on the remote server. `getTunneledDbUrl()` rebuilds `DATABASE_URL` with `hostname=localhost` and `port={localPort}` using the `URL` constructor. Tunnel is closed in a `finally` block after migrations + seed complete.
+
+### `lead-routing.json` Schema (post-SSH)
+
+```json
+{
+  "appUrl": "https://leads.acme.com",
+  "engineUrl": "https://engine.acme.com",
+  "installDir": "/Users/customer/myproject/lead-routing",
+  "remoteDir": "/root/lead-routing",
+  "ssh": {
+    "host": "165.22.100.50",
+    "port": 22,
+    "username": "root",
+    "privateKeyPath": "/Users/customer/.ssh/id_rsa"
+  },
+  "dockerManaged": { "db": true, "redis": true },
+  "installedAt": "2026-03-01T12:00:00.000Z",
+  "version": "0.1.0"
+}
+```
+SSH password is never persisted. Future commands (`deploy`, `logs`, `status`) will read `ssh` from this file to reconnect.
 
 ### Docker Compose
 
@@ -1103,10 +1162,12 @@ apps/cli/
 ├── src/
 │   ├── index.ts                    # Commander root (init, sfdc, deploy, doctor, logs, status, config)
 │   ├── commands/                   # init, sfdc, deploy, doctor, logs, status, config
-│   ├── steps/                      # prerequisites, collect-config, generate-files,
-│   │                               #   start-services, run-migrations, verify-health
+│   ├── steps/                      # prerequisites, collect-ssh-config, collect-config,
+│   │                               #   check-remote-prerequisites, generate-files,
+│   │                               #   upload-files, start-services, run-migrations,
+│   │                               #   verify-health, sfdc-deploy-inline, app-launcher-guide
 │   ├── templates/                  # docker-compose.ts, env-web.ts, env-engine.ts
-│   └── utils/                      # exec.ts, config.ts, crypto.ts
+│   └── utils/                      # exec.ts, config.ts, crypto.ts, ssh.ts
 ├── sfdc-package/                   # Copy of repo-root sfdc-package/ (bundled with npm package)
 ├── tsup.config.ts                  # onSuccess copies sfdc-package/ → dist/sfdc-package/
 ├── package.json                    # "files": ["dist/", "sfdc-package/"]
@@ -1121,6 +1182,7 @@ apps/cli/
 | `commander` | Command / subcommand routing |
 | `execa` | Shell command execution |
 | `chalk` | Terminal colour output |
+| `node-ssh` | SSH connection, SFTP file upload, port-forward tunneling. **Note:** `ssh2` (transitive dep) has optional native modules (`cpu-features`, `sshcrypto`) — pnpm skips their build scripts by default. This is fine; `ssh2` uses pure-JS fallbacks. Do NOT use `noExternal: [/.*/]` in `tsup.config.ts` — it causes build failures trying to bundle the uncompiled `.node` files. Leave `node-ssh` as a runtime external (default tsup behavior); it resolves from `apps/cli/node_modules/` during dev and from the global install `node_modules/` when published. |
 
 ---
 
@@ -1261,7 +1323,12 @@ Paste into SFDC Setup → Custom Settings → Routing Settings → Manage → `W
 - `onboardingWizard.js handleConnect()`: Opens `{appUrl}/api/auth/sfdc/login` (NOT `/auth/sfdc` — that route does not exist in Next.js). The `/api/auth/sfdc/login` route redirects to Salesforce OAuth; callback at `/api/auth/sfdc/callback` stores tokens and redirects to `/dashboard?crm_connected=1`. After the popup completes, the LWC's `checkConnectionStatus` poll detects the stored connection.
 - **PKCE**: Salesforce Connected Apps with "Require Proof Key for Code Exchange" enabled reject auth requests without `code_challenge`. `getSfdcAuthUrl(codeChallenge?)` in `packages/sfdc/src/client.ts` now accepts an optional challenge; `generatePkceVerifier()` / `generatePkceChallenge()` generate the pair. The login route stores `codeVerifier` in `session.sfdcCodeVerifier` (iron-session); the callback reads it, clears it, and passes it to `exchangeCodeForTokens(code, codeVerifier?)`. Token exchange is now done via raw `fetch` to `/services/oauth2/token` (jsforce's `conn.authorize()` doesn't support `code_verifier`).
 - **`POST /api/fields/sync` auth**: This endpoint is called by Apex (server-to-server callout), not from a browser — there is no iron-session cookie. The route now authenticates via `X-Sfdc-Org-Id` header (sent by `OnboardingController.syncFieldSchema`) and looks up the org by `sfdcOrgId`. Previously it used `getActorFromHeaders()` (which reads `x-org-id` injected by middleware), causing a "Missing auth headers" 500 on every sync attempt.
-- **Apex callout endpoints must be in `PUBLIC_PREFIXES`**: `proxy.ts` (Next.js middleware) blocks all unauthenticated requests. Salesforce Apex callouts carry no iron-session cookie. Any endpoint called from Apex must be listed in `PUBLIC_PREFIXES`. Currently: `/api/setup/` (status + onboarding-done) and `/api/fields/sync`.
+- **Apex callout endpoints must be in `PUBLIC_PREFIXES`**: `proxy.ts` (Next.js middleware) blocks all unauthenticated requests. Salesforce Apex callouts carry no iron-session cookie. Any endpoint called from Apex must be listed in `PUBLIC_PREFIXES`. Currently: `/api/setup/` (status + onboarding-done) and `/api/fields/sync`. The CLI OAuth bridge endpoints `/api/cli-auth/` are also in `PUBLIC_PREFIXES` (called by the CLI, not by a browser session).
+- **CLI OAuth Bridge** (`apps/web/app/api/cli-auth/`): The CLI authenticates with Salesforce without requiring `localhost:1717` in the Connected App by routing through the deployed web app:
+  - `POST /api/cli-auth/request` — creates a random `sessionId`, builds the Salesforce auth URL (`redirect_uri={APP_URL}/api/auth/callback&state=cli:{sessionId}`), returns both to the CLI.
+  - `GET /api/cli-auth/poll/{sessionId}` — returns `{ status: 'pending' | 'ok' | 'expired' }`. On `ok`, includes `accessToken` and `instanceUrl`. Token is consumed (deleted) on first successful poll.
+  - `GET /api/auth/callback` — detects `state=cli:{sessionId}`, exchanges the OAuth code for tokens directly (using `SFDC_CLIENT_ID` / `SFDC_CLIENT_SECRET` / `SFDC_REDIRECT_URI` from `.env.web`), stores them in the `cli-auth-store` in-memory Map (10 min TTL), returns a `text/html` "You may close this tab" page. For non-CLI state, continues to redirect to `/api/auth/sfdc/callback` as before.
+  - In-memory store (`apps/web/lib/cli-auth-store.ts`) — suitable for single-process self-hosted deployment; no Redis required.
 - **Engine MUST be on a public URL**: The Apex trigger reads `Engine_Endpoint__c` from `Routing_Settings__c` and calls the engine directly. Salesforce cannot reach `localhost:3001`. For local dev, use `ssh -R 80:localhost:3001 localhost.run` to get a public HTTPS tunnel (URL changes on restart — update `lead-routing.json` `engineUrl` and re-run `lead-routing sfdc deploy` to update `Engine_Endpoint__c` and the Remote Site Setting). For production, the engine should be on a stable public URL.
 - **Named Credential URL not updated by Metadata API re-deploy**: Salesforce's Metadata API silently ignores `<endpoint>` changes in Named Credential XML when the credential already exists. This is why `RoutingEngineCallout` was migrated to read the engine URL from `Routing_Settings__c.Engine_Endpoint__c` (updated reliably via `sf data update record`) rather than using `callout:RoutingEngine/route`.
 - **`appUrl` leading space**: `@clack/prompts text()` does not trim input. A pasted URL with a leading space propagates to `.env.web` `APP_URL` / `SFDC_REDIRECT_URI` and `lead-routing.json`. Fixed in `collect-config.ts` with `.trim()` on `appUrl`.
@@ -1306,6 +1373,7 @@ BullMQ requires a dedicated ioredis connection with `maxRetriesPerRequest: null`
 | Engine container crash-loops with `Cannot find package 'fastify'` | `tsup` bundles only workspace packages (`@lead-routing/db`, `@lead-routing/sfdc`) and leaves third-party deps (fastify, bullmq, ioredis) external, but the old runner stage had no `node_modules` at all | Runner stage now runs `pnpm install --prod --shamefully-hoist` before copying the built `dist/` — installs all production runtime deps without needing devDeps |
 | Engine crash-loops with `Dynamic require of "punycode" is not supported` | jsforce → node-fetch → `whatwg-url@5.0.0` uses `require('punycode')` (removed from Node 24); tsup's ESM `__require` shim blocks all dynamic requires | Switched tsup to `format: ['cjs']`, removed `"type":"module"` from engine `package.json`, moved `await app.register()` inside `start()` — CJS loads CJS deps natively without the shim |
 | Engine `Authentication failed` for `leadrouting` user | Postgres data volume was initialized with a different password in a prior run; `POSTGRES_PASSWORD` env var only applies during first `initdb` | Reset password via `docker compose exec postgres psql -U leadrouting -c "ALTER USER leadrouting PASSWORD '...';"` |
+| `prisma migrate deploy` fails with `npm i @prisma/client@x.y.z --silent` error (global install) | Prisma auto-runs `prisma generate` before migrating; in a global install the inferred project root is `/` (no `package.json`), so Prisma tries to install `@prisma/client` via npm and fails | Pass `--skip-generate` to `prisma migrate deploy` in `run-migrations.ts` — the CLI only executes SQL migrations and has no need for `@prisma/client` |
 
 ### Salesforce OAuth Connection (Self-Hosted)
 

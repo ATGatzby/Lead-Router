@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { log } from '@clack/prompts'
 import type { CollectedConfig } from './collect-config.js'
+import type { SshConfig } from '../utils/ssh.js'
 import { renderDockerCompose } from '../templates/docker-compose.js'
 import { renderEnvWeb } from '../templates/env-web.js'
 import { renderEnvEngine } from '../templates/env-engine.js'
@@ -16,7 +17,7 @@ export interface GeneratedPaths {
   adminSecret: string
 }
 
-export function generateFiles(cfg: CollectedConfig): GeneratedPaths {
+export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): GeneratedPaths {
   const dir = join(process.cwd(), 'lead-routing')
   mkdirSync(dir, { recursive: true })
 
@@ -70,15 +71,27 @@ export function generateFiles(cfg: CollectedConfig): GeneratedPaths {
   writeFileSync(envEngine, envEngineContent, 'utf8')
   log.success('Generated .env.engine')
 
-  // lead-routing.json (persisted config for future commands)
+  // lead-routing.json — persists install metadata + SSH connection details
+  // for subsequent commands (deploy, logs, status, doctor)
   writeConfig(dir, {
     appUrl: cfg.appUrl,
     engineUrl: cfg.engineUrl,
     installDir: dir,
+    remoteDir: sshCfg.remoteDir,
+    ssh: {
+      host: sshCfg.host,
+      port: sshCfg.port,
+      username: sshCfg.username,
+      privateKeyPath: sshCfg.privateKeyPath,
+      // password intentionally not stored
+    },
     dockerManaged: {
       db: cfg.managedDb,
       redis: cfg.managedRedis,
     },
+    // Stored so `lead-routing sfdc deploy` can re-authenticate without re-prompting
+    sfdcClientId: cfg.sfdcClientId,
+    sfdcLoginUrl: cfg.sfdcLoginUrl,
     installedAt: new Date().toISOString(),
     version: '0.1.0',
   })
