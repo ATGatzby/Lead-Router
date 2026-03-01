@@ -47,14 +47,17 @@ export async function runDeploy(): Promise<void> {
   }
 
   try {
+    // Resolve ~ to actual $HOME — node-ssh doesn't expand tilde in cwd
+    const remoteDir = await ssh.resolveHome(cfg.remoteDir)
+
     // ── Pull latest images ────────────────────────────────────────────────
     log.step('Pulling latest Docker images')
-    await ssh.exec('docker compose pull', cfg.remoteDir)
+    await ssh.exec('docker compose pull', remoteDir)
     log.success('Images pulled')
 
     // ── Restart containers ────────────────────────────────────────────────
     log.step('Restarting services')
-    await ssh.exec('docker compose up -d --remove-orphans', cfg.remoteDir)
+    await ssh.exec('docker compose up -d --remove-orphans', remoteDir)
     log.success('Services restarted')
 
     // ── Run migrations ────────────────────────────────────────────────────
