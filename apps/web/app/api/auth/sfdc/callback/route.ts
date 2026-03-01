@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForTokens, createConnection, pushSettings } from "@lead-routing/sfdc";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
-import { completeCliAuthSession } from "@/lib/cli-auth-store";
+import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-store";
 
 // GET /api/auth/sfdc/callback — called by Salesforce after OAuth consent
 //
@@ -30,13 +30,20 @@ export async function GET(req: NextRequest) {
     const loginUrl =
       process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
 
-    const body = new URLSearchParams({
+    const codeVerifier = getCliAuthCodeVerifier(sessionId);
+
+    const bodyParams: Record<string, string> = {
       grant_type: "authorization_code",
       code,
       client_id: process.env.SFDC_CLIENT_ID ?? "",
       client_secret: process.env.SFDC_CLIENT_SECRET ?? "",
       redirect_uri: process.env.SFDC_REDIRECT_URI ?? "",
-    });
+    };
+    if (codeVerifier) {
+      bodyParams.code_verifier = codeVerifier;
+    }
+
+    const body = new URLSearchParams(bodyParams);
 
     try {
       const tokenRes = await fetch(`${loginUrl}/services/oauth2/token`, {

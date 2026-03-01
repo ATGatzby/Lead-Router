@@ -2,6 +2,7 @@ interface CliAuthEntry {
   status: "pending" | "ok";
   accessToken?: string;
   instanceUrl?: string;
+  codeVerifier?: string;
   expiresAt: number;
 }
 
@@ -9,13 +10,21 @@ interface CliAuthEntry {
 // TTL: 10 minutes. Consumed and deleted on first successful poll.
 const store = new Map<string, CliAuthEntry>();
 
-export function createCliAuthSession(sessionId: string): void {
+export function createCliAuthSession(sessionId: string, codeVerifier: string): void {
   const now = Date.now();
   // Prune expired sessions
   for (const [k, v] of store) {
     if (v.expiresAt < now) store.delete(k);
   }
-  store.set(sessionId, { status: "pending", expiresAt: now + 10 * 60 * 1000 });
+  store.set(sessionId, {
+    status: "pending",
+    codeVerifier,
+    expiresAt: now + 10 * 60 * 1000,
+  });
+}
+
+export function getCliAuthCodeVerifier(sessionId: string): string | undefined {
+  return store.get(sessionId)?.codeVerifier;
 }
 
 export function completeCliAuthSession(

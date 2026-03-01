@@ -1,14 +1,21 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { createCliAuthSession } from "@/lib/cli-auth-store";
 
 // POST /api/cli-auth/request
 // Called by the CLI before opening the Salesforce browser auth flow.
 // Returns a sessionId and the Salesforce OAuth URL the CLI should open.
-// The URL uses redirect_uri={appUrl}/api/auth/callback (already registered in the
-// Connected App) so no additional callback URLs need to be added.
+// Uses PKCE (S256) so the Connected App's "Require Secret for Web Server Flow"
+// setting is satisfied without needing a client secret in the browser redirect.
 export async function POST() {
   const sessionId = randomBytes(16).toString("hex");
-  createCliAuthSession(sessionId);
+
+  // PKCE: generate verifier + challenge
+  const codeVerifier = randomBytes(32).toString("base64url");
+  const codeChallenge = createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
+
+  createCliAuthSession(sessionId, codeVerifier);
 
   const loginUrl =
     process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
@@ -21,6 +28,8 @@ export async function POST() {
     redirect_uri: redirectUri,
     scope: "api refresh_token",
     state: `cli:${sessionId}`,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
   });
 
   const authUrl = `${loginUrl}/services/oauth2/authorize?${params.toString()}`;
