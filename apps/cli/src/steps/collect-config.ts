@@ -234,8 +234,8 @@ export async function collectConfig(): Promise<CollectedConfig> {
   const adminSecret = generateSecret(16)
 
   return {
-    appUrl: (appUrl as string).trim(),
-    engineUrl: (engineUrl as string).trim(),
+    appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
+    engineUrl: (engineUrl as string).trim().replace(/\/+$/, ''),
     sfdcClientId: sfdcClientId as string,
     sfdcClientSecret: sfdcClientSecret as string,
     sfdcLoginUrl,

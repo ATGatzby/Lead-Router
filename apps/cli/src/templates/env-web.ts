@@ -36,7 +36,7 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     `SFDC_CLIENT_ID=${c.sfdcClientId}`,
     `SFDC_CLIENT_SECRET=${c.sfdcClientSecret}`,
     `SFDC_LOGIN_URL=${c.sfdcLoginUrl}`,
-    `SFDC_REDIRECT_URI=${c.appUrl}/api/auth/callback`,
+    `SFDC_REDIRECT_URI=${c.appUrl.replace(/\/+$/, '')}/api/auth/callback`,
     ``,
     `# Session`,
     `SESSION_SECRET=${c.sessionSecret}`,
