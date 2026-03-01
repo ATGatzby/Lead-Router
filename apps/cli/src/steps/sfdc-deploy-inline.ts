@@ -230,15 +230,15 @@ async function loginViaAppBridge(rawAppUrl: string, orgAlias: string): Promise<v
   }
 
   s.stop('Auth session started')
-  log.info('A browser window will open — log in to Salesforce and authorise the connection,')
-  log.info('then return here. The CLI will detect completion automatically.')
+  log.info(`Open this URL in your browser to authenticate with Salesforce:\n\n  ${authUrl}\n`)
+  log.info('If Chrome shows a "Dangerous site" warning with no proceed option, paste the URL into Safari or Firefox.')
 
   // Open browser (platform-agnostic)
   const opener = process.platform === 'win32' ? 'start'
     : process.platform === 'darwin' ? 'open'
     : 'xdg-open'
   await execa(opener, [authUrl], { reject: false }).catch(() => {
-    log.info(`Could not open browser automatically. Please visit:\n  ${authUrl}`)
+    // Silently ignore — URL is already printed above
   })
 
   // Poll until token arrives (up to 5 minutes, every 2 s)
