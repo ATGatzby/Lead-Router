@@ -1,8 +1,12 @@
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { intro, outro, log, password as promptPassword } from '@clack/prompts'
 import chalk from 'chalk'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { SshConnection } from '../utils/ssh.js'
 import { runMigrations } from '../steps/run-migrations.js'
+import { renderCaddyfile } from '../templates/caddy.js'
 
 export async function runDeploy(): Promise<void> {
   console.log()
@@ -49,6 +53,18 @@ export async function runDeploy(): Promise<void> {
   try {
     // Resolve ~ to actual $HOME — node-ssh doesn't expand tilde in cwd
     const remoteDir = await ssh.resolveHome(cfg.remoteDir)
+
+    // ── Sync Caddyfile ────────────────────────────────────────────────────
+    // Regenerate from lead-routing.json so hostname changes (e.g. correcting
+    // appUrl after init) are pushed to the VPS without manual edits.
+    log.step('Syncing Caddyfile')
+    const caddyContent = renderCaddyfile(cfg.appUrl, cfg.engineUrl)
+    const tmpCaddy = join(tmpdir(), 'lead-routing-Caddyfile')
+    writeFileSync(tmpCaddy, caddyContent, 'utf8')
+    await ssh.upload([{ local: tmpCaddy, remote: `${remoteDir}/Caddyfile` }])
+    unlinkSync(tmpCaddy)
+    await ssh.exec('docker compose restart caddy', remoteDir)
+    log.success('Caddyfile synced — waiting for TLS cert (~30s)')
 
     // ── Pull latest images ────────────────────────────────────────────────
     log.step('Pulling latest Docker images')
