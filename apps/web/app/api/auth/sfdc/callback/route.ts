@@ -2,18 +2,78 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForTokens, createConnection, pushSettings } from "@lead-routing/sfdc";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
+import { completeCliAuthSession } from "@/lib/cli-auth-store";
 
 // GET /api/auth/sfdc/callback — called by Salesforce after OAuth consent
-// Associates the SFDC org with the already-logged-in user's org
+//
+// Two flows share this URL (SFDC_REDIRECT_URI points here):
+//
+// 1. CLI bridge flow (state starts with "cli:"):
+//    The CLI starts a session via POST /api/cli-auth/request, opens the
+//    Salesforce auth URL in the browser, then polls /api/cli-auth/poll/:sessionId.
+//    We exchange the code for tokens here and store them so the CLI can collect
+//    them without needing an authenticated web session.
+//
+// 2. Normal web app flow (any other state):
+//    Associates the SFDC org with the already-logged-in user's org via iron-session.
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
+  const state = searchParams.get("state") ?? "";
   const code = searchParams.get("code");
   const error = searchParams.get("error");
 
-  // Use APP_URL for all redirects — req.url inside Docker uses the container's
-  // internal hostname which the browser cannot reach.
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
 
+  // ── CLI bridge flow ────────────────────────────────────────────────────────
+  if (state.startsWith("cli:") && code) {
+    const sessionId = state.slice(4);
+    const loginUrl =
+      process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
+
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      client_id: process.env.SFDC_CLIENT_ID ?? "",
+      client_secret: process.env.SFDC_CLIENT_SECRET ?? "",
+      redirect_uri: process.env.SFDC_REDIRECT_URI ?? "",
+    });
+
+    try {
+      const tokenRes = await fetch(`${loginUrl}/services/oauth2/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error("[cli-auth] Token exchange failed:", errText);
+        return new Response(
+          cliResultHtml(false, "Token exchange failed. Please close this tab and try again."),
+          { headers: { "Content-Type": "text/html" } }
+        );
+      }
+
+      const data = (await tokenRes.json()) as {
+        access_token: string;
+        instance_url: string;
+      };
+
+      completeCliAuthSession(sessionId, data.access_token, data.instance_url);
+
+      return new Response(cliResultHtml(true), {
+        headers: { "Content-Type": "text/html" },
+      });
+    } catch (err) {
+      console.error("[cli-auth] Callback error:", err);
+      return new Response(
+        cliResultHtml(false, "Authentication failed. Please close this tab and try again."),
+        { headers: { "Content-Type": "text/html" } }
+      );
+    }
+  }
+
+  // ── Normal web app flow ────────────────────────────────────────────────────
   if (error || !code) {
     const desc = searchParams.get("error_description") ?? "OAuth failed";
     return NextResponse.redirect(
@@ -77,4 +137,35 @@ export async function GET(req: NextRequest) {
       new URL("/dashboard?crm_error=Connection+failed", appUrl)
     );
   }
+}
+
+function cliResultHtml(success: boolean, message?: string): string {
+  const icon = success ? "✓" : "✗";
+  const heading = success ? "Authenticated" : "Error";
+  const body = success
+    ? "You may close this tab and return to your terminal."
+    : (message ?? "Something went wrong.");
+  const color = success ? "#22c55e" : "#ef4444";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${success ? "Authentication Complete" : "Authentication Failed"}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center;
+           justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+    .card { background: #fff; padding: 2rem; border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.1); text-align: center; max-width: 380px; }
+    h1 { margin: 0 0 .5rem; font-size: 1.5rem; color: ${color}; }
+    p { color: #555; margin: 0; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${icon} ${heading}</h1>
+    <p>${body}</p>
+  </div>
+</body>
+</html>`;
 }

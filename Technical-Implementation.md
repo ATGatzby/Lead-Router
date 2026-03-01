@@ -1049,12 +1049,12 @@ Shared deploy logic used by both `init` (step 7) and the standalone `sfdc deploy
 
 Steps executed in order:
 1. **Auth check** — `sf org display --target-org <orgAlias>` — if exit 0, skip login (already authenticated). Otherwise, run the **web app OAuth bridge** (`loginViaAppBridge`):
-   - `POST {appUrl}/api/cli-auth/request` → receive `{ sessionId, authUrl }` (auth URL points to Salesforce OAuth with `state=cli:{sessionId}` and `redirect_uri={appUrl}/api/auth/callback`)
+   - `POST {appUrl}/api/cli-auth/request` → receive `{ sessionId, authUrl }` (auth URL points to Salesforce OAuth with `state=cli:{sessionId}` and `redirect_uri={appUrl}/api/auth/sfdc/callback`)
    - Opens `authUrl` in the browser with the platform `open` / `xdg-open` command
    - Polls `GET {appUrl}/api/cli-auth/poll/{sessionId}` every 2 s (up to 5 min)
    - When browser completes auth, web app exchanges code and stores `{ accessToken, instanceUrl }` in the in-memory CLI auth store; poll returns them to the CLI
    - CLI calls `sf org login access-token --instance-url {instanceUrl} --alias {orgAlias} --no-prompt` with the token piped via stdin to persist credentials in the sf CLI store
-   - **No extra Connected App callback URL needed** — uses only `{appUrl}/api/auth/callback`, which is the same URL already registered for the web app
+   - **Uses `{appUrl}/api/auth/sfdc/callback`** — the same URL already registered in the Connected App for the normal web login flow
 2. Copies bundled `sfdc-package/` from CLI dist to `{installDir ?? tmpdir()}/lead-routing-sfdc-package/`
 3. **Patches Named Credential XML** — replaces `<endpoint>` with `engineUrl`
 4. **Patches Remote Site Setting XMLs** — `LeadRouterEngine → engineUrl`, `LeadRouterApp → appUrl`
@@ -1325,9 +1325,10 @@ Paste into SFDC Setup → Custom Settings → Routing Settings → Manage → `W
 - **`POST /api/fields/sync` auth**: This endpoint is called by Apex (server-to-server callout), not from a browser — there is no iron-session cookie. The route now authenticates via `X-Sfdc-Org-Id` header (sent by `OnboardingController.syncFieldSchema`) and looks up the org by `sfdcOrgId`. Previously it used `getActorFromHeaders()` (which reads `x-org-id` injected by middleware), causing a "Missing auth headers" 500 on every sync attempt.
 - **Apex callout endpoints must be in `PUBLIC_PREFIXES`**: `proxy.ts` (Next.js middleware) blocks all unauthenticated requests. Salesforce Apex callouts carry no iron-session cookie. Any endpoint called from Apex must be listed in `PUBLIC_PREFIXES`. Currently: `/api/setup/` (status + onboarding-done) and `/api/fields/sync`. The CLI OAuth bridge endpoints `/api/cli-auth/` are also in `PUBLIC_PREFIXES` (called by the CLI, not by a browser session).
 - **CLI OAuth Bridge** (`apps/web/app/api/cli-auth/`): The CLI authenticates with Salesforce without requiring `localhost:1717` in the Connected App by routing through the deployed web app:
-  - `POST /api/cli-auth/request` — creates a random `sessionId`, builds the Salesforce auth URL (`redirect_uri={APP_URL}/api/auth/callback&state=cli:{sessionId}`), returns both to the CLI.
+  - `POST /api/cli-auth/request` — creates a random `sessionId`, builds the Salesforce auth URL (`redirect_uri={SFDC_REDIRECT_URI}&state=cli:{sessionId}`) using `SFDC_REDIRECT_URI` from env (points to `/api/auth/sfdc/callback`), returns both to the CLI.
   - `GET /api/cli-auth/poll/{sessionId}` — returns `{ status: 'pending' | 'ok' | 'expired' }`. On `ok`, includes `accessToken` and `instanceUrl`. Token is consumed (deleted) on first successful poll.
-  - `GET /api/auth/callback` — detects `state=cli:{sessionId}`, exchanges the OAuth code for tokens directly (using `SFDC_CLIENT_ID` / `SFDC_CLIENT_SECRET` / `SFDC_REDIRECT_URI` from `.env.web`), stores them in the `cli-auth-store` in-memory Map (10 min TTL), returns a `text/html` "You may close this tab" page. For non-CLI state, continues to redirect to `/api/auth/sfdc/callback` as before.
+  - `GET /api/auth/sfdc/callback` — handles **both** CLI and web flows. Detects `state=cli:{sessionId}`: exchanges the OAuth code for tokens directly (using `SFDC_CLIENT_ID` / `SFDC_CLIENT_SECRET` / `SFDC_REDIRECT_URI` from `.env.web`), stores them in the `cli-auth-store` in-memory Map (10 min TTL), returns a `text/html` "You may close this tab" page. For non-CLI state, proceeds with the normal iron-session org association flow.
+  - `GET /api/auth/callback` — legacy shim: forwards all query params to `/api/auth/sfdc/callback` (handles bookmarked or cached old-format OAuth redirects).
   - In-memory store (`apps/web/lib/cli-auth-store.ts`) — suitable for single-process self-hosted deployment; no Redis required.
 - **Engine MUST be on a public URL**: The Apex trigger reads `Engine_Endpoint__c` from `Routing_Settings__c` and calls the engine directly. Salesforce cannot reach `localhost:3001`. For local dev, use `ssh -R 80:localhost:3001 localhost.run` to get a public HTTPS tunnel (URL changes on restart — update `lead-routing.json` `engineUrl` and re-run `lead-routing sfdc deploy` to update `Engine_Endpoint__c` and the Remote Site Setting). For production, the engine should be on a stable public URL.
 - **Named Credential URL not updated by Metadata API re-deploy**: Salesforce's Metadata API silently ignores `<endpoint>` changes in Named Credential XML when the credential already exists. This is why `RoutingEngineCallout` was migrated to read the engine URL from `Routing_Settings__c.Engine_Endpoint__c` (updated reliably via `sf data update record`) rather than using `callout:RoutingEngine/route`.
@@ -1379,7 +1380,7 @@ BullMQ requires a dedicated ioredis connection with `maxRetriesPerRequest: null`
 
 The CLI `init` wizard collects OAuth app credentials (`SFDC_CLIENT_ID`, `SFDC_CLIENT_SECRET`, `SFDC_LOGIN_URL`) and writes them to `.env.web`. The actual OAuth authorization — granting the app access to a specific Salesforce org — must happen in the browser via **Settings → Connect Salesforce** in the web app. CLI cannot do browser-based OAuth redirects.
 
-**Callback URL setup**: The Salesforce Connected App must have the exact `SFDC_REDIRECT_URI` (`{APP_URL}/api/auth/callback`) listed in its **Callback URLs**. Without this, Salesforce will reject the OAuth attempt with `redirect_uri_mismatch`.
+**Callback URL setup**: The Salesforce Connected App must have the exact `SFDC_REDIRECT_URI` (`{APP_URL}/api/auth/sfdc/callback`) listed in its **Callback URLs**. This single URL covers both the normal web login flow and the CLI OAuth bridge — `SFDC_REDIRECT_URI` in `.env.web` is generated as `{appUrl}/api/auth/sfdc/callback`. Without this, Salesforce will reject the OAuth attempt with `redirect_uri_mismatch`.
 
 ---
 
