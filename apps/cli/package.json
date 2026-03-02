@@ -1,6 +1,6 @@
 {
   "name": "@lead-routing/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Self-hosted deployment CLI for Lead Routing",
   "homepage": "https://github.com/lead-routing/lead-routing",
   "keywords": ["salesforce", "lead-routing", "self-hosted", "deployment", "cli"],

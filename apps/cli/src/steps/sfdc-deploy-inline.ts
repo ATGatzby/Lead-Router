@@ -44,22 +44,37 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
   )
   const alreadyAuthed = authCheck === 0
 
+  // sfCredEnv: passed to every sf execa call so the session token is available
+  // even if alias storage failed. targetOrgArgs: dropped when the alias wasn't
+  // persisted — SF_ACCESS_TOKEN + SF_ORG_INSTANCE_URL identify the org instead.
+  let sfCredEnv: Record<string, string> = {}
+  let targetOrgArgs: string[] = ['--target-org', orgAlias]
+
   if (alreadyAuthed) {
     log.success('Using existing Salesforce authentication')
   } else {
-    await loginViaAppBridge(appUrl, orgAlias)
+    const { accessToken, instanceUrl, aliasStored } = await loginViaAppBridge(appUrl, orgAlias)
+    sfCredEnv = { SF_ACCESS_TOKEN: accessToken, SF_ORG_INSTANCE_URL: instanceUrl }
+    if (!aliasStored) {
+      // Alias lookup will fail — omit --target-org and let env vars specify the org
+      targetOrgArgs = []
+    }
   }
 
   // ── 2. Copy + patch sfdc-package ───────────────────────────────────────────
   s.start('Copying Salesforce package…')
 
-  const bundledPkg = join(__dirname, '..', 'sfdc-package')
+  // Published npm/npx: sfdc-package is inside dist/ (same dir as index.js)
+  // Dev monorepo: sfdc-package is one level up from dist/
+  const inDist = join(__dirname, 'sfdc-package')
+  const nextToDist = join(__dirname, '..', 'sfdc-package')
+  const bundledPkg = existsSync(inDist) ? inDist : nextToDist
   const destPkg = join(installDir ?? tmpdir(), 'lead-routing-sfdc-package')
 
   if (!existsSync(bundledPkg)) {
     s.stop('sfdc-package not found in CLI bundle')
     throw new Error(
-      `Expected bundle at: ${bundledPkg}\n` +
+      `Expected bundle at: ${inDist}\n` +
       'The CLI may need to be reinstalled: npm i -g @lead-routing/cli'
     )
   }
@@ -109,8 +124,8 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
   try {
     await execa(
       'sf',
-      ['project', 'deploy', 'start', '--target-org', orgAlias, '--source-dir', 'force-app'],
-      { cwd: destPkg, stdio: 'inherit' }
+      ['project', 'deploy', 'start', ...targetOrgArgs, '--source-dir', 'force-app'],
+      { cwd: destPkg, stdio: 'inherit', env: { ...process.env, ...sfCredEnv } }
     )
     s.stop('Package deployed')
   } catch (err) {
@@ -128,8 +143,8 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
   try {
     await execa(
       'sf',
-      ['org', 'assign', 'permset', '--name', 'LeadRouterAdmin', '--target-org', orgAlias],
-      { stdio: 'inherit' }
+      ['org', 'assign', 'permset', '--name', 'LeadRouterAdmin', ...targetOrgArgs],
+      { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } }
     )
     s.stop('Permission set assigned — Lead Router Setup will appear in the App Launcher')
   } catch (err) {
@@ -153,10 +168,10 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
     try {
       const qr = await execa('sf', [
         'data', 'query',
-        '--target-org', orgAlias,
+        ...targetOrgArgs,
         '--query', 'SELECT Id FROM Routing_Settings__c LIMIT 1',
         '--json',
-      ])
+      ], { env: { ...process.env, ...sfCredEnv } })
       const parsed = JSON.parse(qr.stdout)
       existingId = parsed?.result?.records?.[0]?.Id
     } catch {
@@ -166,18 +181,18 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
     if (existingId) {
       await execa('sf', [
         'data', 'update', 'record',
-        '--target-org', orgAlias,
+        ...targetOrgArgs,
         '--sobject', 'Routing_Settings__c',
         '--record-id', existingId,
         '--values', `App_Url__c='${appUrl}' Engine_Endpoint__c='${engineUrl}'`,
-      ], { stdio: 'inherit' })
+      ], { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } })
     } else {
       await execa('sf', [
         'data', 'create', 'record',
-        '--target-org', orgAlias,
+        ...targetOrgArgs,
         '--sobject', 'Routing_Settings__c',
         '--values', `App_Url__c='${appUrl}' Engine_Endpoint__c='${engineUrl}'`,
-      ], { stdio: 'inherit' })
+      ], { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } })
     }
     s.stop('Org settings written')
   } catch (err) {
@@ -199,8 +214,15 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
  *
  * Uses only {appUrl}/api/auth/callback as redirect_uri — no extra URLs needed
  * in the Connected App beyond the one already registered for the web app login.
+ *
+ * Returns { accessToken, instanceUrl, aliasStored } so the caller can pass
+ * SF_ACCESS_TOKEN / SF_ORG_INSTANCE_URL env vars to subsequent sf commands
+ * as a fallback when alias storage fails.
  */
-async function loginViaAppBridge(rawAppUrl: string, orgAlias: string): Promise<void> {
+async function loginViaAppBridge(
+  rawAppUrl: string,
+  orgAlias: string
+): Promise<{ accessToken: string; instanceUrl: string; aliasStored: boolean }> {
   // Strip trailing slash so URLs like "https://example.com/" don't produce double-slashes
   const appUrl = rawAppUrl.replace(/\/+$/, '')
   const s = spinner()
@@ -281,18 +303,23 @@ async function loginViaAppBridge(rawAppUrl: string, orgAlias: string): Promise<v
 
   s.stop('Authenticated with Salesforce')
 
-  // Store credentials in sf CLI via access-token login
-  // sf org login access-token reads the token from stdin (masked prompt)
+  // Store credentials in sf CLI via access-token login.
+  // SFDX_ACCESS_TOKEN env var is the reliable way to pass the token —
+  // stdin + --no-prompt can fail depending on Salesforce token format.
+  let aliasStored = false
   try {
     await execa(
       'sf',
       ['org', 'login', 'access-token', '--instance-url', instanceUrl, '--alias', orgAlias, '--no-prompt'],
-      { input: accessToken + '\n' }
+      { env: { ...process.env, SFDX_ACCESS_TOKEN: accessToken } }
     )
     log.success(`Salesforce org saved as "${orgAlias}"`)
+    aliasStored = true
   } catch (err) {
-    // Non-fatal — subsequent sf commands can use SF_ACCESS_TOKEN env var instead
-    log.warn(`Could not store sf CLI credentials: ${String(err)}`)
-    log.info('Re-authenticate manually if deploy commands fail: sf org login web')
+    // Non-fatal — deploy commands will authenticate via SF_ACCESS_TOKEN env var
+    log.warn(`Could not persist sf CLI credentials: ${String(err)}`)
+    log.info('Continuing with direct token auth for this session.')
   }
+
+  return { accessToken: accessToken!, instanceUrl: instanceUrl!, aliasStored }
 }

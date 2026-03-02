@@ -1073,7 +1073,7 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
 | Local copy | `prepare` npm script copies `../../sfdc-package` → `apps/cli/sfdc-package/` |
 | npm publish | `"sfdc-package"` added to `"files"` array in `apps/cli/package.json` |
 | tsup build | `onSuccess` hook in `tsup.config.ts` copies `apps/cli/sfdc-package/` → `apps/cli/dist/sfdc-package/` |
-| Runtime resolve | `join(__dirname, '..', 'sfdc-package')` from `dist/commands/sfdc.js` |
+| Runtime resolve | Checks `join(__dirname, 'sfdc-package')` first (npm install: inside `dist/`), falls back to `join(__dirname, '..', 'sfdc-package')` (monorepo dev) |
 
 ### `init` Wizard Steps
 
@@ -1489,6 +1489,14 @@ Assets are bundled by `tsup`'s `onSuccess` hook in `apps/cli/tsup.config.ts` —
 | `prisma@^6.5.0` | Platform-specific query engine binaries selected automatically at install |
 | `@prisma/client@^6.5.0` | Required by Prisma internals |
 
+### Salesforce Auth — Token Passthrough Pattern
+
+`loginViaAppBridge()` now returns `{ accessToken, instanceUrl, aliasStored }`:
+
+- Stores the alias via `sf org login access-token` using `SFDX_ACCESS_TOKEN` env var (more reliable than stdin with `--no-prompt`).
+- If storage fails (`aliasStored: false`), all subsequent `sf` commands receive `SF_ACCESS_TOKEN` + `SF_ORG_INSTANCE_URL` env vars and `--target-org` is omitted — `sf` uses the env vars as the default org identity.
+- If storage succeeds, env vars are still passed (belt-and-suspenders) and `--target-org orgAlias` is used as normal.
+
 ### GitHub Actions Auto-Publish
 
 Workflow: `.github/workflows/publish-cli.yml`
@@ -1498,7 +1506,7 @@ Decoupled from `publish-images.yml` (Docker) — CLI and Docker releases are ind
 
 **Steps**: checkout → pnpm install → `pnpm --filter @lead-routing/cli build` → `npm publish --access public`
 
-**Required secret**: `NPM_TOKEN` — npm automation token added to GitHub repo secrets.
+**Required secret**: `NPM_TOKEN` — npm Classic Automation token added to GitHub repo secrets (NOT a Granular token — those require "Bypass 2FA" set separately).
 
 ### Release Process
 
