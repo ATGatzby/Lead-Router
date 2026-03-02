@@ -38,8 +38,15 @@ function getTunneledDbUrl(localDir: string, localPort: number): string {
  */
 function findPrismaBin(): string {
   const candidates = [
+    // npx / npm global install: @lead-routing/cli is nested under the scope dir,
+    // so prisma lands 3 levels above dist/ in node_modules/.bin/
+    // e.g. ~/.npm/_npx/HASH/node_modules/.bin/prisma
+    path.join(__dirname, '../../../.bin/prisma'),
+    path.join(__dirname, '../../../prisma/bin/prisma.js'),
+    // Fallback: prisma nested inside the package's own node_modules (hoisted install)
     path.join(__dirname, '../node_modules/.bin/prisma'),
     path.join(__dirname, '../node_modules/prisma/bin/prisma.js'),
+    // Monorepo dev paths
     path.resolve('packages/db/node_modules/.bin/prisma'),
     path.resolve('node_modules/.bin/prisma'),
     path.resolve('node_modules/.pnpm/node_modules/.bin/prisma'),
