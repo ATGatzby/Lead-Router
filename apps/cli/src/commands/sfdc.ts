@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import { execa } from 'execa'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { sfdcDeployInline } from '../steps/sfdc-deploy-inline.js'
+import { guideAppLauncherSetup } from '../steps/app-launcher-guide.js'
 
 export async function runSfdcDeploy(): Promise<void> {
   intro('Lead Routing — Deploy Salesforce Package')
@@ -78,14 +79,12 @@ export async function runSfdcDeploy(): Promise<void> {
     process.exit(1)
   }
 
+  // ── 5. Interactive App Launcher wizard ─────────────────────────────────────
+  await guideAppLauncherSetup(appUrl)
+
   // ── Done ────────────────────────────────────────────────────────────────────
   outro(
     chalk.green('✔  Salesforce package deployed!') +
-    '\n\n' +
-    '  Next steps:\n' +
-    '  1. In Salesforce, open App Launcher → search "Lead Router Setup"\n' +
-    '  2. Click "Connect to Lead Router" to authorise the OAuth connection\n' +
-    '  3. Follow the 4-step wizard to activate triggers and sync field schema\n\n' +
-    `  Your Lead Router dashboard: ${chalk.cyan(appUrl)}`
+    `\n\n  Your Lead Router dashboard: ${chalk.cyan(appUrl)}`
   )
 }

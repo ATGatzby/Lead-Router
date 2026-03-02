@@ -18,7 +18,8 @@ program
   .command('init')
   .description('Interactive setup wizard — configure and deploy the full Lead Routing stack')
   .option('--dry-run', 'Run the wizard and generate config files without starting Docker services')
-  .action((opts: { dryRun?: boolean }) => runInit({ dryRun: opts.dryRun }))
+  .option('--resume', 'Skip steps 1-7 and resume from health check using existing lead-routing.json')
+  .action((opts: { dryRun?: boolean; resume?: boolean }) => runInit({ dryRun: opts.dryRun, resume: opts.resume }))
 
 program
   .command('deploy')

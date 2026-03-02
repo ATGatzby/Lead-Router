@@ -1020,7 +1020,8 @@ The project is distributed as a self-hosted product via an interactive CLI insta
 |---|---|
 | `lead-routing init` | Full interactive setup wizard (9 steps) — SSH remote deploy, inline SFDC deploy, App Launcher guide |
 | `lead-routing init --dry-run` | Wizard + local file generation only — connects nothing, deploys nothing |
-| `lead-routing sfdc deploy` | Standalone SFDC package deploy — re-deploy or use from a different machine |
+| `lead-routing init --resume` | Skip steps 1–7; reconnect SSH using saved config and resume from health check (step 8) + SFDC deploy (step 9). Safe re-entry after a Let's Encrypt timeout — no DB wipe. |
+| `lead-routing sfdc deploy` | Standalone SFDC package deploy — re-deploy or use from a different machine; includes interactive App Launcher wizard |
 | `lead-routing deploy` | Pull latest images via SSH, restart containers on VPS, run migrations via SSH tunnel |
 | `lead-routing doctor` | Health check: Docker, containers, HTTP endpoints |
 | `lead-routing logs [service]` | Stream logs (web / engine / postgres / redis) |
@@ -1032,14 +1033,15 @@ The project is distributed as a self-hosted product via an interactive CLI insta
 
 `apps/cli/src/commands/sfdc.ts` — `runSfdcDeploy()`
 
-Thin orchestrator: resolves config, checks `sf` CLI, prompts for org alias, then delegates all deploy logic to `sfdcDeployInline()` (see below).
+Thin orchestrator: resolves config, checks `sf` CLI, prompts for org alias, then delegates all deploy logic to `sfdcDeployInline()` (see below). Also runs the interactive App Launcher wizard (same as `init` step 9).
 
 Steps executed in order:
 1. Reads `lead-routing.json` via `findInstallDir()` / `readConfig()` — if not found, prompts for App URL and Engine URL directly (supports running from a different machine than where `init` ran)
 2. Checks `sf --version` is installed; if missing, prints install URL and exits
 3. Prompts for Salesforce org alias (default: `lead-routing`)
 4. Calls `sfdcDeployInline({ appUrl, engineUrl, orgAlias })`
-5. Prints success + next steps (open Salesforce App Launcher → Lead Router Setup)
+5. Calls `guideAppLauncherSetup(appUrl)` — interactive 4-step wizard (same as after full `init`)
+6. Prints success + dashboard URL
 
 ### `sfdc-deploy-inline` Step
 
@@ -1079,9 +1081,11 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
 
 `init` is the single command a customer runs from their **local machine**. The CLI SSHes into their server, transfers files, runs Docker remotely, tunnels Postgres for migrations, and runs `sf` locally. The customer never SSHes into their server manually.
 
+**`--resume` flag**: When passed, reads the saved `lead-routing.json`, re-connects SSH (prompts password if key auth wasn't configured), and jumps directly to step 8 (health check) + step 9 (SFDC deploy). Steps 1–7 are skipped — no volume wipe, no re-upload, no migration re-run. Designed for recovery after a Let's Encrypt rate-limit or health-check timeout that hit after migrations already succeeded.
+
 1. **Local prerequisites** — Checks Node 20+ and Salesforce CLI `sf` on the local machine (hard failure). Docker/port checks have moved to step 5 (remote).
 2. **Server connection** — Prompts for VPS hostname, SSH port (default 22), username (default root), auth method (key file or password), key path (validated against `~/.ssh/id_rsa`), remote install directory (default `~/lead-routing`). No connection made yet — prompt-only so dry-run works.
-3. **Configuration** — App URL, Engine URL, SFDC Connected App credentials (CLI prints exact setup instructions with callback URL pre-filled), Salesforce org alias, DB choice, Redis choice, admin email/password, optional Resend API key.
+3. **Configuration** — App URL, Engine URL, SFDC Connected App credentials (CLI prints exact setup instructions with callback URL pre-filled), Salesforce org alias, DB choice, Redis choice, admin email/password, optional Resend API key. After this step, **DNS pre-flight check** — runs `dns.promises.lookup()` on each unique hostname in appUrl + engineUrl. If a hostname doesn't resolve: shows a warning (typo check), asks `Continue anyway?` — not a hard error (accounts for DNS propagation lag and split-horizon setups).
 4. **Generate config files** — Writes locally to `./lead-routing/`: `docker-compose.yml`, `Caddyfile`, `.env.web`, `.env.engine`, `lead-routing.json` (includes `ssh` and `remoteDir` fields). Dry-run exits here.
 5. **Connect to server** — SSH connect via `node-ssh`, resolves `~` via remote `$HOME`, checks remote Docker 24+ and Docker Compose v2 (hard failure), checks ports 80/443 (warn only), uploads all 5 config files via SFTP.
 6. **Start services** — First checks for a stale `{dirName}_postgres_data` volume via `docker volume inspect`; if found runs `docker compose down -v --remove-orphans` to wipe it (prevents POSTGRES_PASSWORD being silently ignored on re-init, which causes Prisma P1000 auth failure). Then SSH exec: `docker compose pull` → `docker compose up -d --remove-orphans`. **Two-phase postgres readiness**: Phase 1 polls `docker compose exec -T postgres pg_isready` (container-internal, up to 60s). Phase 2 polls `bash -c 'echo > /dev/tcp/127.0.0.1/5432'` (host TCP port, up to 8s) — this is what the SSH tunnel actually forwards to; Docker's host-port binding can lag behind container-internal readiness on fresh starts, causing P1001.
