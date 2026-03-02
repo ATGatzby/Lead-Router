@@ -55,7 +55,8 @@ export async function collectConfig(): Promise<CollectedConfig> {
     validate: (v) => {
       if (!v) return 'Required'
       try {
-        new URL(v)
+        const u = new URL(v)
+        if (u.protocol !== 'https:') return 'Must be an HTTPS URL (required for Salesforce OAuth)'
       } catch {
         return 'Must be a valid URL (e.g. https://routing.acme.com)'
       }
@@ -81,16 +82,17 @@ export async function collectConfig(): Promise<CollectedConfig> {
   if (isCancel(engineUrl)) bail(engineUrl)
 
   // ── Salesforce ─────────────────────────────────────────────────────────────
-  const callbackUrl = `${appUrl as string}/api/auth/callback`
+  // Must match SFDC_REDIRECT_URI in .env.web exactly — the web app uses /api/auth/sfdc/callback.
+  const callbackUrl = `${(appUrl as string).trim().replace(/\/+$/, '')}/api/auth/sfdc/callback`
   note(
     'You need a Salesforce Connected App. If you haven\'t created one yet:\n' +
       '\n' +
       '  1. Go to Salesforce Setup → App Manager → New Connected App\n' +
       '  2. Connected App Name: Lead Routing\n' +
       '  3. Check "Enable OAuth Settings"\n' +
-      `  4. Callback URL:\n` +
+      `  4. Callback URL (copy exactly — must match):\n` +
       `       ${callbackUrl}\n` +
-      '  5. Selected Scopes: api  •  refresh_token, offline_access  •  openid\n' +
+      '  5. Selected Scopes: api  •  refresh_token, offline_access\n' +
       '  6. Check "Require Secret for Web Server Flow"\n' +
       '  7. Save — wait ~2 min, then click "Manage Consumer Details"\n' +
       '  8. Copy the Consumer Key (Client ID) and Consumer Secret below',
@@ -236,8 +238,8 @@ export async function collectConfig(): Promise<CollectedConfig> {
   return {
     appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
     engineUrl: (engineUrl as string).trim().replace(/\/+$/, ''),
-    sfdcClientId: sfdcClientId as string,
-    sfdcClientSecret: sfdcClientSecret as string,
+    sfdcClientId: (sfdcClientId as string).trim(),
+    sfdcClientSecret: (sfdcClientSecret as string).trim(),
     sfdcLoginUrl,
     orgAlias: orgAlias as string,
     managedDb: managedDb as boolean,

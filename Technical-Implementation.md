@@ -1489,6 +1489,16 @@ Assets are bundled by `tsup`'s `onSuccess` hook in `apps/cli/tsup.config.ts` —
 | `prisma@^6.5.0` | Platform-specific query engine binaries selected automatically at install |
 | `@prisma/client@^6.5.0` | Required by Prisma internals |
 
+### Known Bugs Fixed (v0.1.4 audit)
+
+| Bug | File | Fix |
+|-----|------|-----|
+| Connected App callback URL showed `/api/auth/callback` but web app sends `/api/auth/sfdc/callback` as `redirect_uri` — Salesforce would return `redirect_uri_mismatch` | `collect-config.ts` | Now shows correct `/api/auth/sfdc/callback` |
+| `appUrl` not validated for HTTPS — Salesforce rejects HTTP redirect URIs | `collect-config.ts` | Added HTTPS validation matching the engine URL check |
+| `sfdcClientId` / `sfdcClientSecret` not trimmed — pasted values with trailing spaces broke auth silently | `collect-config.ts` | Added `.trim()` on both |
+| `deploy.ts` called `runMigrations(ssh, dir, '', '')` — attempted to create an `app_user` with `email=''` on every deploy | `deploy.ts` + `run-migrations.ts` | `adminEmail`/`adminPassword` are now optional; seeding is skipped when omitted; deploy calls `runMigrations(ssh, dir)` |
+| `lead-routing.json` always wrote `version: '0.1.0'` | `generate-files.ts` | Reads actual version from bundled `package.json` at runtime |
+
 ### Port Conflict Auto-Remediation (`check-remote-prerequisites.ts`)
 
 `checkRemotePort()` no longer just warns — it actively tries to free the port:

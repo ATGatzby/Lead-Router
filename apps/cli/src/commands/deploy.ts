@@ -77,8 +77,9 @@ export async function runDeploy(): Promise<void> {
     log.success('Services restarted')
 
     // ── Run migrations ────────────────────────────────────────────────────
+    // No adminEmail/password — deploy only applies schema migrations, never re-seeds.
     log.step('Running database migrations')
-    await runMigrations(ssh, dir, '', '')
+    await runMigrations(ssh, dir)
 
     outro(
       chalk.green('✔  Deployment complete!') +

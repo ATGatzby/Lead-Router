@@ -1,5 +1,17 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+function getCliVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'))
+    return pkg.version ?? '0.1.0'
+  } catch {
+    return '0.1.0'
+  }
+}
 import { log } from '@clack/prompts'
 import type { CollectedConfig } from './collect-config.js'
 import type { SshConfig } from '../utils/ssh.js'
@@ -93,7 +105,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     sfdcClientId: cfg.sfdcClientId,
     sfdcLoginUrl: cfg.sfdcLoginUrl,
     installedAt: new Date().toISOString(),
-    version: '0.1.0',
+    version: getCliVersion(),
   })
   log.success('Generated lead-routing.json')
 

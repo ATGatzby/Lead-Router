@@ -62,14 +62,17 @@ function findPrismaBin(): string {
  * Flow:
  * 1. Open SSH tunnel: local random port → remote localhost:5432
  * 2. prisma migrate deploy  (DATABASE_URL points at the tunnel)
- * 3. prisma db execute seed (same tunnel URL)
+ * 3. prisma db execute seed (same tunnel URL) — skipped if adminEmail is omitted
  * 4. Close the tunnel
+ *
+ * Pass adminEmail + adminPassword on first install to seed the admin user.
+ * Omit them (or pass empty strings) for updates/deploys — migrations only.
  */
 export async function runMigrations(
   ssh: SshConnection,
   localDir: string,
-  adminEmail: string,
-  adminPassword: string
+  adminEmail?: string,
+  adminPassword?: string
 ): Promise<void> {
   const s = spinner()
   s.start('Opening secure tunnel to database')
@@ -82,7 +85,9 @@ export async function runMigrations(
     s.stop(`Database tunnel open (local port ${localPort})`)
 
     await applyMigrations(localDir, localPort)
-    await seedAdminUser(localDir, localPort, adminEmail, adminPassword)
+    if (adminEmail && adminPassword) {
+      await seedAdminUser(localDir, localPort, adminEmail, adminPassword)
+    }
   } finally {
     tunnelClose?.()
   }
