@@ -78,8 +78,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
     // Step 8 — Health check on public HTTPS URLs
     // (Caddy TLS cert provisioning takes ~30s — maxAttempts bumped to 24)
+    // Passes ssh+remoteDir so on timeout we can show Caddy logs + container status.
     log.step('Step 8/9  Verifying health')
-    await verifyHealth(cfg.appUrl, cfg.engineUrl)
+    await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
     // Step 9 — Deploy Salesforce package (sf runs locally — no VPS requirement)
     log.step('Step 9/9  Deploying Salesforce package')

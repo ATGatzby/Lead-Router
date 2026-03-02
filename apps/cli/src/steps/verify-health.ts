@@ -1,4 +1,5 @@
 import { spinner, log } from '@clack/prompts'
+import type { SshConnection } from '../utils/ssh.js'
 
 interface HealthResult {
   service: string
@@ -7,7 +8,21 @@ interface HealthResult {
   detail: string
 }
 
-export async function verifyHealth(appUrl: string, engineUrl: string): Promise<void> {
+/**
+ * Poll the public HTTPS health endpoints for the web app and routing engine.
+ *
+ * On timeout, SSHes into the server to fetch docker compose ps + Caddy logs
+ * so the user can immediately see why services are unreachable (port conflict,
+ * TLS rate limit, container crash, etc.) without needing to SSH in manually.
+ *
+ * Throws if any service fails — SFDC deploy depends on the app being up.
+ */
+export async function verifyHealth(
+  appUrl: string,
+  engineUrl: string,
+  ssh: SshConnection,
+  remoteDir: string
+): Promise<void> {
   const checks: Array<{ service: string; url: string }> = [
     { service: 'Web app', url: `${appUrl}/api/health` },
     { service: 'Routing engine', url: `${engineUrl}/health` },
@@ -19,9 +34,44 @@ export async function verifyHealth(appUrl: string, engineUrl: string): Promise<v
     if (r.ok) {
       log.success(`${r.service} — ${r.url}`)
     } else {
-      log.warn(`${r.service} not responding yet — ${r.detail}`)
+      log.warn(`${r.service} — did not respond after ${r.detail}`)
     }
   }
+
+  const failed = results.filter((r) => !r.ok)
+  if (failed.length === 0) return
+
+  // ── SSH diagnostics ────────────────────────────────────────────────────────
+  // Show container status and Caddy logs directly in the terminal so the user
+  // can see the root cause without having to SSH in manually.
+  log.info('Fetching remote diagnostics…')
+
+  try {
+    const { stdout: ps } = await ssh.execSilent('docker compose ps --format table', remoteDir)
+    if (ps.trim()) log.info(`Container status:\n${ps.trim()}`)
+  } catch { /* non-fatal */ }
+
+  try {
+    const { stdout: caddyLogs } = await ssh.execSilent(
+      'docker compose logs caddy --tail 30 --no-color 2>&1',
+      remoteDir
+    )
+    if (caddyLogs.trim()) log.info(`Caddy logs (last 30 lines):\n${caddyLogs.trim()}`)
+  } catch { /* non-fatal */ }
+
+  const failedNames = failed.map((r) => r.service).join(' and ')
+  throw new Error(
+    `${failedNames} did not respond after 2 minutes.\n\n` +
+    `Common causes (check Caddy logs above):\n` +
+    `  • Let's Encrypt rate limit — wait until tomorrow and re-run\n` +
+    `  • Port 80/443 still blocked by another process\n` +
+    `  • Container crashed — check container status above\n\n` +
+    `To resume once fixed:\n` +
+    `  1. SSH into your server:\n` +
+    `       cd ${remoteDir} && docker compose restart caddy\n` +
+    `  2. Then re-run Salesforce setup:\n` +
+    `       lead-routing sfdc deploy`
+  )
 }
 
 async function pollHealth(
@@ -53,7 +103,7 @@ async function pollHealth(
     service,
     url,
     ok: false,
-    detail: `timed out after ${(maxAttempts * intervalMs) / 1000}s`,
+    detail: `${(maxAttempts * intervalMs) / 1000}s`,
   }
 }
 

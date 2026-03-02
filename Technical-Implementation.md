@@ -1489,6 +1489,21 @@ Assets are bundled by `tsup`'s `onSuccess` hook in `apps/cli/tsup.config.ts` —
 | `prisma@^6.5.0` | Platform-specific query engine binaries selected automatically at install |
 | `@prisma/client@^6.5.0` | Required by Prisma internals |
 
+### Port Conflict Auto-Remediation (`check-remote-prerequisites.ts`)
+
+`checkRemotePort()` no longer just warns — it actively tries to free the port:
+1. Checks if `nginx`, `apache2`, `httpd`, `lighttpd`, or `caddy` is an active systemd service
+2. If found: runs `systemctl stop <svc> && systemctl disable <svc>`, then re-checks the port
+3. If freed: logs success ("Port 80 — freed (stopped system nginx service)")
+4. If still blocked: **hard error** (not a warning) with the occupant process shown — Caddy cannot obtain TLS certs without ports 80/443, so continuing would guarantee a health-check timeout
+
+### Health Check Diagnostics (`verify-health.ts`)
+
+`verifyHealth()` now accepts `ssh` and `remoteDir`. On timeout:
+1. Runs `docker compose ps` via SSH → prints container status table
+2. Runs `docker compose logs caddy --tail 30` via SSH → prints Caddy output (shows TLS errors, port binding failures, Let's Encrypt rate limits)
+3. **Throws** with a remediation message — fixes the previous silent continue → SFDC deploy failure cascade
+
 ### Salesforce Auth — Token Passthrough Pattern
 
 `loginViaAppBridge()` now returns `{ accessToken, instanceUrl, aliasStored }`:
