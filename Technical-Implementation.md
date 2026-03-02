@@ -1454,3 +1454,68 @@ import jsforce from "jsforce";
 const { Connection: ConnectionClass } = jsforce;
 import type { Connection } from "jsforce";  // type-only
 ```
+
+## 19. npm Publishing (`@lead-routing/cli`)
+
+### Package Configuration
+
+`apps/cli/package.json` additions required for scoped public publishing:
+
+| Field | Value | Purpose |
+|-------|-------|---------|
+| `publishConfig.access` | `"public"` | Required so `npm publish` doesn't fail for `@lead-routing/*` scoped packages |
+| `engines.node` | `">=20"` | Prevents install on unsupported Node versions |
+| `prepublishOnly` script | `"pnpm build"` | Ensures fresh `dist/` before any manual `npm publish` |
+
+### What Gets Published
+
+The `"files": ["dist/"]` field restricts the tarball to:
+```
+dist/
+├── index.js           # Bundled CLI (shebang + ESM, ~64 KB)
+├── prisma/
+│   ├── schema.prisma
+│   └── migrations/    # 4 SQL migration files
+└── sfdc-package/      # 47 Salesforce metadata files (Apex, LWC, objects, triggers)
+```
+
+Assets are bundled by `tsup`'s `onSuccess` hook in `apps/cli/tsup.config.ts` — no monorepo access needed at runtime.
+
+### Runtime Dependencies (installed by npm, not bundled)
+
+| Package | Why external |
+|---------|-------------|
+| `node-ssh@^13.2.1` | Has optional native `.node` modules — bundling with tsup fails |
+| `prisma@^6.5.0` | Platform-specific query engine binaries selected automatically at install |
+| `@prisma/client@^6.5.0` | Required by Prisma internals |
+
+### GitHub Actions Auto-Publish
+
+Workflow: `.github/workflows/publish-cli.yml`
+
+**Trigger**: Push a Git tag matching `cli-v*` (e.g. `cli-v0.1.0`) or manual `workflow_dispatch`.
+Decoupled from `publish-images.yml` (Docker) — CLI and Docker releases are independent.
+
+**Steps**: checkout → pnpm install → `pnpm --filter @lead-routing/cli build` → `npm publish --access public`
+
+**Required secret**: `NPM_TOKEN` — npm automation token added to GitHub repo secrets.
+
+### Release Process
+
+1. Edit `version` in `apps/cli/package.json`
+2. Commit + push tag: `git tag cli-v0.x.y && git push origin cli-v0.x.y`
+3. GitHub Actions publishes to npm automatically
+
+### Customer Install
+
+```bash
+# One-time setup wizard
+npx @lead-routing/cli@latest init
+
+# Subsequent commands (reads lead-routing.json)
+lead-routing deploy
+lead-routing status
+lead-routing doctor
+lead-routing logs engine
+lead-routing sfdc deploy
+```

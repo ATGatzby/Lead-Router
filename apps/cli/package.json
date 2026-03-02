@@ -2,15 +2,24 @@
   "name": "@lead-routing/cli",
   "version": "0.1.0",
   "description": "Self-hosted deployment CLI for Lead Routing",
+  "homepage": "https://github.com/lead-routing/lead-routing",
+  "keywords": ["salesforce", "lead-routing", "self-hosted", "deployment", "cli"],
   "type": "module",
   "bin": {
     "lead-routing": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "prepare": "node -e \"const{cpSync,existsSync,rmSync}=require('fs');const src='../../sfdc-package';if(existsSync(src)){rmSync('sfdc-package',{recursive:true,force:true});cpSync(src,'sfdc-package',{recursive:true})}\"",
     "build": "tsup",
     "dev": "tsup --watch",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "files": [
     "dist/"
