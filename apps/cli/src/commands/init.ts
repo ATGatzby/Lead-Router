@@ -18,6 +18,13 @@ import { findInstallDir, readConfig } from '../utils/config.js'
 export interface InitOptions {
   dryRun?: boolean
   resume?: boolean
+  sandbox?: boolean
+  sshPort?: number
+  sshUser?: string
+  sshKey?: string
+  remoteDir?: string
+  externalDb?: string
+  externalRedis?: string
 }
 
 // Warn (not error) when a hostname doesn't resolve — DNS can lag on new domains.
@@ -26,7 +33,6 @@ async function checkDnsResolvable(appUrl: string, engineUrl: string): Promise<vo
   try {
     hosts = [...new Set([new URL(appUrl).hostname, new URL(engineUrl).hostname])]
   } catch {
-    // Invalid URL format — collectConfig already validates; skip DNS check
     return
   }
 
@@ -70,7 +76,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       }
       const saved = readConfig(dir)!
 
-      // Re-prompt SSH password if key auth is not configured (same pattern as deploy.ts)
+      // Re-prompt SSH password if key auth is not configured
       let sshPassword: string | undefined
       if (!saved.ssh.privateKeyPath) {
         const pw = await promptPassword({
@@ -134,18 +140,40 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     log.step('Step 1/9  Checking local prerequisites')
     await checkPrerequisites()
 
-    // Step 2 — SSH connection details (prompts only, no connection yet)
-    log.step('Step 2/9  Server connection')
-    const sshCfg = await collectSshConfig()
+    // Step 2 — SSH connection details + immediate connection test
+    // Connect before collecting app config so SSH errors surface early
+    // (not after the user has spent 5 minutes filling in URLs and credentials).
+    log.step('Step 2/9  SSH connection')
+    const sshCfg = await collectSshConfig({
+      sshPort: options.sshPort,
+      sshUser: options.sshUser,
+      sshKey: options.sshKey,
+      remoteDir: options.remoteDir,
+    })
 
-    // Step 3 — App configuration
+    if (!dryRun) {
+      try {
+        await ssh.connect(sshCfg)
+        log.success(`Connected to ${sshCfg.host}`)
+      } catch (err) {
+        log.error(`SSH connection failed: ${String(err)}`)
+        log.info('Fix your SSH credentials and re-run `lead-routing init`.')
+        process.exit(1)
+      }
+    }
+
+    // Step 3 — App configuration (only reached after SSH is confirmed working)
     log.step('Step 3/9  Configuration')
-    const cfg = await collectConfig()
+    const cfg = await collectConfig({
+      sandbox: options.sandbox,
+      externalDb: options.externalDb,
+      externalRedis: options.externalRedis,
+    })
 
     // DNS pre-flight: warn if hostnames don't resolve (non-blocking, asks to continue)
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
-    // Step 4 — Generate config files locally (includes SSH details in lead-routing.json)
+    // Step 4 — Generate config files locally
     log.step('Step 4/9  Generating config files')
     const { dir, adminSecret } = generateFiles(cfg, sshCfg)
 
@@ -165,9 +193,8 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       return
     }
 
-    // Step 5 — Connect to server, verify Docker, upload files
-    log.step('Step 5/9  Connecting to server')
-    await ssh.connect(sshCfg)
+    // Step 5 — Remote setup (already connected from step 2)
+    log.step('Step 5/9  Remote setup')
     const remoteDir = await ssh.resolveHome(sshCfg.remoteDir)
     await checkRemotePrerequisites(ssh)
     await uploadFiles(ssh, dir, remoteDir)
@@ -182,7 +209,6 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
     // Step 8 — Health check on public HTTPS URLs
     // (Caddy TLS cert provisioning takes ~30s — maxAttempts bumped to 24)
-    // Passes ssh+remoteDir so on timeout we can show Caddy logs + container status.
     log.step('Step 8/9  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
@@ -191,7 +217,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     await sfdcDeployInline({
       appUrl: cfg.appUrl,
       engineUrl: cfg.engineUrl,
-      orgAlias: cfg.orgAlias,
+      orgAlias: 'lead-routing',
       sfdcClientId: cfg.sfdcClientId,
       sfdcLoginUrl: cfg.sfdcLoginUrl,
       installDir: dir,

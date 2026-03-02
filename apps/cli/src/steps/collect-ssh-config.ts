@@ -1,7 +1,30 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { text, password, select, note, cancel, isCancel } from '@clack/prompts'
+import { join } from 'node:path'
+import { text, password, note, log, cancel, isCancel } from '@clack/prompts'
 import type { SshConfig } from '../utils/ssh.js'
+
+export interface SshCollectOptions {
+  /** Override SSH port (default: 22) */
+  sshPort?: number
+  /** Override SSH username (default: root) */
+  sshUser?: string
+  /** Explicit path to SSH private key — skips auto-detection */
+  sshKey?: string
+  /** Override remote install directory (default: ~/lead-routing) */
+  remoteDir?: string
+}
+
+// Standard key locations tried in order — first existing file wins
+const DEFAULT_KEYS = [
+  join(homedir(), '.ssh', 'id_ed25519'),
+  join(homedir(), '.ssh', 'id_rsa'),
+  join(homedir(), '.ssh', 'id_ecdsa'),
+]
+
+function detectDefaultKey(): string | undefined {
+  return DEFAULT_KEYS.find(existsSync)
+}
 
 function bail(value: unknown): never {
   if (isCancel(value)) {
@@ -13,15 +36,16 @@ function bail(value: unknown): never {
 
 /**
  * Prompt the customer for their VPS SSH connection details.
- * No connection is made here — this is prompt-only so that dry-run
- * can write config without connecting.
+ * Auto-detects SSH key from standard locations — only prompts for what it can't determine.
+ * No connection is made here — this is prompt-only so that dry-run can write
+ * config without connecting.
  */
-export async function collectSshConfig(): Promise<SshConfig> {
+export async function collectSshConfig(opts: SshCollectOptions = {}): Promise<SshConfig> {
   note(
     'The CLI will SSH into your server to deploy the full stack.\n' +
       'You will need:\n' +
       '  • Server hostname or IP address\n' +
-      '  • SSH access (key file recommended, password supported)\n' +
+      '  • SSH access (key auto-detected, or password)\n' +
       '  • Docker 24+ already installed on the server',
     'Server connection'
   )
@@ -34,78 +58,47 @@ export async function collectSshConfig(): Promise<SshConfig> {
   })
   if (isCancel(host)) bail(host)
 
-  // ── Port ───────────────────────────────────────────────────────────────────
-  const portRaw = await text({
-    message: 'SSH port',
-    placeholder: '22',
-    initialValue: '22',
-    validate: (v) => {
-      const n = parseInt(v, 10)
-      if (isNaN(n) || n < 1 || n > 65535) return 'Must be a valid port (1–65535)'
-    },
-  })
-  if (isCancel(portRaw)) bail(portRaw)
-
-  // ── Username ───────────────────────────────────────────────────────────────
-  const username = await text({
-    message: 'SSH username',
-    placeholder: 'root',
-    initialValue: 'root',
-    validate: (v) => (!v ? 'Required' : undefined),
-  })
-  if (isCancel(username)) bail(username)
-
-  // ── Auth method ───────────────────────────────────────────────────────────
-  const authMethod = await select({
-    message: 'SSH authentication method',
-    options: [
-      { value: 'key', label: 'SSH key file (recommended)' },
-      { value: 'password', label: 'Password' },
-    ],
-  })
-  if (isCancel(authMethod)) bail(authMethod)
-
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  // Priority: --ssh-key flag → auto-detected default key → prompt for password.
+  // Port, username, and remote dir use sensible defaults and never prompt.
   let privateKeyPath: string | undefined
   let pwd: string | undefined
 
-  if (authMethod === 'key') {
-    const defaultKey = `${homedir()}/.ssh/id_rsa`
-    const keyPath = await text({
-      message: 'Path to SSH private key',
-      placeholder: defaultKey,
-      initialValue: `~/.ssh/id_rsa`,
-      validate: (v) => {
-        const resolved = v.startsWith('~') ? homedir() + v.slice(1) : v
-        if (!existsSync(resolved)) return `Key file not found: ${resolved}`
-      },
-    })
-    if (isCancel(keyPath)) bail(keyPath)
-    const raw = keyPath as string
-    privateKeyPath = raw.startsWith('~') ? homedir() + raw.slice(1) : raw
+  if (opts.sshKey) {
+    // Explicit key from --ssh-key flag
+    const resolved = opts.sshKey.startsWith('~')
+      ? homedir() + opts.sshKey.slice(1)
+      : opts.sshKey
+    if (!existsSync(resolved)) {
+      log.error(`SSH key not found: ${resolved}`)
+      process.exit(1)
+    }
+    privateKeyPath = resolved
+    log.info(`Using SSH key: ${opts.sshKey}`)
   } else {
-    const p = await password({
-      message: 'SSH password',
-      validate: (v) => (!v ? 'Required' : undefined),
-    })
-    if (isCancel(p)) bail(p)
-    pwd = p as string
+    const detected = detectDefaultKey()
+    if (detected) {
+      // Found a standard key — use it silently
+      privateKeyPath = detected
+      log.info(`Using SSH key: ${detected.replace(homedir(), '~')}`)
+    } else {
+      // No key found — fall back to password auth (skip auth method select)
+      log.warn('No SSH key found at ~/.ssh/id_ed25519, ~/.ssh/id_rsa, or ~/.ssh/id_ecdsa')
+      const p = await password({
+        message: `SSH password for ${opts.sshUser ?? 'root'}@${host as string}`,
+        validate: (v) => (!v ? 'Required' : undefined),
+      })
+      if (isCancel(p)) bail(p)
+      pwd = p as string
+    }
   }
-
-  // ── Remote install directory ───────────────────────────────────────────────
-  const remoteDir = await text({
-    message: 'Remote install directory on server',
-    placeholder: '~/lead-routing',
-    initialValue: '~/lead-routing',
-    validate: (v) => (!v ? 'Required' : undefined),
-  })
-  if (isCancel(remoteDir)) bail(remoteDir)
 
   return {
     host: host as string,
-    port: parseInt(portRaw as string, 10),
-    username: username as string,
+    port: opts.sshPort ?? 22,
+    username: opts.sshUser ?? 'root',
     privateKeyPath,
     password: pwd,
-    remoteDir: remoteDir as string,
+    remoteDir: opts.remoteDir ?? '~/lead-routing',
   }
 }

@@ -17,9 +17,24 @@ program
 program
   .command('init')
   .description('Interactive setup wizard — configure and deploy the full Lead Routing stack')
-  .option('--dry-run', 'Run the wizard and generate config files without starting Docker services')
-  .option('--resume', 'Skip steps 1-7 and resume from health check using existing lead-routing.json')
-  .action((opts: { dryRun?: boolean; resume?: boolean }) => runInit({ dryRun: opts.dryRun, resume: opts.resume }))
+  .option('--dry-run', 'Generate config files without connecting or deploying')
+  .option('--resume', 'Skip to health check using existing lead-routing.json (post-timeout recovery)')
+  .option('--sandbox', 'Use Salesforce sandbox (test.salesforce.com) instead of production')
+  .option('--ssh-port <port>', 'SSH port (default: 22)', parseInt)
+  .option('--ssh-user <user>', 'SSH username (default: root)')
+  .option('--ssh-key <path>', 'Path to SSH private key (overrides auto-detection)')
+  .option('--remote-dir <path>', 'Remote install directory (default: ~/lead-routing)')
+  .option('--external-db <url>', 'Use external PostgreSQL URL instead of managed Docker container')
+  .option('--external-redis <url>', 'Use external Redis URL instead of managed Docker container')
+  .action((opts: {
+    dryRun?: boolean; resume?: boolean; sandbox?: boolean
+    sshPort?: number; sshUser?: string; sshKey?: string; remoteDir?: string
+    externalDb?: string; externalRedis?: string
+  }) => runInit({
+    dryRun: opts.dryRun, resume: opts.resume, sandbox: opts.sandbox,
+    sshPort: opts.sshPort, sshUser: opts.sshUser, sshKey: opts.sshKey,
+    remoteDir: opts.remoteDir, externalDb: opts.externalDb, externalRedis: opts.externalRedis,
+  }))
 
 program
   .command('deploy')

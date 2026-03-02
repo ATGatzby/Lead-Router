@@ -1,13 +1,4 @@
-import {
-  group,
-  text,
-  password,
-  select,
-  confirm,
-  note,
-  cancel,
-  isCancel,
-} from '@clack/prompts'
+import { text, password, note, cancel, isCancel } from '@clack/prompts'
 import { generateSecret } from '../utils/crypto.js'
 
 export interface CollectedConfig {
@@ -16,7 +7,6 @@ export interface CollectedConfig {
   sfdcClientId: string
   sfdcClientSecret: string
   sfdcLoginUrl: string
-  orgAlias: string
   managedDb: boolean
   databaseUrl: string
   dbPassword: string
@@ -24,11 +14,22 @@ export interface CollectedConfig {
   redisUrl: string
   adminEmail: string
   adminPassword: string
+  /** Always empty string — configure Resend post-install via config update */
   resendApiKey: string
+  /** Always empty string — configure post-install */
   feedbackToEmail: string
   sessionSecret: string
   engineWebhookSecret: string
   adminSecret: string
+}
+
+export interface ConfigCollectOptions {
+  /** Use Salesforce sandbox (test.salesforce.com) instead of production */
+  sandbox?: boolean
+  /** External PostgreSQL URL — skips managed Docker container */
+  externalDb?: string
+  /** External Redis URL — skips managed Docker container */
+  externalRedis?: string
 }
 
 function bail(value: unknown): never {
@@ -39,16 +40,15 @@ function bail(value: unknown): never {
   throw new Error('Unexpected cancel')
 }
 
-export async function collectConfig(): Promise<CollectedConfig> {
+export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<CollectedConfig> {
   note(
     'You will need:\n' +
       '  • A Salesforce Connected App (Client ID + Secret) — instructions below\n' +
-      '  • A public URL or localhost for the app\n' +
-      '  • PostgreSQL + Redis (or let Docker manage them)',
+      '  • Public HTTPS URLs for the web app and routing engine',
     'Before you begin'
   )
 
-  // ── App ────────────────────────────────────────────────────────────────────
+  // ── App URL ────────────────────────────────────────────────────────────────
   const appUrl = await text({
     message: 'App URL (public URL where the web app will be accessible)',
     placeholder: 'https://routing.acme.com',
@@ -67,8 +67,7 @@ export async function collectConfig(): Promise<CollectedConfig> {
   // ── Engine URL ─────────────────────────────────────────────────────────────
   const engineUrl = await text({
     message: 'Engine URL (public URL Salesforce will use to route leads)',
-    placeholder: 'https://engine.acme.com',
-    hint: 'Subdomain: https://engine.acme.com  •  Same domain + port: https://acme.com:3001',
+    placeholder: 'https://engine.acme.com  or  https://acme.com:3001',
     validate: (v) => {
       if (!v) return 'Required'
       try {
@@ -81,11 +80,11 @@ export async function collectConfig(): Promise<CollectedConfig> {
   })
   if (isCancel(engineUrl)) bail(engineUrl)
 
-  // ── Salesforce ─────────────────────────────────────────────────────────────
-  // Must match SFDC_REDIRECT_URI in .env.web exactly — the web app uses /api/auth/sfdc/callback.
+  // ── Salesforce Connected App ────────────────────────────────────────────────
+  // Callback URL must match SFDC_REDIRECT_URI in .env.web exactly.
   const callbackUrl = `${(appUrl as string).trim().replace(/\/+$/, '')}/api/auth/sfdc/callback`
   note(
-    'You need a Salesforce Connected App. If you haven\'t created one yet:\n' +
+    "You need a Salesforce Connected App. If you haven't created one yet:\n" +
       '\n' +
       '  1. Go to Salesforce Setup → App Manager → New Connected App\n' +
       '  2. Connected App Name: Lead Routing\n' +
@@ -112,75 +111,22 @@ export async function collectConfig(): Promise<CollectedConfig> {
   })
   if (isCancel(sfdcClientSecret)) bail(sfdcClientSecret)
 
-  const sfdcLoginUrlChoice = await select({
-    message: 'Salesforce environment',
-    options: [
-      { value: 'https://login.salesforce.com', label: 'Production / Developer org' },
-      { value: 'https://test.salesforce.com', label: 'Sandbox' },
-    ],
-  })
-  if (isCancel(sfdcLoginUrlChoice)) bail(sfdcLoginUrlChoice)
-  const sfdcLoginUrl = sfdcLoginUrlChoice as string
-
-  const orgAlias = await text({
-    message: 'Salesforce org alias (used by the sf CLI to identify this org)',
-    placeholder: 'lead-routing',
-    initialValue: 'lead-routing',
-    validate: (v) => (!v ? 'Required' : undefined),
-  })
-  if (isCancel(orgAlias)) bail(orgAlias)
+  // SFDC login URL: production by default, sandbox via --sandbox flag
+  const sfdcLoginUrl = opts.sandbox
+    ? 'https://test.salesforce.com'
+    : 'https://login.salesforce.com'
 
   // ── Database ───────────────────────────────────────────────────────────────
-  const managedDb = await confirm({
-    message: 'Manage PostgreSQL with Docker? (recommended — choose No to provide your own URL)',
-    initialValue: true,
-  })
-  if (isCancel(managedDb)) bail(managedDb)
-
-  let databaseUrl = ''
-  let dbPassword = generateSecret(16)
-
-  if (managedDb) {
-    databaseUrl = 'postgresql://leadrouting:' + dbPassword + '@postgres:5432/leadrouting'
-  } else {
-    const url = await text({
-      message: 'PostgreSQL connection URL',
-      placeholder: 'postgresql://user:pass@host:5432/dbname',
-      validate: (v) => {
-        if (!v) return 'Required'
-        if (!v.startsWith('postgresql://') && !v.startsWith('postgres://'))
-          return 'Must start with postgresql:// or postgres://'
-      },
-    })
-    if (isCancel(url)) bail(url)
-    databaseUrl = url as string
-    dbPassword = ''
-  }
+  // Default: managed Docker container. Override with --external-db <url>.
+  const dbPassword = generateSecret(16)
+  const managedDb = !opts.externalDb
+  const databaseUrl =
+    opts.externalDb ?? `postgresql://leadrouting:${dbPassword}@postgres:5432/leadrouting`
 
   // ── Redis ──────────────────────────────────────────────────────────────────
-  const managedRedis = await confirm({
-    message: 'Manage Redis with Docker? (recommended — choose No to provide your own URL)',
-    initialValue: true,
-  })
-  if (isCancel(managedRedis)) bail(managedRedis)
-
-  let redisUrl = ''
-
-  if (managedRedis) {
-    redisUrl = 'redis://redis:6379'
-  } else {
-    const url = await text({
-      message: 'Redis connection URL',
-      placeholder: 'redis://user:pass@host:6379',
-      validate: (v) => {
-        if (!v) return 'Required'
-        if (!v.startsWith('redis://') && !v.startsWith('rediss://'))
-          return 'Must start with redis:// or rediss://'
-      },
-    })
-    if (isCancel(url)) bail(url)
-    redisUrl = url as string
-  }
+  // Default: managed Docker container. Override with --external-redis <url>.
+  const managedRedis = !opts.externalRedis
+  const redisUrl = opts.externalRedis ?? 'redis://redis:6379'
 
   // ── Admin Account ──────────────────────────────────────────────────────────
   note('This creates the first admin user for the web app.', 'Admin Account')
@@ -204,32 +150,6 @@ export async function collectConfig(): Promise<CollectedConfig> {
   })
   if (isCancel(adminPassword)) bail(adminPassword)
 
-  // ── Optional ───────────────────────────────────────────────────────────────
-  const wantResend = await confirm({
-    message: 'Configure Resend for email invites? (optional)',
-    initialValue: false,
-  })
-  if (isCancel(wantResend)) bail(wantResend)
-
-  let resendApiKey = ''
-  let feedbackToEmail = ''
-
-  if (wantResend) {
-    const key = await text({
-      message: 'Resend API key',
-      placeholder: 're_...',
-    })
-    if (isCancel(key)) bail(key)
-    resendApiKey = (key as string) ?? ''
-
-    const email = await text({
-      message: 'Email address to receive feedback',
-      placeholder: 'feedback@acme.com',
-    })
-    if (isCancel(email)) bail(email)
-    feedbackToEmail = (email as string) ?? ''
-  }
-
   // ── Auto-generated secrets ─────────────────────────────────────────────────
   const sessionSecret = generateSecret(32)
   const engineWebhookSecret = generateSecret(32)
@@ -241,16 +161,15 @@ export async function collectConfig(): Promise<CollectedConfig> {
     sfdcClientId: (sfdcClientId as string).trim(),
     sfdcClientSecret: (sfdcClientSecret as string).trim(),
     sfdcLoginUrl,
-    orgAlias: orgAlias as string,
-    managedDb: managedDb as boolean,
+    managedDb,
     databaseUrl,
-    dbPassword,
-    managedRedis: managedRedis as boolean,
+    dbPassword: managedDb ? dbPassword : '',
+    managedRedis,
     redisUrl,
     adminEmail: adminEmail as string,
     adminPassword: adminPassword as string,
-    resendApiKey,
-    feedbackToEmail,
+    resendApiKey: '',
+    feedbackToEmail: '',
     sessionSecret,
     engineWebhookSecret,
     adminSecret,
