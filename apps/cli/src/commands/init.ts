@@ -144,8 +144,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     // Connect before collecting app config so SSH errors surface early
     // (not after the user has spent 5 minutes filling in URLs and credentials).
     log.step('Step 2/9  SSH connection')
-    // `let` — may be reassigned to password-auth config if key auth fails
-    let sshCfg = await collectSshConfig({
+    const sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
       sshKey: options.sshKey,
@@ -157,30 +156,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         await ssh.connect(sshCfg)
         log.success(`Connected to ${sshCfg.host}`)
       } catch (err) {
-        // Key was auto-detected/provided but rejected by server — offer password fallback
-        if (sshCfg.privateKeyPath && !sshCfg.password) {
-          log.warn(`Key auth failed — the server rejected the SSH key`)
-          log.info('Falling back to password auth…')
-          const pw = await promptPassword({
-            message: `SSH password for ${sshCfg.username}@${sshCfg.host}`,
-            validate: (v) => (!v ? 'Required' : undefined),
-          })
-          if (isCancel(pw)) { cancel('Setup cancelled.'); process.exit(0) }
-          // Update sshCfg so generateFiles saves password-auth config (not the rejected key)
-          sshCfg = { ...sshCfg, privateKeyPath: undefined, password: pw as string }
-          try {
-            await ssh.connect(sshCfg)
-            log.success(`Connected to ${sshCfg.host}`)
-          } catch (err2) {
-            log.error(`SSH connection failed: ${String(err2)}`)
-            log.info('Fix your SSH credentials and re-run `lead-routing init`.')
-            process.exit(1)
-          }
-        } else {
-          log.error(`SSH connection failed: ${String(err)}`)
-          log.info('Fix your SSH credentials and re-run `lead-routing init`.')
-          process.exit(1)
-        }
+        log.error(`SSH connection failed: ${String(err)}`)
+        log.info('Check your password and re-run `lead-routing init`.')
+        process.exit(1)
       }
     }
 
