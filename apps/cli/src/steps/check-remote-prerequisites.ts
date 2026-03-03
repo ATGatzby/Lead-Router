@@ -122,12 +122,27 @@ async function checkRemotePort(ssh: SshConnection, port: number): Promise<CheckR
   const { stdout: occupant } = await ssh.execSilent(
     `ss -tlnp 2>/dev/null | grep ':${port} ' | head -1 || echo "unknown process"`
   )
+  const occupantStr = occupant.trim()
+
+  // docker-proxy = a Docker container already owns the port.
+  // Docker Compose will stop the old container and reclaim the port when it
+  // starts our stack — this is safe to continue past as a warning.
+  if (occupantStr.includes('docker-proxy')) {
+    return {
+      ok: false,
+      warn: true,
+      label:
+        `Port ${port} is held by an existing Docker container (docker-proxy).\n` +
+        `  Docker Compose will reclaim it when the new stack starts — continuing.`,
+    }
+  }
+
   return {
     ok: false,
-    // Hard error — Caddy cannot get TLS certs without these ports
+    // Hard error — non-Docker process; Caddy cannot get TLS certs without these ports
     label:
       `Port ${port} is occupied and could not be freed automatically.\n` +
-      `  Occupant: ${occupant.trim()}\n` +
+      `  Occupant: ${occupantStr}\n` +
       `  Stop the conflicting process on the server, then re-run:\n` +
       `    lead-routing init`,
   }

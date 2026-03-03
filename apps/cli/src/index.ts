@@ -12,7 +12,7 @@ const program = new Command()
 program
   .name('lead-routing')
   .description('Self-hosted Lead Routing — scaffold, deploy, and manage your installation')
-  .version('0.1.7')
+  .version('0.1.8')
 
 program
   .command('init')
