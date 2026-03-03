@@ -1440,8 +1440,9 @@ Accessible at `/admin` (separate from the main dashboard). Protected by `admin_t
 |---|---|---|
 | `plan` | `PAID` | All PAID-tier features enabled from day one |
 | `seatsPurchased` | `9999` | Seat cap never reached; seat enforcement UI never shown |
-| `routingQuota` | `999999` | Monthly routing quota never hit; quota banner never shown |
 | `isActive` | `true` | Org is active on first login |
+
+Note: `routingQuota` is **not** a schema column — the quota limit is derived from `PLAN_LIMITS[plan]` in the engine. `PAID` plan has a quota limit that is effectively unlimited for self-hosted use.
 
 These values mean all SaaS quota/upgrade UI is permanently inert without any code changes to the engine quota gate or seat-cap API routes.
 
