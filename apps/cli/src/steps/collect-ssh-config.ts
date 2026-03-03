@@ -46,7 +46,7 @@ export async function collectSshConfig(opts: SshCollectOptions = {}): Promise<Ss
       'You will need:\n' +
       '  • Server hostname or IP address\n' +
       '  • SSH access (key auto-detected, or password)\n' +
-      '  • Docker 24+ already installed on the server',
+      '  • A fresh Linux VPS (Ubuntu/Debian/CentOS) — Docker installed automatically',
     'Server connection'
   )
 
