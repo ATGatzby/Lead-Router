@@ -90,7 +90,7 @@ Lead Routing automatically assigns incoming Salesforce records (Leads, Contacts,
 │  - Round-Robin Teams CRUD                                       │
 │  - Routing Rules builder (condition groups, drag-to-reorder)   │
 │  - Routing History, Stats, Failed, Audit Log                   │
-│  - Settings (Billing/GST, Webhook notifications)               │
+│  - Settings (General: Salesforce sync, Webhooks: routing webhook)│
 │  - Onboarding checklist                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -223,7 +223,7 @@ lead-routing/
 | webhookSecret | String | HMAC-SHA256 secret — must match `Webhook_Secret__c` in SFDC Custom Setting |
 | plan | Plan enum | FREE (default) or PAID — drives seat and quota limits |
 | isActive | Boolean | false = org suspended; engine returns 403, web redirects to /suspended |
-| seatsPurchased | Int | Default 5 (FREE tier); overridable by admin |
+| seatsPurchased | Int | Seeded to 9999 by CLI init (self-hosted — cap never hit); overridable via admin portal |
 | seatsUsed | Int | Incremented on license grant |
 | routingQuotaUsed | Int | Running count of successful routings this month |
 | quotaResetAt | DateTime | Reset lazily when engine sees this timestamp in the past |
@@ -381,9 +381,10 @@ export async function getActorFromHeaders(): Promise<{ orgId, userId, userName }
 ### Module: License Users (`/license-users`)
 
 - **Sync**: `POST /api/users` — calls `syncFieldSchema` against SFDC, upserts users from `SELECT Id, Name, Email, Profile.Name FROM User WHERE IsActive = true`
-- **License toggle**: `POST /api/users/[id]/license` / `de-license` — enforces `seatsPurchased` cap
+- **License toggle**: `POST /api/users/[id]/license` / `de-license` — API-level seat cap check still exists but is never triggered (`seatsPurchased = 9999`)
 - **Bulk license**: `POST /api/users/bulk-license`
 - Seat usage tracked on `Organization.seatsUsed`
+- Seat counter pill and "Seat limit reached" upgrade dialog removed from UI (self-hosted cleanup)
 
 ### Module: Round-Robin Teams (`/round-robins`)
 
@@ -429,25 +430,12 @@ export async function getActorFromHeaders(): Promise<{ orgId, userId, userName }
 
 ### Module: Settings
 
-- **Billing** (`/settings/billing`): GST entity name, GSTIN, address, invoice email
-- **Notifications** (`/settings/notifications`): WhatsApp/Slack webhook URL — engine fires this on every successful routing
-- **Upgrade modal**: INR pricing (₹2,999 Starter / ₹6,999 Growth / Custom Enterprise)
+Settings sidebar has two tabs:
 
-### Feedback Widget
+- **General** (`/settings`): Salesforce webhook-secret sync button. Removed: Plan & Seats section, Routing Quota section, Upgrade button.
+- **Webhooks** (`/settings/notifications`): Post-routing webhook URL (engine fires on every successful routing) + WhatsApp Cloud API template reference. Formerly labelled "Notifications" — renamed to "Webhooks" for clarity.
 
-A floating feedback button is rendered on every dashboard page via `apps/web/app/(dashboard)/layout.tsx`.
-
-- **Trigger**: Fixed `bottom-6 right-6` circular button with `MessageSquare` icon
-- **Dialog**: Category select (General / Bug Report / Feature Request) + Textarea (min 10 chars, max 2000)
-- **States**: idle → submitting → success (auto-close 1.5s) / error (inline message)
-- **API**: `POST /api/feedback` — auth-gated, sends email via **Resend** to `FEEDBACK_TO_EMAIL`
-- **Email service**: `resend` package (`apps/web`). Requires `RESEND_API_KEY` and `FEEDBACK_TO_EMAIL` in `.env.local`
-- **From address**: `onboarding@resend.dev` (Resend's test domain — works without domain verification)
-
-Key files:
-- `apps/web/components/feedback/FeedbackButton.tsx` — client component (button + dialog)
-- `apps/web/components/ui/textarea.tsx` — shadcn Textarea (added)
-- `apps/web/app/api/feedback/route.ts` — POST handler
+Removed in self-hosted cleanup: `/settings/billing` (GST billing address form), `FeedbackButton` floating widget, `QuotaBanner` top-of-dashboard banner, `UpgradeModal` pricing dialog.
 
 ### Admin Org Creation (`POST /api/admin/orgs`)
 - Required: `inviteEmail` (valid email)
@@ -1092,7 +1080,7 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
 **Prompt count (v0.1.6):** 7 prompts on the happy path (user has a standard SSH key at `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`); 8 prompts if password auth is needed. Down from 24 prompts in v0.1.4.
 
 1. **Local prerequisites** — Checks Node 20+ and Salesforce CLI `sf` on the local machine (hard failure). Docker/port checks have moved to step 5 (remote).
-2. **Server connection + immediate SSH test** — Prompts for VPS hostname only. SSH key is **auto-detected** from `~/.ssh/id_ed25519` → `~/.ssh/id_rsa` → `~/.ssh/id_ecdsa` in priority order; if found, no further auth prompts. If no standard key exists, prompts for SSH password directly (skips the auth method select prompt). Port defaults to 22, username to `root`, remote dir to `~/lead-routing` — all overridable via flags. **SSH connection is established immediately after this step** — before app config is collected. A bad host/key causes an early exit rather than a 5-minute wasted setup.
+2. **Server connection + immediate SSH test** — Prompts for VPS hostname only. SSH key is **auto-detected** from `~/.ssh/id_ed25519` → `~/.ssh/id_rsa` → `~/.ssh/id_ecdsa` in priority order; if found, no further auth prompts. If the detected/provided key is **rejected by the server** (e.g. wrong key authorized), the CLI warns and falls back to a password prompt — no need to restart init. If no standard key exists at all, prompts for SSH password directly. Port defaults to 22, username to `root`, remote dir to `~/lead-routing` — all overridable via flags. **SSH connection is established immediately after this step** — before app config is collected. A bad host/key causes an early exit rather than a 5-minute wasted setup.
 3. **Configuration** — App URL, Engine URL, SFDC Connected App credentials (CLI prints exact setup instructions with callback URL pre-filled), admin email/password. Salesforce environment defaults to production (use `--sandbox` flag for `test.salesforce.com`). Postgres and Redis are managed by Docker by default (use `--external-db`/`--external-redis` flags to skip). Resend email is not collected at init time — configure post-install. After this step, **DNS pre-flight check** — runs `dns.promises.lookup()` on each unique hostname. If a hostname doesn't resolve: shows a warning (typo check), asks `Continue anyway?` — not a hard error.
 4. **Generate config files** — Writes locally to `./lead-routing/`: `docker-compose.yml`, `Caddyfile`, `.env.web`, `.env.engine`, `lead-routing.json` (includes `ssh` and `remoteDir` fields). Dry-run exits here.
 5. **Remote setup** — Already connected from step 2. Resolves `~` via remote `$HOME`, checks remote Docker 24+ and Docker Compose v2 (hard failure), checks ports 80/443 (warn only), uploads all 5 config files via SFTP.
@@ -1444,13 +1432,18 @@ Accessible at `/admin` (separate from the main dashboard). Protected by `admin_t
 - Preserves: org record, billing info
 - **Publishes Redis cache invalidation** for all 3 object types so engine flushes stale rules
 
-### Customer-Facing Tier UX
+### Self-Hosted Seed Values (CLI init)
 
-- **`QuotaBanner`** (`components/quota-banner.tsx`): shown in dashboard layout when `quotaPercent >= 80`
-  - Amber at 80–99%, Red + blocked message at 100%
-- **`UpgradeModal`** (`components/upgrade-modal.tsx`): shows Free/Paid/Enterprise tiers with contact CTA
-  - `context="seats"` or `context="quota"` changes the header copy
-- **Settings page** (`/settings`): shows routing quota progress bar alongside seat usage
+`apps/cli/src/steps/run-migrations.ts` — `seedAdminUser()` seeds the org with self-hosted defaults so no quota/seat enforcement ever triggers:
+
+| Field | Self-hosted value | Effect |
+|---|---|---|
+| `plan` | `PAID` | All PAID-tier features enabled from day one |
+| `seatsPurchased` | `9999` | Seat cap never reached; seat enforcement UI never shown |
+| `routingQuota` | `999999` | Monthly routing quota never hit; quota banner never shown |
+| `isActive` | `true` | Org is active on first login |
+
+These values mean all SaaS quota/upgrade UI is permanently inert without any code changes to the engine quota gate or seat-cap API routes.
 
 ### ESM Workspace Packages
 `packages/db` and `packages/sfdc` both need in their `package.json`:

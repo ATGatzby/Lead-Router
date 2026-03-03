@@ -54,11 +54,6 @@ interface UsersResponse {
   pages: number;
 }
 
-interface StatsResponse {
-  seatsPurchased: number;
-  seatsUsed: number;
-}
-
 interface SyncResult {
   upserted: number;
   deactivated: number;
@@ -97,10 +92,6 @@ export default function LicenseUsersPage() {
 
   // Toast / feedback state
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  // Upgrade dialog
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [upgradeMeta, setUpgradeMeta] = useState<{ seatsPurchased: number; seatsUsed: number } | null>(null);
 
   // De-license feedback dialog (shows team cascade info)
   const [cascadeOpen, setCascadeOpen] = useState(false);
@@ -143,15 +134,6 @@ export default function LicenseUsersPage() {
     },
   });
 
-  const statsQuery = useQuery<StatsResponse>({
-    queryKey: ["users/stats"],
-    queryFn: async () => {
-      const res = await fetch("/api/users/stats");
-      if (!res.ok) throw new Error("Failed to load stats");
-      return res.json();
-    },
-  });
-
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -161,7 +143,6 @@ export default function LicenseUsersPage() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["users"] });
-    qc.invalidateQueries({ queryKey: ["users/stats"] });
   };
 
   // Sync mutation — used inside the dialog
@@ -188,11 +169,6 @@ export default function LicenseUsersPage() {
       return data;
     },
     onSuccess: (data, variables) => {
-      if (data.error === "seat_cap_exceeded") {
-        setUpgradeMeta({ seatsPurchased: data.seatsPurchased, seatsUsed: data.seatsUsed });
-        setUpgradeOpen(true);
-        return;
-      }
       if (variables.action === "de-license" && data.removedFromTeams?.length > 0) {
         const user = usersQuery.data?.users.find((u) => u.id === variables.id);
         setCascadeInfo({ userName: user?.name ?? "User", teams: data.removedFromTeams });
@@ -250,11 +226,6 @@ export default function LicenseUsersPage() {
       return data;
     },
     onSuccess: (data, variables) => {
-      if (data.error === "seat_cap_exceeded") {
-        setUpgradeMeta({ seatsPurchased: data.seatsPurchased, seatsUsed: data.seatsUsed });
-        setUpgradeOpen(true);
-        return;
-      }
       setSelected(new Set());
       invalidate();
       const action = variables.action === "license" ? "licensed" : "de-licensed";
@@ -377,9 +348,6 @@ export default function LicenseUsersPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  const stats = statsQuery.data;
-  const seatsFull = stats ? stats.seatsUsed >= stats.seatsPurchased : false;
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -392,14 +360,6 @@ export default function LicenseUsersPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Seat counter */}
-          {stats && (
-            <div className={`flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full border ${seatsFull ? "text-destructive border-destructive/30 bg-destructive/5" : "text-foreground border-border bg-muted/50"}`}>
-              <span className={`size-2 rounded-full ${seatsFull ? "bg-destructive" : "bg-primary"}`} />
-              {stats.seatsUsed} of {stats.seatsPurchased} seats used
-            </div>
-          )}
-
           <Button
             variant="outline"
             size="sm"
@@ -538,16 +498,8 @@ export default function LicenseUsersPage() {
                       </Badge>
                       <Switch
                         checked={user.isLicensed}
-                        disabled={isPending || (seatsFull && !user.isLicensed)}
+                        disabled={isPending}
                         onCheckedChange={(checked) => {
-                          if (seatsFull && checked) {
-                            setUpgradeMeta({
-                              seatsPurchased: stats!.seatsPurchased,
-                              seatsUsed: stats!.seatsUsed,
-                            });
-                            setUpgradeOpen(true);
-                            return;
-                          }
                           licenseMutation.mutate({
                             id: user.id,
                             action: checked ? "license" : "de-license",
@@ -895,27 +847,6 @@ export default function LicenseUsersPage() {
               onClick={() => bulkDeleteMutation.mutate(Array.from(selected))}
             >
               {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selected.size} User${selected.size !== 1 ? "s" : ""}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upgrade dialog */}
-      <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Seat limit reached</DialogTitle>
-            <DialogDescription>
-              You&apos;ve used all {upgradeMeta?.seatsPurchased} seats. Upgrade your plan to license
-              more users.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUpgradeOpen(false)}>
-              Cancel
-            </Button>
-            <Button asChild>
-              <a href="/settings#billing">Upgrade Plan</a>
             </Button>
           </DialogFooter>
         </DialogContent>

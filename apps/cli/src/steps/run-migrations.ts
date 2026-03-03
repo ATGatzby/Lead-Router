@@ -142,9 +142,9 @@ async function seedAdminUser(
     const safeWebhookSecret = webhookSecret.replace(/'/g, "''")
 
     const sql = `
--- Create initial organisation if none exists
-INSERT INTO organizations (id, "webhookSecret", "createdAt", "updatedAt")
-SELECT gen_random_uuid(), '${safeWebhookSecret}', NOW(), NOW()
+-- Create initial organisation if none exists (self-hosted defaults: PAID plan, unlimited seats/quota)
+INSERT INTO organizations (id, "webhookSecret", plan, "seatsPurchased", "routingQuota", "isActive", "createdAt", "updatedAt")
+SELECT gen_random_uuid(), '${safeWebhookSecret}', 'PAID', 9999, 999999, true, NOW(), NOW()
 WHERE NOT EXISTS (SELECT 1 FROM organizations);
 
 -- Create admin AppUser under the first org (idempotent)
