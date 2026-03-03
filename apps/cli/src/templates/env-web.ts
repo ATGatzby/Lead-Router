@@ -1,6 +1,7 @@
 export interface WebEnvConfig {
   appUrl: string
-  engineUrl: string
+  engineUrl: string        // Docker-internal: http://engine:3001
+  publicEngineUrl: string  // Public HTTPS URL — used by pushSettings → Salesforce
   databaseUrl: string
   redisUrl: string
   sfdcClientId: string
@@ -24,6 +25,7 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     ``,
     `# Engine`,
     `ENGINE_URL=${c.engineUrl}`,
+    `PUBLIC_ENGINE_URL=${c.publicEngineUrl}`,
     `ENGINE_WEBHOOK_SECRET=${c.engineWebhookSecret}`,
     ``,
     `# Database`,

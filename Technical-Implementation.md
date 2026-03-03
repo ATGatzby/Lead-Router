@@ -1139,9 +1139,10 @@ Internet traffic flows: `Caddy:443 → web:3000` and `Caddy:443/3001 → engine:
 
 ### ENGINE_URL Split
 
-Two separate engine URL values exist post-init:
+Three engine URL values exist post-init:
 - **`ENGINE_URL=http://engine:3001`** in `.env.web` — Docker service name for web→engine internal communication
-- **`engineUrl` in `lead-routing.json`** — the user-provided public HTTPS URL (e.g. `https://engine.acme.com`) used for Salesforce Named Credential patching
+- **`PUBLIC_ENGINE_URL=https://engine.acme.com`** in `.env.web` — public HTTPS URL used by `pushSettings()` to write `Engine_Endpoint__c` in Salesforce. All three `pushSettings` call sites use `PUBLIC_ENGINE_URL ?? ENGINE_URL` so Salesforce receives the public URL, not the Docker-internal one.
+- **`engineUrl` in `lead-routing.json`** — same public URL, used by CLI commands (sfdc deploy, deploy, doctor)
 
 ### Caddyfile Generation
 

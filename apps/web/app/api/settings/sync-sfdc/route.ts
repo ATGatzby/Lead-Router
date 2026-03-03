@@ -36,7 +36,7 @@ export async function POST() {
 
     await pushSettings(conn, {
       webhookSecret: org.webhookSecret,
-      engineUrl: process.env.ENGINE_URL ?? "http://localhost:3001",
+      engineUrl: process.env.PUBLIC_ENGINE_URL ?? process.env.ENGINE_URL ?? "http://localhost:3001",
       appUrl: process.env.APP_URL ?? "http://localhost:3000",
     });
 

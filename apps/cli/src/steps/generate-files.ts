@@ -55,6 +55,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
   const envWebContent = renderEnvWeb({
     appUrl: cfg.appUrl,
     engineUrl: dockerEngineUrl,
+    publicEngineUrl: cfg.engineUrl,
     databaseUrl: cfg.databaseUrl,
     redisUrl: cfg.redisUrl,
     sfdcClientId: cfg.sfdcClientId,

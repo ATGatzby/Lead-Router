@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       });
       pushSettings(conn, {
         webhookSecret: updated.webhookSecret,
-        engineUrl: process.env.ENGINE_URL ?? "http://localhost:3001",
+        engineUrl: process.env.PUBLIC_ENGINE_URL ?? process.env.ENGINE_URL ?? "http://localhost:3001",
         appUrl: process.env.APP_URL ?? "http://localhost:3000",
       }).catch((err) =>
         console.error("[onboarding-done] pushSettings failed:", err)
