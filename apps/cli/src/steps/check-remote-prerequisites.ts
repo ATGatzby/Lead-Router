@@ -1,4 +1,4 @@
-import { log } from '@clack/prompts'
+import { log, spinner } from '@clack/prompts'
 import type { SshConnection } from '../utils/ssh.js'
 
 interface CheckResult {
@@ -11,18 +11,23 @@ interface CheckResult {
  * Verify that the remote server has the required software installed.
  * Runs after SSH connection is established.
  *
- * Port 80/443 checks attempt to auto-stop common system web servers
- * (nginx, apache2, caddy, etc.) that would prevent Caddy from binding.
- * If a port cannot be freed, it is treated as a hard error — Caddy
- * cannot provision TLS certs without those ports.
+ * Docker: auto-installed via get.docker.com if missing (includes Compose plugin).
+ * Port 80/443: auto-stop common system web servers that conflict with Caddy.
+ * If a port cannot be freed, it is a hard error — Caddy needs both ports for TLS.
  */
 export async function checkRemotePrerequisites(ssh: SshConnection): Promise<void> {
-  const results = await Promise.all([
-    checkRemoteDocker(ssh),
-    checkRemoteDockerCompose(ssh),
+  // Docker must be resolved before Compose — installing Docker also installs the
+  // Compose plugin, so we run these sequentially rather than in parallel.
+  const dockerResult = await checkOrInstallDocker(ssh)
+  const composeResult = await checkRemoteDockerCompose(ssh)
+
+  // Port checks are independent — run in parallel
+  const portResults = await Promise.all([
     checkRemotePort(ssh, 80),
     checkRemotePort(ssh, 443),
   ])
+
+  const results = [dockerResult, composeResult, ...portResults]
 
   const failed = results.filter((r) => !r.ok && !r.warn)
   const warnings = results.filter((r) => !r.ok && r.warn)
@@ -45,32 +50,91 @@ export async function checkRemotePrerequisites(ssh: SshConnection): Promise<void
     throw new Error(
       `Remote server is missing required software:\n` +
         failed.map((r) => `  • ${r.label}`).join('\n') +
-        `\n\nInstall the missing software on your server and re-run lead-routing init.`
+        `\n\nFix the issues above and re-run lead-routing init.`
     )
   }
 }
 
-async function checkRemoteDocker(ssh: SshConnection): Promise<CheckResult> {
-  const { stdout, code } = await ssh.execSilent('docker --version')
-  if (code !== 0 || !stdout) {
+/**
+ * Check for Docker. If not installed, auto-install via the official
+ * convenience script (https://get.docker.com) — the same one Docker
+ * recommends for fresh Linux servers. Works on Ubuntu, Debian, CentOS,
+ * Fedora, and most common VPS distros.
+ *
+ * The script also installs the Compose plugin, so checkRemoteDockerCompose
+ * will pass after a successful install.
+ */
+async function checkOrInstallDocker(ssh: SshConnection): Promise<CheckResult> {
+  const { stdout, code } = await ssh.execSilent('docker --version 2>/dev/null')
+
+  if (code === 0 && stdout) {
+    const match = stdout.match(/Docker version (\d+)/)
+    if (match && parseInt(match[1], 10) < 24) {
+      return { ok: false, label: `Docker ${stdout.trim()} — version 24+ required` }
+    }
+    return { ok: true, label: `Docker — ${stdout.trim()}` }
+  }
+
+  // Not installed — run the official Docker convenience script
+  const s = spinner()
+  s.start('Docker not found — installing via get.docker.com (~2 min)…')
+
+  try {
+    // Ensure curl is available (it almost always is on fresh VPS images)
+    const { code: curlCode } = await ssh.execSilent('command -v curl 2>/dev/null')
+    if (curlCode !== 0) {
+      await ssh.execSilent(
+        'apt-get install -y curl 2>/dev/null || yum install -y curl 2>/dev/null'
+      )
+    }
+
+    // Run Docker's official install script
+    const { code: installCode } = await ssh.execSilent(
+      'curl -fsSL https://get.docker.com | sh 2>&1'
+    )
+
+    if (installCode !== 0) {
+      s.stop('Docker auto-install failed')
+      return {
+        ok: false,
+        label:
+          'Docker — auto-install failed.\n' +
+          '  SSH in and run manually: curl -fsSL https://get.docker.com | sh',
+      }
+    }
+
+    // Start and enable the daemon so it survives reboots
+    await ssh.execSilent(
+      'systemctl start docker 2>/dev/null; systemctl enable docker 2>/dev/null'
+    )
+
+    // Verify the install worked
+    const { stdout: ver, code: verCode } = await ssh.execSilent('docker --version 2>/dev/null')
+    if (verCode !== 0 || !ver) {
+      s.stop('Docker installed but not responding')
+      return {
+        ok: false,
+        label: 'Docker — installed but daemon not responding. Try rebooting the server.',
+      }
+    }
+
+    s.stop(`Docker installed — ${ver.trim()}`)
+    return { ok: true, label: `Docker — installed ${ver.trim()}` }
+  } catch (err) {
+    s.stop('Docker auto-install failed')
     return {
       ok: false,
-      label: 'Docker — not found on server (install Docker Engine 24+)',
+      label: `Docker — auto-install failed: ${err instanceof Error ? err.message : String(err)}`,
     }
   }
-  const match = stdout.match(/Docker version (\d+)/)
-  if (match && parseInt(match[1], 10) < 24) {
-    return { ok: false, label: `Docker ${stdout.trim()} — version 24+ required` }
-  }
-  return { ok: true, label: `Docker — ${stdout.trim()}` }
 }
 
 async function checkRemoteDockerCompose(ssh: SshConnection): Promise<CheckResult> {
-  const { stdout, code } = await ssh.execSilent('docker compose version')
+  const { stdout, code } = await ssh.execSilent('docker compose version 2>/dev/null')
   if (code !== 0 || !stdout) {
     return {
       ok: false,
-      label: 'Docker Compose — not found on server (update Docker to include Compose v2)',
+      label: 'Docker Compose — not found (update Docker to include Compose v2)',
     }
   }
   return { ok: true, label: `Docker Compose — ${stdout.trim()}` }
