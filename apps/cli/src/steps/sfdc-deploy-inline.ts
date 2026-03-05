@@ -38,7 +38,7 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
 
   // ── 1. Web login via app bridge ────────────────────────────────────────────
   // Check if already authenticated to this org alias — skip browser login if so.
-  const { code: authCheck } = await execa(
+  const { exitCode: authCheck } = await execa(
     'sf', ['org', 'display', '--target-org', orgAlias, '--json'],
     { reject: false }
   )

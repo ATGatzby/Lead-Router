@@ -1022,6 +1022,25 @@ The project is distributed as a self-hosted product via an interactive CLI insta
 | `lead-routing status` | Show `docker compose ps` output |
 | `lead-routing config show` | Print admin secret, app URL, and SFDC client ID from `.env.web` |
 | `lead-routing config sfdc` | Update Salesforce Consumer Key + Secret in `.env.web` / `.env.engine` and restart containers |
+| `lead-routing uninstall` | Stop all containers, wipe volumes, delete remote dir, delete local config dir — full teardown |
+
+### `uninstall` Command
+
+`apps/cli/src/commands/uninstall.ts` — `runUninstall()`
+
+Performs a full teardown of a Lead Routing installation — remote server and local config. Intended for resetting a VPS before a fresh `init` run (e.g., for demos or re-testing the install flow).
+
+Steps executed in order:
+1. Finds `lead-routing.json` via `findInstallDir()` — exits if not found
+2. Shows a summary of what will be destroyed (remote host + path, local config dir)
+3. Prompts for confirmation (`initialValue: false` — must opt in explicitly)
+4. Prompts for SSH password if `privateKeyPath` is not set in `lead-routing.json`
+5. Connects via SSH
+6. Resolves `~` in `remoteDir` via `resolveHome()`
+7. Runs `docker compose down -v` in `remoteDir` — stops containers, removes volumes (Postgres + Redis data)
+8. Runs `rm -rf <remoteDir>` — deletes compose files, env files, Caddyfile from remote
+9. Disconnects SSH
+10. Deletes local `installDir` (`./lead-routing/`) with `rmSync(..., { recursive: true })`
 
 ### `sfdc deploy` Command
 
@@ -1077,10 +1096,10 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
 
 **`--resume` flag**: When passed, reads the saved `lead-routing.json`, re-connects SSH (prompts password if key auth wasn't configured), and jumps directly to step 8 (health check) + step 9 (SFDC deploy). Steps 1–7 are skipped — no volume wipe, no re-upload, no migration re-run. Designed for recovery after a Let's Encrypt rate-limit or health-check timeout that hit after migrations already succeeded.
 
-**Prompt count (v0.1.6):** 7 prompts on the happy path (user has a standard SSH key at `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`); 8 prompts if password auth is needed. Down from 24 prompts in v0.1.4.
+**Prompt count (v0.1.11):** 8 prompts on the happy path (hostname + SSH password + 6 app config prompts). Down from 24 prompts in v0.1.4.
 
 1. **Local prerequisites** — Checks Node 20+ and Salesforce CLI `sf` on the local machine (hard failure). Docker/port checks have moved to step 5 (remote).
-2. **Server connection + immediate SSH test** — Prompts for VPS hostname only. SSH key is **auto-detected** from `~/.ssh/id_ed25519` → `~/.ssh/id_rsa` → `~/.ssh/id_ecdsa` in priority order; if found, no further auth prompts. If the detected/provided key is **rejected by the server** (e.g. wrong key authorized), the CLI warns and falls back to a password prompt — no need to restart init. If no standard key exists at all, prompts for SSH password directly. Port defaults to 22, username to `root`, remote dir to `~/lead-routing` — all overridable via flags. **SSH connection is established immediately after this step** — before app config is collected. A bad host/key causes an early exit rather than a 5-minute wasted setup.
+2. **Server connection + immediate SSH test** — Prompts for VPS hostname, then **always prompts for SSH password** (key auto-detection was removed in v0.1.11 — it caused silent failures when the detected key wasn't authorized on the server). Use `--ssh-key <path>` flag to override with a private key file instead of password. Port defaults to 22, username to `root`, remote dir to `~/lead-routing` — all overridable via flags. **SSH connection is established immediately after this step** — before app config is collected. A bad password causes an early exit rather than a 5-minute wasted setup.
 3. **Configuration** — App URL, Engine URL, SFDC Connected App credentials (CLI prints exact setup instructions with callback URL pre-filled), admin email/password. Salesforce environment defaults to production (use `--sandbox` flag for `test.salesforce.com`). Postgres and Redis are managed by Docker by default (use `--external-db`/`--external-redis` flags to skip). Resend email is not collected at init time — configure post-install. After this step, **DNS pre-flight check** — runs `dns.promises.lookup()` on each unique hostname. If a hostname doesn't resolve: shows a warning (typo check), asks `Continue anyway?` — not a hard error.
 4. **Generate config files** — Writes locally to `./lead-routing/`: `docker-compose.yml`, `Caddyfile`, `.env.web`, `.env.engine`, `lead-routing.json` (includes `ssh` and `remoteDir` fields). Dry-run exits here.
 5. **Remote setup** — Already connected from step 2. Resolves `~` via remote `$HOME`. Checks Docker 24+: **auto-installs via `curl -fsSL https://get.docker.com | sh` if missing** (includes Compose plugin; ~2 min). Checks ports 80/443: auto-stops conflicting system web servers (nginx/apache2/etc.), docker-proxy conflicts are a warning only. Uploads all 5 config files via SFTP.
@@ -1116,15 +1135,14 @@ The `sfdc-package/` metadata directory must travel with the CLI npm package:
   "ssh": {
     "host": "165.22.100.50",
     "port": 22,
-    "username": "root",
-    "privateKeyPath": "/Users/customer/.ssh/id_rsa"
+    "username": "root"
   },
   "dockerManaged": { "db": true, "redis": true },
   "installedAt": "2026-03-01T12:00:00.000Z",
-  "version": "0.1.0"
+  "version": "0.1.12"
 }
 ```
-SSH password is never persisted. Future commands (`deploy`, `logs`, `status`) will read `ssh` from this file to reconnect.
+SSH password is never persisted. `privateKeyPath` appears only when `--ssh-key` flag was used. Future commands (`deploy`, `logs`, `status`) will read `ssh` from this file to reconnect and re-prompt for password.
 
 ### Docker Compose
 
@@ -1498,13 +1516,17 @@ Assets are bundled by `tsup`'s `onSuccess` hook in `apps/cli/tsup.config.ts` —
 
 ### Known Bugs Fixed (v0.1.4 audit)
 
-| Bug | File | Fix |
-|-----|------|-----|
-| Connected App callback URL showed `/api/auth/callback` but web app sends `/api/auth/sfdc/callback` as `redirect_uri` — Salesforce would return `redirect_uri_mismatch` | `collect-config.ts` | Now shows correct `/api/auth/sfdc/callback` |
-| `appUrl` not validated for HTTPS — Salesforce rejects HTTP redirect URIs | `collect-config.ts` | Added HTTPS validation matching the engine URL check |
-| `sfdcClientId` / `sfdcClientSecret` not trimmed — pasted values with trailing spaces broke auth silently | `collect-config.ts` | Added `.trim()` on both |
-| `deploy.ts` called `runMigrations(ssh, dir, '', '')` — attempted to create an `app_user` with `email=''` on every deploy | `deploy.ts` + `run-migrations.ts` | `adminEmail`/`adminPassword` are now optional; seeding is skipped when omitted; deploy calls `runMigrations(ssh, dir)` |
-| `lead-routing.json` always wrote `version: '0.1.0'` | `generate-files.ts` | Reads actual version from bundled `package.json` at runtime |
+| Bug | Version | File | Fix |
+|-----|---------|------|-----|
+| Connected App callback URL showed `/api/auth/callback` but web app sends `/api/auth/sfdc/callback` as `redirect_uri` — Salesforce would return `redirect_uri_mismatch` | v0.1.4 | `collect-config.ts` | Now shows correct `/api/auth/sfdc/callback` |
+| `appUrl` not validated for HTTPS — Salesforce rejects HTTP redirect URIs | v0.1.4 | `collect-config.ts` | Added HTTPS validation matching the engine URL check |
+| `sfdcClientId` / `sfdcClientSecret` not trimmed — pasted values with trailing spaces broke auth silently | v0.1.4 | `collect-config.ts` | Added `.trim()` on both |
+| `deploy.ts` called `runMigrations(ssh, dir, '', '')` — attempted to create an `app_user` with `email=''` on every deploy | v0.1.4 | `deploy.ts` + `run-migrations.ts` | `adminEmail`/`adminPassword` are now optional; seeding is skipped when omitted; deploy calls `runMigrations(ssh, dir)` |
+| `lead-routing.json` always wrote `version: '0.1.0'` | v0.1.4 | `generate-files.ts` | Reads actual version from bundled `package.json` at runtime |
+| Seed INSERT included `"routingQuota"` column which doesn't exist in `organizations` schema — init failed with Postgres column error | v0.1.9 | `run-migrations.ts` | Removed `routingQuota` from seed INSERT; quota limit is derived from `PLAN_LIMITS[plan]` in engine, not stored in DB |
+| Fresh VPS had no Docker — init failed with `docker: command not found` on step 5, customer had to manually install | v0.1.10 | `check-remote-prerequisites.ts` | `checkOrInstallDocker()` auto-installs via `curl -fsSL https://get.docker.com \| sh` when Docker missing; includes Compose plugin (~2 min) |
+| SSH key auto-detection silently picked wrong key — customer got "All configured authentication methods failed" with no useful error | v0.1.11 | `collect-ssh-config.ts` + `init.ts` | Removed `DEFAULT_KEYS` / `detectDefaultKey()` entirely; CLI always prompts for SSH password. `--ssh-key <path>` flag still available for power users |
+| `pushSettings()` wrote `http://engine:3001` (Docker-internal hostname) to `Engine_Endpoint__c` in Salesforce — Apex couldn't reach the engine | v0.1.12 | `env-web.ts`, `generate-files.ts`, `sfdc/callback`, `setup/onboarding-done`, `settings/sync-sfdc` | Added `PUBLIC_ENGINE_URL` to `.env.web`; all three `pushSettings` call sites use `PUBLIC_ENGINE_URL ?? ENGINE_URL` |
 
 ### Port Conflict Auto-Remediation (`check-remote-prerequisites.ts`)
 
@@ -1559,3 +1581,51 @@ lead-routing doctor
 lead-routing logs engine
 lead-routing sfdc deploy
 ```
+
+---
+
+## 20. Regression Test Suite
+
+### Overview
+
+`RegressionSuite.md` at the repo root is the authoritative test playbook. It defines five tiers:
+
+| Tier | Name | Time | Trigger |
+|------|------|------|---------|
+| T0 | Type-check + build | ~2 min | CI — every push |
+| T1 | Unit tests (vitest) | ~30 sec | CI — every push |
+| T2 | Local smoke tests (dry-run) | ~10 min | Before PR merge |
+| T3 | Integration tests (local Docker) | ~20 min | Before CLI version bump |
+| T4 | Full E2E (real VPS + Salesforce) | ~45 min | Before `npm publish` |
+
+### Unit Test Files
+
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `apps/engine/src/evaluator.test.ts` | 68 | All 17 condition operators, AND/OR group logic, catch-all, field name normalization |
+| `apps/cli/src/templates/templates.test.ts` | 34 | `renderEnvWeb` (PUBLIC_ENGINE_URL, SFDC_REDIRECT_URI), `renderDockerCompose` (managed vs external services), `renderCaddyfile` (subdomain vs port-based) |
+| `apps/web/lib/crypto.test.ts` | 18 | `hashPassword`/`verifyPassword` (PBKDF2 salt:hash), `generateWebhookSecret`, `verifyHmacSignature` |
+
+Run all tests: `pnpm test` (120 tests, ~600ms).
+
+### CI Gate
+
+`.github/workflows/test.yml` runs T0 + T1 on every push/PR:
+- Type-check CLI, web, engine
+- Build CLI
+- Verify SFDC package + Prisma migrations bundled in `dist/`
+- Run `pnpm test`
+
+### Change-Specific Quick Reference
+
+| Changed file | Run |
+|-------------|-----|
+| `evaluator.ts` | `pnpm test` — 68 evaluator cases |
+| `env-web.ts` template | `pnpm test` — verifies ENGINE_URL vs PUBLIC_ENGINE_URL split |
+| `docker-compose.ts` template | `pnpm test` — verifies managed vs external service variants |
+| `caddy.ts` template | `pnpm test` — verifies both Caddyfile cases |
+| `crypto.ts` | `pnpm test` — 18 hash/HMAC cases |
+| Any CLI version bump | T2a smoke: `node dist/index.js --version` prints new version |
+| `run-migrations.ts` seed SQL | T4 Phase 1: verify org seeded with `plan=PAID`, `seatsPurchased=9999` |
+| `sfdc-deploy-inline.ts` | T4 Phase 5: `Engine_Endpoint__c` = public HTTPS URL |
+| `pushSettings()` in sfdc package | T4 Phase 5: `Engine_Endpoint__c` ≠ `http://engine:3001` |

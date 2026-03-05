@@ -2,6 +2,9 @@
 
 ## Standing Rules
 
+### Parallelization
+- If any work can pe done in parallel, make sure to spin mulitple agents to acomplish the task
+
 ### After Every Code Change
 After implementing any change — no matter how small — update `Technical-Implementation.md` to reflect what was built. Specifically:
 - Update the relevant module/section to describe the new behaviour

@@ -6,13 +6,14 @@ import { runLogs } from './commands/logs.js'
 import { runStatus } from './commands/status.js'
 import { runConfigSfdc, runConfigShow } from './commands/config.js'
 import { runSfdcDeploy } from './commands/sfdc.js'
+import { runUninstall } from './commands/uninstall.js'
 
 const program = new Command()
 
 program
   .name('lead-routing')
   .description('Self-hosted Lead Routing — scaffold, deploy, and manage your installation')
-  .version('0.1.12')
+  .version('0.1.13')
 
 program
   .command('init')
@@ -78,6 +79,11 @@ sfdc
   .command('deploy')
   .description('Deploy (or redeploy) the Lead Router Salesforce package to your Salesforce org')
   .action(runSfdcDeploy)
+
+program
+  .command('uninstall')
+  .description('Stop all containers, remove all data, and delete the remote installation')
+  .action(runUninstall)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err))

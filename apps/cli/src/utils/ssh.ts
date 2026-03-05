@@ -118,7 +118,7 @@ export class SshConnection {
           }
           socket.pipe(stream)
           stream.pipe(socket)
-          socket.on('close', () => (stream as NodeJS.ReadableStream & { destroy(): void }).destroy())
+          socket.on('close', () => (stream as unknown as { destroy(): void }).destroy())
           stream.on('close', () => socket.destroy())
         }
       )

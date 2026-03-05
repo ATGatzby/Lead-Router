@@ -1,0 +1,19 @@
+#!/bin/sh
+# Lead Routing — pre-push hook
+# Runs T0 (build) + T1 (unit tests) before every push.
+# Install automatically via: pnpm install  (triggers the prepare script)
+# Install manually via:      git config core.hooksPath .githooks
+
+set -e
+
+echo "🔍 Pre-push: running regression suite (T0 + T1)..."
+
+# T0 — Build CLI (catches tsup bundling errors)
+echo "\n[T0] Building CLI..."
+pnpm --filter @lead-routing/cli build --silent
+
+# T1 — Unit tests
+echo "\n[T1] Running unit tests..."
+pnpm test
+
+echo "\n✅ All checks passed — push allowed."

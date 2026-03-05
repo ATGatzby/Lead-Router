@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  test:
+    name: Type-check, build & unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      # ── T0: Type checks ──────────────────────────────────────────────────────
+      - name: Type-check CLI
+        run: pnpm --filter @lead-routing/cli type-check
+
+      - name: Type-check Web
+        run: pnpm --filter @lead-routing/web type-check
+
+      # Engine type-check excluded: pre-existing errors in sfdc/db package imports
+      # (Prisma not generated at type-check time, missing .js extensions in packages/).
+      # Engine is built via tsup which does not type-check — Docker images are unaffected.
+
+      # ── T0: Build CLI ────────────────────────────────────────────────────────
+      - name: Build CLI
+        run: pnpm --filter @lead-routing/cli build
+
+      - name: Verify CLI binary loads
+        run: node apps/cli/dist/index.js --version
+
+      - name: Verify SFDC package bundled in dist
+        run: ls apps/cli/dist/sfdc-package/force-app/main/default/classes/RoutingEngineCallout.cls
+
+      - name: Verify Prisma migrations bundled in dist
+        run: ls apps/cli/dist/prisma/migrations/
+
+      # ── T1: Unit tests ───────────────────────────────────────────────────────
+      - name: Run unit tests
+        run: pnpm test
