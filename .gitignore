@@ -12,3 +12,14 @@ dist
 # CLI intermediate + pack artifacts
 apps/cli/sfdc-package/
 apps/cli/*.tgz
+
+# Internal documents — keep off GitHub
+CLAUDE.md
+Deployment-Strategy.md
+E2E-TEST-PLAYBOOK.md
+E2ETest.md
+Flowenhancement.md
+NPXImplementation.md
+investor-pitch.html
+plans/
+preview/
