@@ -43,6 +43,25 @@ enum RoutingStatus {
   FAILED
   UNMATCHED
   RETRY
+  MERGED
+}
+
+enum LeadMatchAction {
+  SFDC_MERGE
+  ASSIGN_TO_OWNER
+  ASSIGN_CUSTOM
+}
+
+enum ContactMatchAction {
+  ASSIGN_TO_OWNER
+  ASSIGN_CUSTOM
+  SKIP
+}
+
+enum AccountMatchAction {
+  ASSIGN_TO_OWNER
+  ASSIGN_CUSTOM
+  SKIP
 }
 
 enum Plan {
@@ -172,27 +191,108 @@ model TeamMember {
 }
 
 model RoutingRule {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   orgId            String
   objectType       SfdcObjectType
   triggerEvent     TriggerEvent
   name             String
   priority         Int
-  status           RuleStatus     @default(ACTIVE)
-  assignmentType   AssignmentType
-  assigneeUserId   String?        // references User.id (individual user)
-  assigneeTeamId   String?        // references RoundRobinTeam.id
-  assigneeQueueId  String?        // references SfdcQueue.id
-  isDryRun         Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  status           RuleStatus      @default(ACTIVE)
+  // Legacy single-assignee fields (used by old rules; null for new Route Builder rules)
+  assignmentType   AssignmentType?
+  assigneeUserId   String?         // references User.id (individual user)
+  assigneeTeamId   String?         // references RoundRobinTeam.id
+  assigneeQueueId  String?         // references SfdcQueue.id
+  isDryRun         Boolean         @default(false)
+  // Default owner: absolute catch-all for new Route Builder routes
+  defaultOwnerType     AssignmentType?
+  defaultOwnerUserId   String?
+  defaultOwnerTeamId   String?
+  defaultOwnerQueueId  String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  org        Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  team       RoundRobinTeam? @relation("TeamRules", fields: [assigneeTeamId], references: [id])
-  queue      SfdcQueue?      @relation(fields: [assigneeQueueId], references: [id])
-  conditions RuleCondition[]
+  org        Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team       RoundRobinTeam?  @relation("TeamRules", fields: [assigneeTeamId], references: [id])
+  queue      SfdcQueue?       @relation(fields: [assigneeQueueId], references: [id])
+  conditions RuleCondition[]  // legacy conditions (old-style rules)
+  branches   RoutingBranch[]  // new Route Builder paths
+  matchConfig RouteMatchConfig?
 
   @@map("routing_rules")
+}
+
+model RoutingBranch {
+  id              String         @id @default(cuid())
+  ruleId          String
+  rule            RoutingRule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  label           String?
+  priority        Int            @default(0)
+  assignmentType  AssignmentType
+  assigneeUserId  String?
+  assigneeTeamId  String?
+  assigneeQueueId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  conditions BranchCondition[]
+
+  @@map("routing_branches")
+}
+
+model BranchCondition {
+  id        String        @id @default(cuid())
+  branchId  String
+  branch    RoutingBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  groupId   String
+  fieldName String
+  operator  String
+  value     String?
+  sortOrder Int           @default(0)
+
+  @@map("branch_conditions")
+}
+
+model RouteMatchConfig {
+  id              String      @id @default(cuid())
+  ruleId          String      @unique
+  rule            RoutingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  // Which objects to check
+  checkLeads      Boolean     @default(true)
+  checkContacts   Boolean     @default(true)
+  checkAccounts   Boolean     @default(false)
+
+  // Which fields to match on
+  matchEmail      Boolean     @default(true)
+  matchPhone      Boolean     @default(false)
+  matchDomain     Boolean     @default(false)
+
+  // Lead match outcome
+  onLeadMatch           LeadMatchAction    @default(SFDC_MERGE)
+  leadAssignmentType    AssignmentType?
+  leadAssigneeUserId    String?
+  leadAssigneeTeamId    String?
+  leadAssigneeQueueId   String?
+
+  // Contact match outcome
+  onContactMatch        ContactMatchAction @default(ASSIGN_TO_OWNER)
+  contactAssignmentType AssignmentType?
+  contactAssigneeUserId  String?
+  contactAssigneeTeamId  String?
+  contactAssigneeQueueId String?
+
+  // Account match outcome
+  onAccountMatch        AccountMatchAction @default(ASSIGN_TO_OWNER)
+  accountAssignmentType AssignmentType?
+  accountAssigneeUserId  String?
+  accountAssigneeTeamId  String?
+  accountAssigneeQueueId String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("route_match_configs")
 }
 
 model RuleCondition {

@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { href: "/history", label: "Routing History", exact: true },
-  { href: "/history/stats", label: "Assignment Stats", exact: false },
-  { href: "/history/failed", label: "Failed Routings", exact: false },
-  { href: "/history/audit", label: "Audit Log", exact: false },
+  { href: "/activity", label: "Routing History", exact: true },
+  { href: "/activity/stats", label: "Assignment Stats", exact: false },
+  { href: "/activity/failed", label: "Failed Routings", exact: false },
+  { href: "/activity/audit", label: "Audit Log", exact: false },
 ];
 
 export default function HistoryLayout({ children }: { children: React.ReactNode }) {

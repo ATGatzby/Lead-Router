@@ -38,13 +38,17 @@ interface Rule {
   triggerEvent: string;
   priority: number;
   status: "ACTIVE" | "INACTIVE";
-  assignmentType: AssignmentType;
+  assignmentType: AssignmentType | null;
   assigneeUserName: string | null;
   assigneeTeamName: string | null;
   assigneeQueueName: string | null;
   conditionCount: number;
   isDryRun: boolean;
   updatedAt: string;
+  // New Route Builder fields
+  branches?: Array<{ id: string }>;
+  matchConfig?: object | null;
+  defaultOwnerType?: string | null;
 }
 
 interface RulesResponse {
@@ -65,7 +69,7 @@ function assigneeName(rule: Rule): string {
   return rule.assigneeQueueName ?? "—";
 }
 
-function assigneeLabel(type: AssignmentType): string {
+function assigneeLabel(type: AssignmentType | null): string {
   if (type === "ROUND_ROBIN") return "Team";
   if (type === "QUEUE") return "Queue";
   return "User";
@@ -245,7 +249,7 @@ export default function RoutingRulesPage() {
           </Button>
           <Button size="sm" onClick={() => router.push(`/routing-rules/new?object=${tab}`)}>
             <Plus className="h-4 w-4 mr-1" />
-            New Rule
+            New Route
           </Button>
         </div>
       </div>
@@ -411,7 +415,9 @@ export default function RoutingRulesPage() {
                   size="sm"
                   variant="ghost"
                   className="h-7 w-7 p-0 text-muted-foreground"
-                  onClick={() => router.push(`/routing-rules/${rule.id}/edit`)}
+                  onClick={() => {
+                    router.push(`/routing-rules/${rule.id}/flow`);
+                  }}
                   aria-label="Edit rule"
                 >
                   <Pencil className="h-3.5 w-3.5" />

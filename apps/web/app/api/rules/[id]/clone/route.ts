@@ -15,7 +15,14 @@ export async function POST(
 
     const source = await prisma.routingRule.findFirst({
       where: { id, orgId },
-      include: { conditions: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        conditions: { orderBy: { sortOrder: "asc" } },
+        branches: {
+          orderBy: { priority: "asc" },
+          include: { conditions: { orderBy: { sortOrder: "asc" } } },
+        },
+        matchConfig: true,
+      },
     });
     if (!source) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
@@ -36,12 +43,16 @@ export async function POST(
         objectType: source.objectType,
         triggerEvent: source.triggerEvent,
         priority,
-        status: "INACTIVE", // clones start inactive
+        status: "INACTIVE",
         assignmentType: source.assignmentType,
         assigneeUserId: source.assigneeUserId,
         assigneeTeamId: source.assigneeTeamId,
         assigneeQueueId: source.assigneeQueueId,
         isDryRun: source.isDryRun,
+        defaultOwnerType: source.defaultOwnerType,
+        defaultOwnerUserId: source.defaultOwnerUserId,
+        defaultOwnerTeamId: source.defaultOwnerTeamId,
+        defaultOwnerQueueId: source.defaultOwnerQueueId,
         conditions: {
           create: source.conditions.map((c) => ({
             groupId: c.groupId,
@@ -51,6 +62,52 @@ export async function POST(
             sortOrder: c.sortOrder,
           })),
         },
+        branches: {
+          create: source.branches.map((b) => ({
+            label: b.label,
+            priority: b.priority,
+            assignmentType: b.assignmentType,
+            assigneeUserId: b.assigneeUserId,
+            assigneeTeamId: b.assigneeTeamId,
+            assigneeQueueId: b.assigneeQueueId,
+            conditions: {
+              create: b.conditions.map((c) => ({
+                groupId: c.groupId,
+                fieldName: c.fieldName,
+                operator: c.operator,
+                value: c.value,
+                sortOrder: c.sortOrder,
+              })),
+            },
+          })),
+        },
+        matchConfig: source.matchConfig
+          ? {
+              create: {
+                checkLeads: source.matchConfig.checkLeads,
+                checkContacts: source.matchConfig.checkContacts,
+                checkAccounts: source.matchConfig.checkAccounts,
+                matchEmail: source.matchConfig.matchEmail,
+                matchPhone: source.matchConfig.matchPhone,
+                matchDomain: source.matchConfig.matchDomain,
+                onLeadMatch: source.matchConfig.onLeadMatch,
+                leadAssignmentType: source.matchConfig.leadAssignmentType,
+                leadAssigneeUserId: source.matchConfig.leadAssigneeUserId,
+                leadAssigneeTeamId: source.matchConfig.leadAssigneeTeamId,
+                leadAssigneeQueueId: source.matchConfig.leadAssigneeQueueId,
+                onContactMatch: source.matchConfig.onContactMatch,
+                contactAssignmentType: source.matchConfig.contactAssignmentType,
+                contactAssigneeUserId: source.matchConfig.contactAssigneeUserId,
+                contactAssigneeTeamId: source.matchConfig.contactAssigneeTeamId,
+                contactAssigneeQueueId: source.matchConfig.contactAssigneeQueueId,
+                onAccountMatch: source.matchConfig.onAccountMatch,
+                accountAssignmentType: source.matchConfig.accountAssignmentType,
+                accountAssigneeUserId: source.matchConfig.accountAssigneeUserId,
+                accountAssigneeTeamId: source.matchConfig.accountAssigneeTeamId,
+                accountAssigneeQueueId: source.matchConfig.accountAssigneeQueueId,
+              },
+            }
+          : undefined,
       },
     });
 

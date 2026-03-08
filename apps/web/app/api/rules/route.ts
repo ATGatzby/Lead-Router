@@ -3,6 +3,49 @@ import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 
+// ─── Types ────────────────────────────────────────────────────────────────
+
+interface BranchInput {
+  id?: string;
+  label?: string;
+  priority: number;
+  assignmentType: "USER" | "ROUND_ROBIN" | "QUEUE";
+  assigneeUserId?: string | null;
+  assigneeTeamId?: string | null;
+  assigneeQueueId?: string | null;
+  conditions: Array<{
+    groupId: string;
+    fieldName: string;
+    operator: string;
+    value?: string | null;
+    sortOrder?: number;
+  }>;
+}
+
+interface MatchConfigInput {
+  checkLeads: boolean;
+  checkContacts: boolean;
+  checkAccounts: boolean;
+  matchEmail: boolean;
+  matchPhone: boolean;
+  matchDomain: boolean;
+  onLeadMatch: "SFDC_MERGE" | "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM";
+  leadAssignmentType?: "USER" | "ROUND_ROBIN" | "QUEUE" | null;
+  leadAssigneeUserId?: string | null;
+  leadAssigneeTeamId?: string | null;
+  leadAssigneeQueueId?: string | null;
+  onContactMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP";
+  contactAssignmentType?: "USER" | "ROUND_ROBIN" | "QUEUE" | null;
+  contactAssigneeUserId?: string | null;
+  contactAssigneeTeamId?: string | null;
+  contactAssigneeQueueId?: string | null;
+  onAccountMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP";
+  accountAssignmentType?: "USER" | "ROUND_ROBIN" | "QUEUE" | null;
+  accountAssigneeUserId?: string | null;
+  accountAssigneeTeamId?: string | null;
+  accountAssigneeQueueId?: string | null;
+}
+
 // GET /api/rules?object=LEAD — list rules for object, ordered by priority
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +61,11 @@ export async function GET(req: NextRequest) {
       orderBy: { priority: "asc" },
       include: {
         conditions: { orderBy: { sortOrder: "asc" } },
+        branches: {
+          orderBy: { priority: "asc" },
+          include: { conditions: { orderBy: { sortOrder: "asc" } } },
+        },
+        matchConfig: true,
         team: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
       },
@@ -54,6 +102,12 @@ export async function GET(req: NextRequest) {
       assigneeQueueName: r.queue?.name ?? null,
       conditionCount: r.conditions.length,
       conditions: r.conditions,
+      branches: r.branches,
+      matchConfig: r.matchConfig,
+      defaultOwnerType: r.defaultOwnerType,
+      defaultOwnerUserId: r.defaultOwnerUserId,
+      defaultOwnerTeamId: r.defaultOwnerTeamId,
+      defaultOwnerQueueId: r.defaultOwnerQueueId,
       isDryRun: r.isDryRun,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -77,12 +131,20 @@ export async function POST(req: NextRequest) {
       name,
       objectType,
       triggerEvent,
+      // Legacy single-assignee fields (optional for new-style Route Builder rules)
       assignmentType,
       assigneeUserId,
       assigneeTeamId,
       assigneeQueueId,
       isDryRun = false,
       conditions = [],
+      // New Route Builder fields
+      branches = [],
+      matchConfig = null,
+      defaultOwnerType = null,
+      defaultOwnerUserId = null,
+      defaultOwnerTeamId = null,
+      defaultOwnerQueueId = null,
     } = body;
 
     if (!name?.trim()) {
@@ -94,7 +156,10 @@ export async function POST(req: NextRequest) {
     if (!["INSERT", "UPDATE", "BOTH"].includes(triggerEvent)) {
       return NextResponse.json({ error: "Invalid triggerEvent" }, { status: 400 });
     }
-    if (!["USER", "ROUND_ROBIN", "QUEUE"].includes(assignmentType)) {
+
+    // For legacy rules, assignmentType is required
+    const isNewStyle = branches.length > 0 || matchConfig !== null || defaultOwnerType !== null;
+    if (!isNewStyle && !["USER", "ROUND_ROBIN", "QUEUE"].includes(assignmentType)) {
       return NextResponse.json({ error: "Invalid assignmentType" }, { status: 400 });
     }
 
@@ -113,20 +178,18 @@ export async function POST(req: NextRequest) {
         objectType,
         triggerEvent,
         priority,
-        assignmentType,
-        assigneeUserId: assignmentType === "USER" ? assigneeUserId : null,
-        assigneeTeamId: assignmentType === "ROUND_ROBIN" ? assigneeTeamId : null,
-        assigneeQueueId: assignmentType === "QUEUE" ? assigneeQueueId : null,
+        assignmentType: isNewStyle ? null : assignmentType,
+        assigneeUserId: (!isNewStyle && assignmentType === "USER") ? assigneeUserId : null,
+        assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
+        assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun,
+        defaultOwnerType: defaultOwnerType ?? null,
+        defaultOwnerUserId: defaultOwnerType === "USER" ? defaultOwnerUserId : null,
+        defaultOwnerTeamId: defaultOwnerType === "ROUND_ROBIN" ? defaultOwnerTeamId : null,
+        defaultOwnerQueueId: defaultOwnerType === "QUEUE" ? defaultOwnerQueueId : null,
         conditions: {
           create: conditions.map(
-            (c: {
-              groupId: string;
-              fieldName: string;
-              operator: string;
-              value?: string | null;
-              sortOrder?: number;
-            }) => ({
+            (c: { groupId: string; fieldName: string; operator: string; value?: string | null; sortOrder?: number }) => ({
               groupId: c.groupId,
               fieldName: c.fieldName,
               operator: c.operator,
@@ -135,6 +198,30 @@ export async function POST(req: NextRequest) {
             })
           ),
         },
+        branches: {
+          create: (branches as BranchInput[]).map((b) => ({
+            label: b.label ?? null,
+            priority: b.priority,
+            assignmentType: b.assignmentType,
+            assigneeUserId: b.assignmentType === "USER" ? (b.assigneeUserId ?? null) : null,
+            assigneeTeamId: b.assignmentType === "ROUND_ROBIN" ? (b.assigneeTeamId ?? null) : null,
+            assigneeQueueId: b.assignmentType === "QUEUE" ? (b.assigneeQueueId ?? null) : null,
+            conditions: {
+              create: b.conditions.map((c, ci) => ({
+                groupId: c.groupId,
+                fieldName: c.fieldName,
+                operator: c.operator,
+                value: c.value ?? null,
+                sortOrder: c.sortOrder ?? ci,
+              })),
+            },
+          })),
+        },
+        matchConfig: matchConfig
+          ? {
+              create: buildMatchConfigData(matchConfig as MatchConfigInput),
+            }
+          : undefined,
       },
     });
 
@@ -146,7 +233,7 @@ export async function POST(req: NextRequest) {
         action: "RULE_CREATED",
         entityType: "RoutingRule",
         entityId: rule.id,
-        afterState: { name: rule.name, objectType, priority, assignmentType },
+        afterState: { name: rule.name, objectType, priority, assignmentType: rule.assignmentType },
       },
     });
 
@@ -157,4 +244,32 @@ export async function POST(req: NextRequest) {
     console.error("POST /api/rules error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────
+
+export function buildMatchConfigData(mc: MatchConfigInput) {
+  return {
+    checkLeads: mc.checkLeads,
+    checkContacts: mc.checkContacts,
+    checkAccounts: mc.checkAccounts,
+    matchEmail: mc.matchEmail,
+    matchPhone: mc.matchPhone,
+    matchDomain: mc.matchDomain,
+    onLeadMatch: mc.onLeadMatch,
+    leadAssignmentType: mc.leadAssignmentType ?? null,
+    leadAssigneeUserId: mc.onLeadMatch === "ASSIGN_CUSTOM" && mc.leadAssignmentType === "USER" ? (mc.leadAssigneeUserId ?? null) : null,
+    leadAssigneeTeamId: mc.onLeadMatch === "ASSIGN_CUSTOM" && mc.leadAssignmentType === "ROUND_ROBIN" ? (mc.leadAssigneeTeamId ?? null) : null,
+    leadAssigneeQueueId: mc.onLeadMatch === "ASSIGN_CUSTOM" && mc.leadAssignmentType === "QUEUE" ? (mc.leadAssigneeQueueId ?? null) : null,
+    onContactMatch: mc.onContactMatch,
+    contactAssignmentType: mc.contactAssignmentType ?? null,
+    contactAssigneeUserId: mc.onContactMatch === "ASSIGN_CUSTOM" && mc.contactAssignmentType === "USER" ? (mc.contactAssigneeUserId ?? null) : null,
+    contactAssigneeTeamId: mc.onContactMatch === "ASSIGN_CUSTOM" && mc.contactAssignmentType === "ROUND_ROBIN" ? (mc.contactAssigneeTeamId ?? null) : null,
+    contactAssigneeQueueId: mc.onContactMatch === "ASSIGN_CUSTOM" && mc.contactAssignmentType === "QUEUE" ? (mc.contactAssigneeQueueId ?? null) : null,
+    onAccountMatch: mc.onAccountMatch,
+    accountAssignmentType: mc.accountAssignmentType ?? null,
+    accountAssigneeUserId: mc.onAccountMatch === "ASSIGN_CUSTOM" && mc.accountAssignmentType === "USER" ? (mc.accountAssigneeUserId ?? null) : null,
+    accountAssigneeTeamId: mc.onAccountMatch === "ASSIGN_CUSTOM" && mc.accountAssignmentType === "ROUND_ROBIN" ? (mc.accountAssigneeTeamId ?? null) : null,
+    accountAssigneeQueueId: mc.onAccountMatch === "ASSIGN_CUSTOM" && mc.accountAssignmentType === "QUEUE" ? (mc.accountAssigneeQueueId ?? null) : null,
+  };
 }

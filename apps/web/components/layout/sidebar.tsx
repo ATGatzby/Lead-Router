@@ -31,7 +31,7 @@ const NAV_SECTIONS = [
         label: "Routing Rules",
         icon: ArrowRightLeft,
       },
-      { href: "/history", label: "History", icon: History },
+      { href: "/activity", label: "Activity", icon: History },
     ],
   },
   {

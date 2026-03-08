@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
+import { buildMatchConfigData } from "@/app/api/rules/route";
 
-// GET /api/rules/:id — full rule detail with conditions
+// GET /api/rules/:id — full rule detail with conditions and branches
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,6 +17,11 @@ export async function GET(
       where: { id, orgId },
       include: {
         conditions: { orderBy: { sortOrder: "asc" } },
+        branches: {
+          orderBy: { priority: "asc" },
+          include: { conditions: { orderBy: { sortOrder: "asc" } } },
+        },
+        matchConfig: true,
         team: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
       },
@@ -25,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
     }
 
-    // Get assignee user name if needed
+    // Get assignee user name if needed (legacy rules)
     let assigneeUserName: string | null = null;
     if (rule.assignmentType === "USER" && rule.assigneeUserId) {
       const user = await prisma.user.findFirst({
@@ -49,7 +55,7 @@ export async function GET(
   }
 }
 
-// PUT /api/rules/:id — update rule (replaces conditions wholesale)
+// PUT /api/rules/:id — update rule (replaces conditions, branches, matchConfig wholesale)
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,7 +67,7 @@ export async function PUT(
 
     const existing = await prisma.routingRule.findFirst({
       where: { id, orgId },
-      select: { id: true, name: true, status: true },
+      select: { id: true, name: true, status: true, objectType: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
@@ -72,20 +78,36 @@ export async function PUT(
       name,
       objectType,
       triggerEvent,
+      // Legacy single-assignee (optional for new-style rules)
       assignmentType,
       assigneeUserId,
       assigneeTeamId,
       assigneeQueueId,
       isDryRun,
       conditions = [],
+      // New Route Builder fields
+      branches = [],
+      matchConfig = null,
+      defaultOwnerType = null,
+      defaultOwnerUserId = null,
+      defaultOwnerTeamId = null,
+      defaultOwnerQueueId = null,
     } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    // Replace conditions — delete old, create new
+    const isNewStyle = branches.length > 0 || matchConfig !== null || defaultOwnerType !== null;
+
+    // Replace conditions + branches wholesale
     await prisma.ruleCondition.deleteMany({ where: { ruleId: id } });
+
+    // Delete existing branches (cascade deletes branch_conditions)
+    await prisma.routingBranch.deleteMany({ where: { ruleId: id } });
+
+    // Delete existing matchConfig
+    await prisma.routeMatchConfig.deleteMany({ where: { ruleId: id } });
 
     const updated = await prisma.routingRule.update({
       where: { id },
@@ -93,20 +115,18 @@ export async function PUT(
         name: name.trim(),
         objectType,
         triggerEvent,
-        assignmentType,
-        assigneeUserId: assignmentType === "USER" ? assigneeUserId : null,
-        assigneeTeamId: assignmentType === "ROUND_ROBIN" ? assigneeTeamId : null,
-        assigneeQueueId: assignmentType === "QUEUE" ? assigneeQueueId : null,
+        assignmentType: isNewStyle ? null : (assignmentType ?? null),
+        assigneeUserId: (!isNewStyle && assignmentType === "USER") ? assigneeUserId : null,
+        assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
+        assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun: isDryRun ?? false,
+        defaultOwnerType: defaultOwnerType ?? null,
+        defaultOwnerUserId: defaultOwnerType === "USER" ? defaultOwnerUserId : null,
+        defaultOwnerTeamId: defaultOwnerType === "ROUND_ROBIN" ? defaultOwnerTeamId : null,
+        defaultOwnerQueueId: defaultOwnerType === "QUEUE" ? defaultOwnerQueueId : null,
         conditions: {
           create: conditions.map(
-            (c: {
-              groupId: string;
-              fieldName: string;
-              operator: string;
-              value?: string | null;
-              sortOrder?: number;
-            }) => ({
+            (c: { groupId: string; fieldName: string; operator: string; value?: string | null; sortOrder?: number }) => ({
               groupId: c.groupId,
               fieldName: c.fieldName,
               operator: c.operator,
@@ -115,6 +135,30 @@ export async function PUT(
             })
           ),
         },
+        branches: {
+          create: branches.map((b: any) => ({
+            label: b.label ?? null,
+            priority: b.priority,
+            assignmentType: b.assignmentType,
+            assigneeUserId: b.assignmentType === "USER" ? (b.assigneeUserId ?? null) : null,
+            assigneeTeamId: b.assignmentType === "ROUND_ROBIN" ? (b.assigneeTeamId ?? null) : null,
+            assigneeQueueId: b.assignmentType === "QUEUE" ? (b.assigneeQueueId ?? null) : null,
+            conditions: {
+              create: b.conditions.map((c: any, ci: number) => ({
+                groupId: c.groupId,
+                fieldName: c.fieldName,
+                operator: c.operator,
+                value: c.value ?? null,
+                sortOrder: c.sortOrder ?? ci,
+              })),
+            },
+          })),
+        },
+        matchConfig: matchConfig
+          ? {
+              create: buildMatchConfigData(matchConfig),
+            }
+          : undefined,
       },
     });
 
@@ -127,7 +171,14 @@ export async function PUT(
         entityType: "RoutingRule",
         entityId: id,
         beforeState: { name: existing.name },
-        afterState: { name: updated.name, assignmentType, conditions: conditions.length },
+        afterState: {
+          name: updated.name,
+          assignmentType: updated.assignmentType,
+          branchCount: branches.length,
+          conditions: conditions.length,
+          hasMatchConfig: matchConfig !== null,
+          hasDefaultOwner: defaultOwnerType !== null,
+        },
       },
     });
 

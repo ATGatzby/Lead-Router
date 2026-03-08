@@ -5,3 +5,4 @@ export * from "./schema";
 export * from "./queues";
 export * from "./update-owner";
 export * from "./settings";
+export * from "./merge-lead";

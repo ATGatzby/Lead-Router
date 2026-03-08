@@ -5,6 +5,46 @@ export const INVALIDATE_CHANNEL = "rules:invalidate";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
+export interface CachedBranch {
+  id: string;
+  label: string | null;
+  priority: number;
+  assignmentType: string;
+  assigneeUserId: string | null;
+  assigneeTeamId: string | null;
+  assigneeQueueId: string | null;
+  conditions: Array<{
+    groupId: string;
+    fieldName: string;
+    operator: string;
+    value: string | null;
+  }>;
+}
+
+export interface CachedMatchConfig {
+  checkLeads: boolean;
+  checkContacts: boolean;
+  checkAccounts: boolean;
+  matchEmail: boolean;
+  matchPhone: boolean;
+  matchDomain: boolean;
+  onLeadMatch: "SFDC_MERGE" | "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM";
+  leadAssignmentType: string | null;
+  leadAssigneeUserId: string | null;
+  leadAssigneeTeamId: string | null;
+  leadAssigneeQueueId: string | null;
+  onContactMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP";
+  contactAssignmentType: string | null;
+  contactAssigneeUserId: string | null;
+  contactAssigneeTeamId: string | null;
+  contactAssigneeQueueId: string | null;
+  onAccountMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP";
+  accountAssignmentType: string | null;
+  accountAssigneeUserId: string | null;
+  accountAssigneeTeamId: string | null;
+  accountAssigneeQueueId: string | null;
+}
+
 export interface CachedRule {
   id: string;
   orgId: string;
@@ -12,17 +52,26 @@ export interface CachedRule {
   triggerEvent: string;
   name: string;
   priority: number;
-  assignmentType: string;
+  isDryRun: boolean;
+  // Legacy single-assignee fields (old-style rules — null for new Route Builder rules)
+  assignmentType: string | null;
   assigneeUserId: string | null;
   assigneeTeamId: string | null;
   assigneeQueueId: string | null;
-  isDryRun: boolean;
+  // Legacy conditions (old-style rules)
   conditions: Array<{
     groupId: string;
     fieldName: string;
     operator: string;
     value: string | null;
   }>;
+  // New Route Builder: branches + match config + default owner
+  branches: CachedBranch[];
+  matchConfig: CachedMatchConfig | null;
+  defaultOwnerType: string | null;
+  defaultOwnerUserId: string | null;
+  defaultOwnerTeamId: string | null;
+  defaultOwnerQueueId: string | null;
 }
 
 // ─── In-memory store ──────────────────────────────────────────────────────
@@ -44,7 +93,14 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
   const rules = await prisma.routingRule.findMany({
     where: { orgId, objectType: objectType as "LEAD" | "CONTACT" | "ACCOUNT", status: "ACTIVE" },
     orderBy: { priority: "asc" },
-    include: { conditions: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      conditions: { orderBy: { sortOrder: "asc" } },
+      branches: {
+        orderBy: { priority: "asc" },
+        include: { conditions: { orderBy: { sortOrder: "asc" } } },
+      },
+      matchConfig: true,
+    },
   });
 
   const cached: CachedRule[] = rules.map((r) => ({
@@ -54,17 +110,61 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
     triggerEvent: r.triggerEvent,
     name: r.name,
     priority: r.priority,
+    isDryRun: r.isDryRun,
     assignmentType: r.assignmentType,
     assigneeUserId: r.assigneeUserId,
     assigneeTeamId: r.assigneeTeamId,
     assigneeQueueId: r.assigneeQueueId,
-    isDryRun: r.isDryRun,
     conditions: r.conditions.map((c) => ({
       groupId: c.groupId,
       fieldName: c.fieldName,
       operator: c.operator,
       value: c.value,
     })),
+    branches: r.branches.map((b) => ({
+      id: b.id,
+      label: b.label,
+      priority: b.priority,
+      assignmentType: b.assignmentType,
+      assigneeUserId: b.assigneeUserId,
+      assigneeTeamId: b.assigneeTeamId,
+      assigneeQueueId: b.assigneeQueueId,
+      conditions: b.conditions.map((c) => ({
+        groupId: c.groupId,
+        fieldName: c.fieldName,
+        operator: c.operator,
+        value: c.value,
+      })),
+    })),
+    matchConfig: r.matchConfig
+      ? {
+          checkLeads: r.matchConfig.checkLeads,
+          checkContacts: r.matchConfig.checkContacts,
+          checkAccounts: r.matchConfig.checkAccounts,
+          matchEmail: r.matchConfig.matchEmail,
+          matchPhone: r.matchConfig.matchPhone,
+          matchDomain: r.matchConfig.matchDomain,
+          onLeadMatch: r.matchConfig.onLeadMatch,
+          leadAssignmentType: r.matchConfig.leadAssignmentType,
+          leadAssigneeUserId: r.matchConfig.leadAssigneeUserId,
+          leadAssigneeTeamId: r.matchConfig.leadAssigneeTeamId,
+          leadAssigneeQueueId: r.matchConfig.leadAssigneeQueueId,
+          onContactMatch: r.matchConfig.onContactMatch,
+          contactAssignmentType: r.matchConfig.contactAssignmentType,
+          contactAssigneeUserId: r.matchConfig.contactAssigneeUserId,
+          contactAssigneeTeamId: r.matchConfig.contactAssigneeTeamId,
+          contactAssigneeQueueId: r.matchConfig.contactAssigneeQueueId,
+          onAccountMatch: r.matchConfig.onAccountMatch,
+          accountAssignmentType: r.matchConfig.accountAssignmentType,
+          accountAssigneeUserId: r.matchConfig.accountAssigneeUserId,
+          accountAssigneeTeamId: r.matchConfig.accountAssigneeTeamId,
+          accountAssigneeQueueId: r.matchConfig.accountAssigneeQueueId,
+        }
+      : null,
+    defaultOwnerType: r.defaultOwnerType,
+    defaultOwnerUserId: r.defaultOwnerUserId,
+    defaultOwnerTeamId: r.defaultOwnerTeamId,
+    defaultOwnerQueueId: r.defaultOwnerQueueId,
   }));
 
   store.set(cacheKey(orgId, objectType), cached);
