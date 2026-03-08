@@ -132,7 +132,7 @@ lead-routing/
 │   │   │   │   ├── license-users/  # → /license-users
 │   │   │   │   ├── round-robins/   # → /round-robins
 │   │   │   │   ├── routing-rules/  # → /routing-rules
-│   │   │   │   ├── history/        # → /history (+ stats, failed, audit)
+│   │   │   │   ├── activity/        # → /activity (+ stats, failed, audit)
 │   │   │   │   ├── settings/       # → /settings (+ billing, notifications)
 │   │   │   │   └── error.tsx       # Next.js error boundary
 │   │   │   ├── (auth)/
@@ -414,14 +414,14 @@ export async function getActorFromHeaders(): Promise<{ orgId, userId, userName }
 - Conditions within a group = AND; groups = OR
 - Field operators sourced from `apps/web/lib/operators.ts` (browser-safe — does **not** import `@lead-routing/sfdc` which pulls in Node.js `child_process`)
 
-### Module: History & Audit (`/history`)
+### Module: History & Audit (`/activity`)
 
 | Sub-page | Route | Description |
 |---|---|---|
-| History | `/history` | Paginated routing log with filters |
-| Stats | `/history/stats` | Per-rep assignment counts |
-| Failed | `/history/failed` | Failed routings, retry/dismiss actions |
-| Audit | `/history/audit` | Audit log with JSON diff viewer |
+| History | `/activity` | Paginated routing log with filters |
+| Stats | `/activity/stats` | Per-rep assignment counts |
+| Failed | `/activity/failed` | Failed routings, retry/dismiss actions |
+| Audit | `/activity/audit` | Audit log with JSON diff viewer |
 
 - CSV export: `GET /api/routing-logs/export`
 - Retry failed: `POST /api/routing-logs/[id]/retry` — enqueues job to BullMQ
@@ -735,7 +735,7 @@ interface RetryJobData {
 - **Exponential backoff**: 2s → 8s → 32s
 - On success: `RoutingLog.status` → `SUCCESS`
 - On all attempts exhausted: job moves to DLQ (`routing-retries:failed`), `RoutingLog.status` stays `RETRY`
-- Admin can manually retry from the `/history/failed` page (re-enqueues via `POST /api/routing-logs/[id]/retry`)
+- Admin can manually retry from the `/activity/failed` page (re-enqueues via `POST /api/routing-logs/[id]/retry`)
 
 ### BullMQ Redis Connection
 BullMQ requires `maxRetriesPerRequest: null` on its ioredis connection — this is different from the standard connection and must be set explicitly.
@@ -1340,7 +1340,7 @@ Paste into SFDC Setup → Custom Settings → Routing Settings → Manage → `W
 - After deployment, grant FLS on `Routing_Error_Log__c` fields via a Permission Set
 - `CustomApplication isNavPersonalizationDisabled`: Must be `true`. If set to `false`, Salesforce persists an empty personalized nav bar for any user who visited the app before the tab was accessible — subsequent deploys don't clear that saved state, causing "No Items" permanently. With `true`, the app always uses its declared `<tabs>` and ignores saved personalization.
 - `onboardingWizard.js handleConnect()`: Opens `{appUrl}/api/auth/sfdc/login` (NOT `/auth/sfdc` — that route does not exist in Next.js). The `/api/auth/sfdc/login` route redirects to Salesforce OAuth; callback at `/api/auth/sfdc/callback` stores tokens and redirects to `/dashboard?crm_connected=1`. After the popup completes, the LWC's `checkConnectionStatus` poll detects the stored connection.
-- **PKCE**: Salesforce Connected Apps with "Require Proof Key for Code Exchange" enabled reject auth requests without `code_challenge`. `getSfdcAuthUrl(codeChallenge?)` in `packages/sfdc/src/client.ts` now accepts an optional challenge; `generatePkceVerifier()` / `generatePkceChallenge()` generate the pair. The login route stores `codeVerifier` in `session.sfdcCodeVerifier` (iron-session); the callback reads it, clears it, and passes it to `exchangeCodeForTokens(code, codeVerifier?)`. Token exchange is now done via raw `fetch` to `/services/oauth2/token` (jsforce's `conn.authorize()` doesn't support `code_verifier`).
+- **PKCE**: Salesforce Connected Apps with "Require Proof Key for Code Exchange" enabled reject auth requests without `code_challenge`. `getSfdcAuthUrl(codeChallenge?)` in `packages/sfdc/src/client.ts` now accepts an optional challenge; `generatePkceVerifier()` / `generatePkceChallenge()` generate the pair. The login route generates the PKCE pair and stores `codeVerifier` in a **dedicated short-lived cookie** (`sfdc_pkce_verifier`, `httpOnly`, `maxAge: 600`) set directly on the `NextResponse.redirect()` object — **not** via `iron-session.save()`. Reason: `iron-session.save()` before `NextResponse.redirect()` in Next.js App Router does not reliably propagate the `Set-Cookie` header to the browser, causing the callback to read an empty verifier. The callback reads the verifier from `req.cookies.get("sfdc_pkce_verifier")?.value`, clears the cookie on success, and passes it to `exchangeCodeForTokens(code, codeVerifier?)`. Token exchange is done via raw `fetch` to `/services/oauth2/token` (jsforce's `conn.authorize()` doesn't support `code_verifier`).
 - **`POST /api/fields/sync` auth**: This endpoint is called by Apex (server-to-server callout), not from a browser — there is no iron-session cookie. The route now authenticates via `X-Sfdc-Org-Id` header (sent by `OnboardingController.syncFieldSchema`) and looks up the org by `sfdcOrgId`. Previously it used `getActorFromHeaders()` (which reads `x-org-id` injected by middleware), causing a "Missing auth headers" 500 on every sync attempt.
 - **Apex callout endpoints must be in `PUBLIC_PREFIXES`**: `proxy.ts` (Next.js middleware) blocks all unauthenticated requests. Salesforce Apex callouts carry no iron-session cookie. Any endpoint called from Apex must be listed in `PUBLIC_PREFIXES`. Currently: `/api/setup/` (status + onboarding-done) and `/api/fields/sync`. The CLI OAuth bridge endpoints `/api/cli-auth/` are also in `PUBLIC_PREFIXES` (called by the CLI, not by a browser session).
 - **CLI OAuth Bridge** (`apps/web/app/api/cli-auth/`): The CLI authenticates with Salesforce without requiring `localhost:1717` in the Connected App by routing through the deployed web app:
@@ -1629,3 +1629,148 @@ Run all tests: `pnpm test` (120 tests, ~600ms).
 | `run-migrations.ts` seed SQL | T4 Phase 1: verify org seeded with `plan=PAID`, `seatsPurchased=9999` |
 | `sfdc-deploy-inline.ts` | T4 Phase 5: `Engine_Endpoint__c` = public HTTPS URL |
 | `pushSettings()` in sfdc package | T4 Phase 5: `Engine_Endpoint__c` ≠ `http://engine:3001` |
+
+---
+
+## 21. Route Builder — Freeform Canvas Flow Builder
+
+### Overview
+
+The Route Builder is a full-viewport freeform canvas (n8n/Zapier-style) that replaces the old linear step-list UI. Routes are modelled as a chain of typed nodes connected by bezier curve SVG edges. The right panel is a permanent Step Registry from which users drag steps onto the canvas.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [Route name input]                            [Save Route btn] │  ← 56px top bar
+├────────────────────────────────────────────────┬────────────────┤
+│  Canvas (dot-grid, overflow-auto)              │  STEP REGISTRY │
+│                                                │  (220px fixed) │
+│    ┌──────────────────┐                        │  ⚡ Trigger     │
+│    │ ⚡ Trigger node  │                        │  (non-drag)    │
+│    └──────────────────┘                        │                │
+│             │ (bezier edge)                    │  🔍 Match       │
+│    ┌──────────────────┐                        │  🔽 Filter      │
+│    │ 🔍 Match node    │ ← dragged from panel   │  👤 Assign      │
+│    └──────────────────┘                        │  ⚠ Default Own │
+└────────────────────────────────────────────────┴────────────────┘
+```
+
+**Node types and colours:**
+| Type | Left border | Icon bg |
+|------|------------|---------|
+| trigger | `border-l-violet-500` | violet-100 |
+| match | `border-l-blue-500` | blue-100 |
+| filter | `border-l-indigo-500` | indigo-100 |
+| assign | `border-l-green-500` | green-100 |
+| defaultOwner | `border-l-amber-500` | amber-100 |
+
+**Data architecture:** Two parallel state trees:
+1. `CanvasNode[]` / `CanvasEdge[]` — pure visual positions; no business data
+2. `RouteBuilderState` — the actual route data saved to the API (unchanged from before)
+
+These stay in sync: dropping a node updates `RouteBuilderState`; deleting a node clears its section. `builderToApiBody()` and `apiRuleToBuilderState()` are unchanged.
+
+Routes are structured as a flow:
+
+```
+Trigger → (optional) Match Step → Paths (filter branches) → Default Owner
+```
+
+### Data Model Changes (migration `20260308100000_route_match_config`)
+
+| Table | Change |
+|-------|--------|
+| `routing_rules` | `assignmentType` made nullable; added `defaultOwnerType`, `defaultOwnerUserId`, `defaultOwnerTeamId`, `defaultOwnerQueueId` |
+| `routing_branches` | NEW — stores per-path assignee + conditions per route |
+| `branch_conditions` | NEW — conditions on each routing branch |
+| `route_match_configs` | NEW — optional SFDC duplicate check config per route |
+| `RoutingStatus` enum | Added `MERGED` value |
+| `LeadMatchAction` enum | NEW: `SFDC_MERGE`, `ASSIGN_TO_OWNER`, `ASSIGN_CUSTOM` |
+| `ContactMatchAction` enum | NEW: `ASSIGN_TO_OWNER`, `ASSIGN_CUSTOM`, `SKIP` |
+| `AccountMatchAction` enum | NEW: `ASSIGN_TO_OWNER`, `ASSIGN_CUSTOM`, `SKIP` |
+
+**Backward compat**: Old single-assignee rules have `assignmentType` set + `conditions` on `RoutingRule`. New Route Builder rules have `assignmentType = null` + `branches`. The engine handles both.
+
+### Engine Flow (new-style rules)
+
+1. **Match step** (if `rule.matchConfig` exists): SOQL check for existing Lead/Contact/Account by email/phone/domain → route based on `onLeadMatch` / `onContactMatch` / `onAccountMatch` actions
+   - `SFDC_MERGE` → Salesforce Lead Merge (existing record = master), log `MERGED`
+   - `ASSIGN_TO_OWNER` → set lead owner to matched record's OwnerId
+   - `ASSIGN_CUSTOM` → resolve custom assignee and set
+   - `SKIP` → fall through to branch evaluation
+2. **Branch evaluation**: evaluate each `RoutingBranch` in priority order (conditions use same AND/OR group logic). First matching branch resolves assignee → update SFDC owner → log `SUCCESS`
+3. **Default owner**: if no branch matched and `rule.defaultOwnerType` is set → assign to default owner → log `SUCCESS`
+4. **UNMATCHED**: logged if no match config result, no branch, and no default owner
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/web/components/route-builder/types.ts` | Shared types + `defaultBuilderState()` / `triggerEventLabel()` |
+| `apps/web/components/route-builder/RouteBuilder.tsx` | **REWRITTEN (multi-path)** — freeform canvas: `CanvasNode[]` visual state + `RouteBuilderState` data state. Edges derived via `computeEdges()` (no edge state). Multi-path fan-out: each Filter drop creates a new `RoutePath` + positions filter+assign pair side-by-side. Filter card has editable inline path name + condition preview in subtitle. `buildNodesFromState()` reconstructs canvas from loaded rule. |
+| `apps/web/components/route-builder/StepRegistry.tsx` | **UPDATED** — removed standalone "Assign" step (now auto-created with Filter). "Filter" renamed to "Filter + Assign". `match` + `defaultOwner` singletons. |
+| `apps/web/components/route-builder/RouteHeader.tsx` | Legacy file — no longer used by RouteBuilder (top bar is now inline in RouteBuilder.tsx) |
+| `apps/web/components/route-builder/steps/AddStepButton.tsx` | Legacy file — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/TriggerStepCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/MatchStepCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/PathsStepCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/FilterStepCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/ActionStepCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/steps/DefaultOwnerCard.tsx` | Legacy step card — no longer used by RouteBuilder |
+| `apps/web/components/route-builder/config/TriggerConfigSheet.tsx` | Object type + trigger event + dry run config (unchanged) |
+| `apps/web/components/route-builder/config/MatchConfigSheet.tsx` | Full match step config (unchanged) |
+| `apps/web/components/route-builder/config/FilterConfigSheet.tsx` | Wraps ConditionBuilder (unchanged) |
+| `apps/web/components/route-builder/config/ActionConfigSheet.tsx` | Wraps AssigneeSelect (unchanged) |
+| `apps/web/components/route-builder/config/DefaultOwnerConfigSheet.tsx` | Fallback owner config (unchanged) |
+| `apps/web/components/ui/sheet.tsx` | shadcn-style Sheet component (unchanged) |
+| `apps/web/lib/builder-to-rule.ts` | `builderToApiBody()` + `apiRuleToBuilderState()` (unchanged) |
+| `packages/sfdc/src/merge-lead.ts` | Salesforce Lead Merge via SOAP (unchanged) |
+| `apps/engine/src/cache.ts` | Loads branches + matchConfig (unchanged) |
+| `apps/engine/src/router.ts` | New-style + legacy routing paths (unchanged) |
+
+### Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| New route | `/routing-rules/new` | Blank RouteBuilder canvas |
+| Edit route | `/routing-rules/[id]/flow` | RouteBuilder pre-populated from DB (all rules) |
+| Edit rule (legacy direct URL only) | `/routing-rules/[id]/edit` | Old RuleForm — no longer linked from the UI |
+
+### API Changes
+
+`POST /api/rules` and `PUT /api/rules/:id` now accept:
+```typescript
+{
+  branches: BranchInput[]          // Route Builder paths
+  matchConfig: MatchConfigInput | null
+  defaultOwnerType: "USER" | "ROUND_ROBIN" | "QUEUE" | null
+  defaultOwnerUserId: string | null
+  defaultOwnerTeamId: string | null
+  defaultOwnerQueueId: string | null
+}
+```
+
+`GET /api/rules/:id` now returns `branches`, `matchConfig`, `defaultOwner*` fields.
+
+### Route Builder — Canvas Implementation Notes
+
+- **Dual state model**: `RouteBuilderState` (the API data) + `CanvasNode[]` (visual positions only). Edges are **derived** via `useMemo(() => computeEdges(nodes))` — no edge state stored.
+- **Multi-path fan-out/fan-in**: Each "Filter + Assign" drag creates one `RoutePath` + filter/assign node pair side-by-side. `computeEdges()` draws: splitNode → each filter (fan-out), filter → assign (by `pathId`), each assign → defaultOwner (fan-in). `FILTER_GAP = NODE_WIDTH + 40 = 260px` horizontal spacing.
+- **Editable filter card label**: Filter node title is an inline `<input>` editing `RoutePath.label`. Subtitle shows condition preview: `{fieldApiName} {op} {value} +N more` or "No conditions (catch-all)".
+- **Node sizes**: `NODE_WIDTH = 220`, `NODE_HEIGHT = 72`. Top bar is `56px` (`TOP_BAR_HEIGHT`).
+- **Dot-grid canvas**: `backgroundImage: 'radial-gradient(circle, #d1d5db 1.5px, transparent 1.5px)'`, `backgroundSize: '24px 24px'`.
+- **SVG edge layer**: `position: absolute; pointer-events: none; zIndex: 1`. Each edge: `M sx sy C sx,sy+60 tx,ty-60 tx,ty`. Stroke: `#94a3b8`, width 2.
+- **Node drag**: `onMouseDown` → `dragRef` (useRef). `window` mousemove/mouseup in `useEffect`. `hasMoved` flag (delta > 3px) suppresses `onClick`.
+- **Drop from registry**: Match node inserts between trigger and filters (shifts filter/assign/defaultOwner down 140px). Filter drop places at `{ x: splitNode.x + n * FILTER_GAP, y: splitNode.y + 140 }`. DefaultOwner auto-centres below assigns.
+- **Node delete**: Match delete shifts filter/assign/defaultOwner up 140px. Filter delete removes entire path column (filter + assign by `pathId`) + removes `RoutePath` from state. Assign delete only removes the assign node + clears path action.
+- **Singleton nodes**: `match` and `defaultOwner` greyed-out in registry when present. Filter is multi-instance.
+- **Initialisation from `initialState`**: `buildNodesFromState()` creates filter+assign columns for each path in `initialState.paths`. `defaultBuilderState().paths = []` — new routes start blank.
+- **Config sheets**: One `FilterConfigSheet` + one `ActionConfigSheet` instance each, driven by `activeFilterPathId` / `activeAssignPathId` derived from `activeSheet`. `key={pathId}` forces remount when switching paths.
+- **State management**: `useState<RouteBuilderState>`. Dirty: `JSON.stringify(state) !== JSON.stringify(savedState)`.
+- **External `isSaving` prop**: When the parent page provides an `isSaving` prop (e.g. from a TanStack Mutation's `isPending`), it overrides the component's internal saving indicator.
+- **Config sheet reset pattern**: Each config sheet resets its local state when `onOpenChange(true)` is called (i.e., when it opens) to always show the current canonical state rather than stale draft state.
+- **No `nanoid` dependency**: Path IDs use `crypto.randomUUID()` (browser built-in, Node 20+).
+- **`builder-to-rule.ts`**: `apiRuleToBuilderState` handles the conditions-to-ConditionGroup reconstruction by grouping by `groupId` with a `Map`. All three assignee ID columns (`assigneeUserId`, `assigneeTeamId`, `assigneeQueueId`) are coalesced with `??` to resolve the correct ID.
+
+### SFDC Merge (`packages/sfdc/src/merge-lead.ts`)
+
+Uses `conn.soap.merge("Lead", [...])` via jsforce. Falls back to `conn.tooling.executeAnonymous(apex)` if SOAP API unavailable. The **existing** lead (masterLeadId) is preserved; the newly ingested duplicate (duplicateLeadId) is merged in.

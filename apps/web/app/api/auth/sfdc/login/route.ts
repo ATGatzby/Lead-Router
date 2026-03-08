@@ -1,17 +1,25 @@
 import { NextResponse } from "next/server";
 import { getSfdcAuthUrl, generatePkceVerifier, generatePkceChallenge } from "@lead-routing/sfdc";
-import { getSession } from "@/lib/session";
 
 // GET /api/auth/sfdc/login — redirect to Salesforce OAuth with PKCE
 export async function GET() {
   const codeVerifier  = generatePkceVerifier();
   const codeChallenge = generatePkceChallenge(codeVerifier);
 
-  // Persist verifier in session so the callback can complete the exchange
-  const session = await getSession();
-  session.sfdcCodeVerifier = codeVerifier;
-  await session.save();
-
   const authUrl = getSfdcAuthUrl(codeChallenge);
-  return NextResponse.redirect(authUrl);
+  const response = NextResponse.redirect(authUrl);
+
+  // Store verifier in a dedicated short-lived cookie on the redirect response.
+  // Using iron-session.save() + NextResponse.redirect() doesn't reliably propagate
+  // the Set-Cookie header in Next.js App Router — the browser never receives the
+  // updated session, so the callback reads an empty sfdcCodeVerifier.
+  response.cookies.set("sfdc_pkce_verifier", codeVerifier, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 10, // 10 minutes — enough for any OAuth round-trip
+    path: "/",
+  });
+
+  return response;
 }

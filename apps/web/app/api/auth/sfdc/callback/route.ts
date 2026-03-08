@@ -4,6 +4,9 @@ import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
 import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-store";
 
+// CLI flow still uses server-side token exchange (exchangeCodeForTokens).
+// Web flow uses client-side token exchange (browser → Salesforce) to avoid server IP restrictions.
+
 // GET /api/auth/sfdc/callback — called by Salesforce after OAuth consent
 //
 // Two flows share this URL (SFDC_REDIRECT_URI points here):
@@ -89,16 +92,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Use getSession() (returns IronSession) so we can call .save() to clear the verifier
     const session = await getSession();
     if (!session.orgId) throw new Error("Not authenticated");
 
-    // Retrieve and clear the PKCE verifier stored during /api/auth/sfdc/login
-    const codeVerifier = session.sfdcCodeVerifier;
-    if (codeVerifier) {
-      session.sfdcCodeVerifier = undefined;
-      await session.save();
-    }
+    const codeVerifier = req.cookies.get("sfdc_pkce_verifier")?.value;
 
     const { tokens, orgId: sfdcOrgId } = await exchangeCodeForTokens(code, codeVerifier);
 
@@ -124,20 +121,18 @@ export async function GET(req: NextRequest) {
       select: { webhookSecret: true },
     });
 
-    // Push settings to SFDC so Routing_Settings__c + Named Credential + Remote Site Setting stay in sync.
-    // Fire-and-forget — don't block the redirect on failure.
     if (org.webhookSecret) {
       const conn = createConnection(tokens);
       pushSettings(conn, {
         webhookSecret: org.webhookSecret,
         engineUrl: process.env.PUBLIC_ENGINE_URL ?? process.env.ENGINE_URL ?? "http://localhost:3001",
         appUrl: process.env.APP_URL ?? "http://localhost:3000",
-      }).catch((err) =>
-        console.error("[sfdc-callback] pushSettings failed:", err)
-      );
+      }).catch((err) => console.error("[sfdc-callback] pushSettings failed:", err));
     }
 
-    return NextResponse.redirect(new URL("/dashboard?crm_connected=1", appUrl));
+    const successRedirect = NextResponse.redirect(new URL("/dashboard?crm_connected=1", appUrl));
+    successRedirect.cookies.delete("sfdc_pkce_verifier");
+    return successRedirect;
   } catch (err) {
     console.error("SFDC OAuth callback error:", err);
     return NextResponse.redirect(
