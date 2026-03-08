@@ -1,6 +1,6 @@
 # Lead Routing
 
-> Self-hosted, Salesforce-native lead routing engine with round-robin assignment, rule-based conditions, and a Next.js management UI — deployed to your own server in minutes via a single CLI command.
+> Self-hosted, Salesforce-native lead routing engine with a visual Route Builder, round-robin assignment, and a Next.js management UI — deployed to your own server in minutes via a single CLI command.
 
 [![npm version](https://img.shields.io/npm/v/@lead-routing/cli)](https://www.npmjs.com/package/@lead-routing/cli)
 [![CI](https://github.com/ATGatzby/Lead-Router/actions/workflows/test.yml/badge.svg)](https://github.com/ATGatzby/Lead-Router/actions/workflows/test.yml)
@@ -10,16 +10,19 @@
 
 ## What It Does
 
-When a Lead, Contact, or Account is created or updated in Salesforce, Lead Routing automatically assigns the record's `OwnerId` to the right sales rep based on rules you configure in a web dashboard — with no code required.
+When a Lead, Contact, or Account is created or updated in Salesforce, Lead Routing automatically assigns the record's `OwnerId` to the right sales rep based on rules you configure in a visual Route Builder — no code required.
 
 **Key features:**
-- Rule-based routing with 17 condition operators (equals, contains, greater than, date ranges, etc.)
-- Round-robin assignment across teams with per-member pause/resume
-- Salesforce queue support
-- Dry-run mode — test rules without making live assignments
-- Full routing history and audit logs
-- HMAC-signed webhooks for secure Salesforce → engine communication
-- 100% self-hosted — your data never leaves your server
+- **Visual Route Builder** — Zapier-style canvas with Trigger → Match → Filter+Assign branches → Default Owner pipeline
+- **Duplicate matching** — Configurable lead-to-contact, lead-to-account, and contact-to-account match actions (convert, merge, skip, assign)
+- **17 condition operators** — equals, contains, greater than, date ranges, regex, and more
+- **Round-robin assignment** across teams with per-member pause/resume
+- **Salesforce queue support** — assign to queues or individual users
+- **Dry-run mode** — test rules without making live assignments
+- **Full routing history** and audit logs
+- **HMAC-signed webhooks** for secure Salesforce → engine communication
+- **Admin portal** — multi-org management, org suspension, usage monitoring
+- **100% self-hosted** — your data never leaves your server
 
 ---
 
@@ -33,15 +36,20 @@ Salesforce Org
 Routing Engine (Fastify)
   ├─ Validates HMAC signature
   ├─ Checks idempotency (Redis)
-  ├─ Evaluates routing rules against record fields
+  ├─ Evaluates routing rules (branches, conditions, match config)
+  ├─ Round-robin team resolution (Redis Lua atomic INCR)
   ├─ Updates OwnerId in Salesforce via jsforce
+  ├─ Failed updates → BullMQ retry queue (3x exponential backoff)
   └─ Logs result to PostgreSQL
 
 Management UI (Next.js)
-  ├─ Create and manage routing rules
-  ├─ License users, manage round-robin teams
+  ├─ Visual Route Builder (drag-and-drop rule canvas)
+  ├─ Create and manage routing rules with branches
+  ├─ Configure duplicate match settings
+  ├─ Manage round-robin teams and members
   ├─ View routing history and audit logs
-  └─ Connect Salesforce org via OAuth
+  ├─ Connect Salesforce org via OAuth
+  └─ Admin portal for multi-org management
 ```
 
 Everything runs in Docker on your own VPS. You keep full control of your data.
@@ -104,6 +112,8 @@ It then:
 ---
 
 ## Architecture
+
+For the full technical architecture — including all API routes, database schema, auth flows, routing pipeline internals, and deployment infrastructure — see [Architecture.md](Architecture.md).
 
 ### Services
 

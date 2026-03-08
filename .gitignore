@@ -15,6 +15,7 @@ apps/cli/*.tgz
 
 # Internal documents — keep off GitHub
 CLAUDE.md
+Technical-Implementation.md
 Deployment-Strategy.md
 E2E-TEST-PLAYBOOK.md
 E2ETest.md
