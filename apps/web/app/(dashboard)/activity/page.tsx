@@ -18,6 +18,7 @@ interface RoutingLog {
   eventType: string;
   ruleId: string | null;
   ruleName: string | null;
+  pathLabel: string | null;
   assigneeName: string | null;
   assignmentType: string | null;
   status: "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY" | "MERGED";
@@ -277,7 +278,12 @@ export default function HistoryPage() {
               </span>
 
               {/* Rule */}
-              <span className="text-sm truncate">{log.ruleName ?? <em className="text-muted-foreground">No match</em>}</span>
+              <div className="min-w-0">
+                <span className="text-sm truncate block">{log.ruleName ?? <em className="text-muted-foreground">No match</em>}</span>
+                {log.pathLabel && (
+                  <span className="text-xs text-muted-foreground truncate block">{log.pathLabel}</span>
+                )}
+              </div>
 
               {/* Assignee */}
               <div className="min-w-0">

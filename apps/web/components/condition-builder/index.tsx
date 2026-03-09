@@ -57,6 +57,7 @@ export function ConditionBuilder({ value: groups, onChange, fields }: Props) {
           {idx > 0 && <GroupConnector />}
           <ConditionGroupComponent
             group={group}
+            groupIndex={idx}
             fields={fields}
             onUpdate={(updated) => updateGroup(group.id, updated)}
             onRemove={() => removeGroup(group.id)}

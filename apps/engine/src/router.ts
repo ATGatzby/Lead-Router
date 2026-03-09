@@ -435,6 +435,7 @@ async function routeNewStyle(
         data: {
           orgId, sfdcRecordId: recordId, objectType, eventType,
           ruleId: rule.id, ruleName: rule.name,
+          pathLabel: branch.label || `Path ${rule.branches.indexOf(branch) + 1}`,
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
           isDryRun: rule.isDryRun, status: "RETRY", recordSnapshot: fields,
@@ -486,6 +487,7 @@ async function routeNewStyle(
         data: {
           orgId, sfdcRecordId: recordId, objectType, eventType,
           ruleId: rule.id, ruleName: rule.name,
+          pathLabel: "Default Owner",
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
           isDryRun: rule.isDryRun, status: "RETRY", recordSnapshot: fields,

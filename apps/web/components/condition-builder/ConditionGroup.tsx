@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Plus, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Condition, ConditionGroup as ConditionGroupType, FieldSchema } from "./types";
 import { ConditionRow } from "./ConditionRow";
@@ -9,13 +10,30 @@ import { getOperatorsForType } from "@/lib/operators";
 
 interface Props {
   group: ConditionGroupType;
+  groupIndex: number;
   fields: FieldSchema[];
   onUpdate: (updated: ConditionGroupType) => void;
   onRemove: () => void;
   canRemove: boolean;
 }
 
-export function ConditionGroup({ group, fields, onUpdate, onRemove, canRemove }: Props) {
+export function ConditionGroup({ group, groupIndex, fields, onUpdate, onRemove, canRemove }: Props) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const displayName = group.name || `Group ${groupIndex + 1}`;
+
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  const commitName = () => {
+    const val = nameInputRef.current?.value.trim() ?? "";
+    onUpdate({ ...group, name: val || undefined });
+    setIsEditingName(false);
+  };
   const addCondition = () => {
     const firstField = fields[0];
     const ops = firstField ? getOperatorsForType(firstField.fieldType) : [];
@@ -54,9 +72,27 @@ export function ConditionGroup({ group, fields, onUpdate, onRemove, canRemove }:
     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
       {/* Group header */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Group
-        </span>
+        {isEditingName ? (
+          <input
+            ref={nameInputRef}
+            defaultValue={displayName}
+            className="text-xs font-medium text-muted-foreground uppercase tracking-wider bg-transparent border-b border-primary outline-none w-32"
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              if (e.key === "Escape") setIsEditingName(false);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors group"
+            onClick={() => setIsEditingName(true)}
+          >
+            {displayName}
+            <Pencil className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        )}
         <div className="flex items-center gap-2">
           {group.conditions.length > 1 && (
             <button

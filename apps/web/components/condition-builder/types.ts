@@ -27,6 +27,7 @@ export interface Condition {
 
 export interface ConditionGroup {
   id: string; // becomes groupId in DB
+  name?: string; // optional user-friendly label
   conjunction: "AND" | "OR"; // logic WITHIN the group
   conditions: Condition[];
 }

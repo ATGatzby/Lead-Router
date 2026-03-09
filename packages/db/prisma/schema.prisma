@@ -317,6 +317,7 @@ model RoutingLog {
   eventType      TriggerEvent
   ruleId         String?
   ruleName       String?
+  pathLabel      String?  // which branch/path triggered: e.g. "Path A" or "Default Owner"
   assigneeId     String?  // SFDC user/queue ID
   assigneeName   String?
   assignmentType AssignmentType?

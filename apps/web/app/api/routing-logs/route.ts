@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const ruleId = p.get("ruleId");
 
     const VALID_OBJECTS = ["LEAD", "CONTACT", "ACCOUNT"];
-    const VALID_STATUSES = ["SUCCESS", "FAILED", "UNMATCHED", "RETRY"];
+    const VALID_STATUSES = ["SUCCESS", "FAILED", "UNMATCHED", "RETRY", "MERGED"];
 
     const where: Prisma.RoutingLogWhereInput = { orgId };
 
