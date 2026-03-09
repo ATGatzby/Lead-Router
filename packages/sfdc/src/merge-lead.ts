@@ -12,32 +12,8 @@ export async function mergeLead(
   masterLeadId: string,
   duplicateLeadId: string
 ): Promise<void> {
-  // jsforce v2 exposes SOAP merge via conn.soap.merge()
-  // Signature: conn.soap.merge(type, mergeRequests)
-  try {
-    const result = await (conn as any).soap.merge("Lead", [
-      {
-        masterRecord: { Id: masterLeadId },
-        recordToMergeIds: [duplicateLeadId],
-      },
-    ]);
-
-    const mergeResult = Array.isArray(result) ? result[0] : result;
-    if (!mergeResult?.success) {
-      const errors = mergeResult?.errors ?? [];
-      const message = Array.isArray(errors) && errors.length > 0
-        ? errors.map((e: any) => e.message ?? String(e)).join("; ")
-        : "Lead merge failed with no error details";
-      throw new Error(message);
-    }
-  } catch (err: any) {
-    // If SOAP merge is not available, fall back to Apex anonymous execution
-    if (err?.message?.includes("is not a function") || err?.name === "TypeError") {
-      await mergeLeadViaApex(conn, masterLeadId, duplicateLeadId);
-    } else {
-      throw err;
-    }
-  }
+  // jsforce SOAP merge sends malformed XML (null master record) — use Apex directly
+  await mergeLeadViaApex(conn, masterLeadId, duplicateLeadId);
 }
 
 /** Fallback: execute Lead merge via Apex anonymous */

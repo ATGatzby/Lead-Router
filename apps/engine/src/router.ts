@@ -281,7 +281,7 @@ async function routeNewStyle(
           if (mc.onLeadMatch === "SFDC_MERGE") {
             if (!rule.isDryRun) {
               try {
-                await mergeLead(conn, recordId, matchResult.recordId);
+                await mergeLead(conn, matchResult.recordId, recordId);
               } catch (err) {
                 console.error(`[router] Lead merge failed:`, err);
                 await prisma.routingLog.create({
