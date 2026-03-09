@@ -20,7 +20,7 @@ interface RoutingLog {
   ruleName: string | null;
   assigneeName: string | null;
   assignmentType: string | null;
-  status: "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY";
+  status: "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY" | "MERGED";
   errorMessage: string | null;
   retryCount: number;
   recordSnapshot: Record<string, unknown> | null;
@@ -86,8 +86,9 @@ function StatusBadge({ status }: { status: RoutingLog["status"] }) {
     FAILED: "bg-red-50 text-red-700 border-red-200",
     UNMATCHED: "bg-yellow-50 text-yellow-700 border-yellow-200",
     RETRY: "bg-blue-50 text-blue-700 border-blue-200",
+    MERGED: "bg-purple-50 text-purple-700 border-purple-200",
   }[status];
-  const label = { SUCCESS: "Success", FAILED: "Failed", UNMATCHED: "Unmatched", RETRY: "Retry" }[status];
+  const label = { SUCCESS: "Success", FAILED: "Failed", UNMATCHED: "Unmatched", RETRY: "Retry", MERGED: "Merged" }[status];
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", cfg)}>
       {label}
@@ -205,6 +206,7 @@ export default function HistoryPage() {
             <SelectItem value="FAILED">Failed</SelectItem>
             <SelectItem value="UNMATCHED">Unmatched</SelectItem>
             <SelectItem value="RETRY">Retry</SelectItem>
+            <SelectItem value="MERGED">Merged</SelectItem>
           </SelectContent>
         </Select>
         <Input
