@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Pencil } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -23,6 +24,7 @@ interface Props {
   conditions: RuleConditions
   objectType: ObjectType
   onSave: (conditions: RuleConditions) => void
+  onLabelChange?: (label: string) => void
 }
 
 interface FieldsResponse {
@@ -36,8 +38,26 @@ export function FilterConfigSheet({
   conditions,
   objectType,
   onSave,
+  onLabelChange,
 }: Props) {
   const [localConditions, setLocalConditions] = useState<RuleConditions>(conditions)
+  const [isEditingLabel, setIsEditingLabel] = useState(false)
+  const labelInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditingLabel && labelInputRef.current) {
+      labelInputRef.current.focus()
+      labelInputRef.current.select()
+    }
+  }, [isEditingLabel])
+
+  const commitLabel = () => {
+    const val = labelInputRef.current?.value.trim()
+    if (val && val !== pathLabel && onLabelChange) {
+      onLabelChange(val)
+    }
+    setIsEditingLabel(false)
+  }
 
   const fieldsQuery = useQuery<FieldsResponse>({
     queryKey: ["fields", objectType],
@@ -65,7 +85,30 @@ export function FilterConfigSheet({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>Filter Conditions — {pathLabel}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            <span>Filter Conditions —</span>
+            {isEditingLabel ? (
+              <input
+                ref={labelInputRef}
+                defaultValue={pathLabel}
+                className="text-lg font-semibold bg-transparent border-b border-primary outline-none w-40"
+                onBlur={commitLabel}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitLabel()
+                  if (e.key === "Escape") setIsEditingLabel(false)
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 hover:text-primary transition-colors group"
+                onClick={() => setIsEditingLabel(true)}
+              >
+                {pathLabel}
+                <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            )}
+          </SheetTitle>
           <SheetDescription>
             Records matching all condition groups will be routed to this path. Leave empty to make
             this a catch-all path.

@@ -809,6 +809,14 @@ export function RouteBuilder({
             paths: s.paths.map((p) => (p.id === pathId ? { ...p, conditions } : p)),
           }))
         }}
+        onLabelChange={(label: string) => {
+          if (!activeFilterPathId) return
+          const pathId = activeFilterPathId
+          setState((s) => ({
+            ...s,
+            paths: s.paths.map((p) => (p.id === pathId ? { ...p, label } : p)),
+          }))
+        }}
       />
 
       {/* Assign sheet — one instance driven by activeAssignPathId */}
