@@ -28,18 +28,20 @@ export async function getOrgConnection(orgId: string): Promise<SfdcConnection> {
 
 /** Get the SFDC User ID for a given internal User.id */
 export async function getSfdcUserId(userId: string): Promise<string> {
-  const user = await prisma.user.findUniqueOrThrow({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { sfdcUserId: true },
   });
+  if (!user) throw new Error(`User ${userId} not found — may have been deleted or not synced`);
   return user.sfdcUserId;
 }
 
 /** Get the SFDC Queue ID for a given internal SfdcQueue.id */
 export async function getSfdcQueueId(queueId: string): Promise<string> {
-  const queue = await prisma.sfdcQueue.findUniqueOrThrow({
+  const queue = await prisma.sfdcQueue.findUnique({
     where: { id: queueId },
     select: { sfdcQueueId: true },
   });
+  if (!queue) throw new Error(`Queue ${queueId} not found — may have been deleted or not synced`);
   return queue.sfdcQueueId;
 }
