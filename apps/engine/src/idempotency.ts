@@ -18,3 +18,29 @@ export async function claimIdempotencyKey(
   const result = await redis.set(key, "1", "NX", "EX", TTL_SECONDS);
   return result === "OK";
 }
+
+/**
+ * Bulk idempotency check via Redis pipeline (single round-trip for N keys).
+ * Returns a Map of recordId → isNew (true = should process, false = duplicate).
+ */
+export async function claimIdempotencyKeys(
+  orgId: string,
+  records: Array<{ recordId: string; eventType: string; timestamp: string }>
+): Promise<Map<string, boolean>> {
+  const pipeline = redis.pipeline();
+
+  for (const r of records) {
+    const key = `idem:${orgId}:${r.recordId}:${r.eventType}:${r.timestamp}`;
+    pipeline.set(key, "1", "NX", "EX", TTL_SECONDS);
+  }
+
+  const results = await pipeline.exec();
+  const map = new Map<string, boolean>();
+
+  for (let i = 0; i < records.length; i++) {
+    const isNew = results?.[i]?.[1] === "OK";
+    map.set(records[i].recordId, isNew);
+  }
+
+  return map;
+}

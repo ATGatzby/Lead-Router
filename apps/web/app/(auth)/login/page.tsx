@@ -72,7 +72,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all"
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>
@@ -82,7 +82,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/50">
       <div className="w-full max-w-md space-y-8 px-6">
         {/* Logo / Brand */}
         <div className="text-center space-y-2">
@@ -96,7 +96,7 @@ export default function LoginPage() {
         </div>
 
         {/* Login card */}
-        <div className="rounded-xl border bg-card p-8 shadow-sm space-y-6">
+        <div className="rounded-xl border bg-card p-8 shadow-lg space-y-6">
           <div className="space-y-1">
             <h2 className="text-lg font-medium">Sign in</h2>
             <p className="text-sm text-muted-foreground">

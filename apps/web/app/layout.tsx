@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "sonner";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} font-sans antialiased`}>
         <Providers>
           <TooltipProvider>{children}</TooltipProvider>
+          <Toaster richColors position="bottom-right" />
         </Providers>
       </body>
     </html>

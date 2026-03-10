@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderEnvWeb } from './env-web.js'
+import { renderEnvEngine } from './env-engine.js'
 import { renderDockerCompose } from './docker-compose.js'
 import { renderCaddyfile } from './caddy.js'
 
@@ -237,5 +238,83 @@ describe('renderCaddyfile — Case B: same domain, port-based engine URL', () =>
     const portBlockEnd = out.indexOf('\n}', portBlockStart)
     const portBlock = out.slice(portBlockStart, portBlockEnd)
     expect(portBlock).toContain('reverse_proxy engine:3001')
+  })
+})
+
+// ─── renderEnvEngine ──────────────────────────────────────────────────────────
+
+const baseEngineConfig = {
+  databaseUrl: 'postgresql://u:p@postgres:5432/leadrouting',
+  redisUrl: 'redis://redis:6379',
+  sfdcClientId: 'SFDC_CLIENT_ID',
+  sfdcClientSecret: 'SFDC_SECRET',
+  sfdcLoginUrl: 'https://login.salesforce.com',
+  engineWebhookSecret: 'webhook_secret_here',
+}
+
+describe('renderEnvEngine', () => {
+  it('renders all expected env vars', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    const expectedKeys = [
+      'ENGINE_PORT',
+      'LOG_LEVEL',
+      'NODE_ENV',
+      'DATABASE_URL',
+      'REDIS_URL',
+      'SFDC_CLIENT_ID',
+      'SFDC_CLIENT_SECRET',
+      'SFDC_LOGIN_URL',
+      'ENGINE_WEBHOOK_SECRET',
+    ]
+    for (const key of expectedKeys) {
+      expect(out).toContain(`${key}=`)
+    }
+  })
+
+  it('defaults ENGINE_PORT to 3001', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('ENGINE_PORT=3001')
+  })
+
+  it('uses custom ENGINE_PORT when specified', () => {
+    const out = renderEnvEngine({ ...baseEngineConfig, enginePort: 4000 })
+    expect(out).toContain('ENGINE_PORT=4000')
+  })
+
+  it('includes DATABASE_URL', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('DATABASE_URL=postgresql://u:p@postgres:5432/leadrouting')
+  })
+
+  it('includes REDIS_URL', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('REDIS_URL=redis://redis:6379')
+  })
+
+  it('includes SFDC credentials', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('SFDC_CLIENT_ID=SFDC_CLIENT_ID')
+    expect(out).toContain('SFDC_CLIENT_SECRET=SFDC_SECRET')
+    expect(out).toContain('SFDC_LOGIN_URL=https://login.salesforce.com')
+  })
+
+  it('includes ENGINE_WEBHOOK_SECRET', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('ENGINE_WEBHOOK_SECRET=webhook_secret_here')
+  })
+
+  it('includes NODE_ENV=production', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('NODE_ENV=production')
+  })
+
+  it('defaults LOG_LEVEL to info', () => {
+    const out = renderEnvEngine(baseEngineConfig)
+    expect(out).toContain('LOG_LEVEL=info')
+  })
+
+  it('uses custom LOG_LEVEL when specified', () => {
+    const out = renderEnvEngine({ ...baseEngineConfig, logLevel: 'debug' })
+    expect(out).toContain('LOG_LEVEL=debug')
   })
 })

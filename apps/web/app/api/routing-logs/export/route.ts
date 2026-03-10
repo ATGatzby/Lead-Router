@@ -14,9 +14,12 @@ export async function GET(req: NextRequest) {
     const to = p.get("to");
     const object = p.get("object")?.toUpperCase();
     const status = p.get("status")?.toUpperCase();
+    const assignee = p.get("assignee");
+    const ruleId = p.get("ruleId");
+    const teamId = p.get("teamId");
 
     const VALID_OBJECTS = ["LEAD", "CONTACT", "ACCOUNT"];
-    const VALID_STATUSES = ["SUCCESS", "FAILED", "UNMATCHED", "RETRY"];
+    const VALID_STATUSES = ["SUCCESS", "FAILED", "UNMATCHED", "RETRY", "MERGED"];
 
     const where: Prisma.RoutingLogWhereInput = { orgId };
 
@@ -30,6 +33,15 @@ export async function GET(req: NextRequest) {
     }
     if (status && VALID_STATUSES.includes(status)) {
       where.status = status as "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY";
+    }
+    if (assignee) {
+      where.assigneeName = { contains: assignee, mode: "insensitive" };
+    }
+    if (ruleId) {
+      where.ruleId = ruleId;
+    }
+    if (teamId) {
+      where.teamId = teamId;
     }
 
     const total = await prisma.routingLog.count({ where });
@@ -46,6 +58,7 @@ export async function GET(req: NextRequest) {
       "Object",
       "Event Type",
       "Rule Name",
+      "Team",
       "Assignee Name",
       "Assignment Mode",
       "Timestamp",
@@ -59,6 +72,7 @@ export async function GET(req: NextRequest) {
         log.objectType,
         log.eventType,
         log.ruleName ?? "",
+        log.teamName ?? "",
         log.assigneeName ?? "",
         log.assignmentType ?? "",
         log.createdAt.toISOString(),

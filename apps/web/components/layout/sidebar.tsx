@@ -20,7 +20,7 @@ const NAV_SECTIONS = [
     label: "Setup",
     items: [
       { href: "/license-users", label: "License Users", icon: Users },
-      { href: "/round-robins", label: "Round Robins", icon: GitFork },
+      { href: "/round-robins", label: "Teams", icon: GitFork },
     ],
   },
   {
@@ -60,15 +60,15 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-56 flex-col border-r bg-card">
+    <aside className="flex h-screen w-56 flex-col bg-sidebar">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2 px-4 border-b">
+      <div className="flex h-14 items-center gap-2 px-4 border-b border-sidebar-border">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
           LR
         </div>
-        <span className="text-sm font-semibold">Lead Router</span>
+        <span className="text-sm font-semibold text-sidebar-foreground">Lead Router</span>
         <div className="ml-auto">
-          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+          <Zap className="h-3.5 w-3.5 text-sidebar-muted-foreground" />
         </div>
       </div>
 
@@ -79,8 +79,8 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {NAV_SECTIONS.map((section, idx) => (
           <div key={section.label}>
-            {idx !== 0 && <Separator className="mb-3" />}
-            <p className="px-2 mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {idx !== 0 && <Separator className="mb-3 bg-sidebar-border" />}
+            <p className="px-2 mb-1 text-xs font-medium text-sidebar-muted-foreground uppercase tracking-wider">
               {section.label}
             </p>
             <ul className="space-y-0.5">
@@ -95,8 +95,8 @@ export function Sidebar() {
                       className={cn(
                         "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
                         active
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
                       <item.icon className="h-4 w-4 shrink-0" />

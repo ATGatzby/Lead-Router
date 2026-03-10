@@ -53,6 +53,7 @@ export function builderToApiBody(
         group.conditions.map((cond, ci) => ({
           groupId: group.id,
           fieldName: cond.fieldApiName,
+          fieldType: cond.fieldType ?? "TEXT",
           operator: cond.operator,
           value: cond.value || null,
           sortOrder: gi * 100 + ci,

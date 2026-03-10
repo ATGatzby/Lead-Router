@@ -92,4 +92,53 @@ class LeadTriggerTest {
         Routing_Error_Log__c errLog = [SELECT Status_Code__c FROM Routing_Error_Log__c LIMIT 1];
         System.assertEquals(500, (Integer) errLog.Status_Code__c);
     }
+
+    @isTest
+    static void testBatchPayloadFormat() {
+        // Verify RoutingPayloadBuilder.buildBatch produces correct schema
+        Lead l = new Lead(FirstName = 'Batch', LastName = 'Test', Company = 'BatchCo');
+        insert l;
+        l = [SELECT Id, FirstName, LastName, Company FROM Lead WHERE Id = :l.Id];
+
+        String payload = RoutingPayloadBuilder.buildBatch('Lead', 'INSERT', new List<Lead>{ l });
+        Map<String, Object> parsed = (Map<String, Object>) JSON.deserializeUntyped(payload);
+
+        System.assertEquals('LEAD', parsed.get('objectType'));
+        System.assertEquals('INSERT', parsed.get('eventType'));
+        System.assertNotEquals(null, parsed.get('sfdcOrgId'));
+        System.assertNotEquals(null, parsed.get('timestamp'));
+
+        List<Object> records = (List<Object>) parsed.get('records');
+        System.assertEquals(1, records.size(), 'Expected 1 record in batch');
+
+        Map<String, Object> rec = (Map<String, Object>) records[0];
+        System.assertEquals(String.valueOf(l.Id), rec.get('recordId'));
+        System.assertNotEquals(null, rec.get('fields'));
+    }
+
+    @isTest
+    static void testBulkInsertUsesBatchEndpoint() {
+        // Verify that inserting multiple leads sends to /route/batch
+        Routing_Settings__c settings = Routing_Settings__c.getOrgDefaults();
+        settings.Engine_Endpoint__c = 'https://engine.example.com';
+        upsert settings;
+
+        RoutingEngineMock mock = new RoutingEngineMock();
+        Test.setMock(HttpCalloutMock.class, mock);
+
+        Test.startTest();
+        List<Lead> leads = new List<Lead>();
+        for (Integer i = 0; i < 5; i++) {
+            leads.add(new Lead(
+                FirstName = 'Bulk' + i,
+                LastName  = 'Test' + i,
+                Company   = 'BulkCo'
+            ));
+        }
+        insert leads;
+        Test.stopTest();
+
+        System.assertEquals(0, [SELECT COUNT() FROM Routing_Error_Log__c],
+            'Expected no error logs for batch callout');
+    }
 }

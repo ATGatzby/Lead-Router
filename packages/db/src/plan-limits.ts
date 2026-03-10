@@ -8,11 +8,11 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   FREE: {
     seats: 5,
-    routingLeadsPerMonth: 100,
+    routingLeadsPerMonth: 100000,
   },
   PAID: {
     seats: 20,
-    routingLeadsPerMonth: 1000,
+    routingLeadsPerMonth: 100000,
   },
 };
 

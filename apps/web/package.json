@@ -14,9 +14,9 @@
     "@lead-routing/sfdc": "workspace:*",
     "@tanstack/react-query": "^5.70.0",
     "@tanstack/react-query-devtools": "^5.70.0",
+    "bullmq": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "bullmq": "^5.0.0",
     "ioredis": "^5.9.3",
     "iron-session": "^8.0.4",
     "lucide-react": "^0.475.0",
@@ -25,7 +25,9 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "recharts": "^3.8.0",
     "resend": "^6.9.2",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {

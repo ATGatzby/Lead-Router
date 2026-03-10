@@ -19,10 +19,22 @@ trigger LeadTrigger on Lead (after insert, after update) {
         }
     }
 
-    if (!insertIds.isEmpty()) {
-        RoutingEngineCallout.sendAsync('Lead', insertIds, 'INSERT');
+    // Chunk into batches of 100 to stay within Salesforce callout limits
+    // (each @future context allows max 100 HTTP callouts)
+    for (Integer i = 0; i < insertIds.size(); i += 100) {
+        Integer endIdx = Math.min(i + 100, insertIds.size());
+        List<Id> chunk = new List<Id>();
+        for (Integer j = i; j < endIdx; j++) {
+            chunk.add(insertIds[j]);
+        }
+        RoutingEngineCallout.sendAsync('Lead', chunk, 'INSERT');
     }
-    if (!updateIds.isEmpty()) {
-        RoutingEngineCallout.sendAsync('Lead', updateIds, 'UPDATE');
+    for (Integer i = 0; i < updateIds.size(); i += 100) {
+        Integer endIdx = Math.min(i + 100, updateIds.size());
+        List<Id> chunk = new List<Id>();
+        for (Integer j = i; j < endIdx; j++) {
+            chunk.add(updateIds[j]);
+        }
+        RoutingEngineCallout.sendAsync('Lead', chunk, 'UPDATE');
     }
 }

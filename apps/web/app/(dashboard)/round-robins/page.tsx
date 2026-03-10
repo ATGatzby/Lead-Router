@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { GitFork, Plus, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CardSkeleton } from "@/components/skeletons/card-skeleton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,8 +40,6 @@ interface TeamsResponse {
 export default function RoundRobinsPage() {
   const qc = useQueryClient();
   const router = useRouter();
-
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -66,11 +66,6 @@ export default function RoundRobinsPage() {
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const invalidate = () => qc.invalidateQueries({ queryKey: ["teams"] });
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
@@ -86,14 +81,14 @@ export default function RoundRobinsPage() {
       if (!res.ok) throw new Error(data.error ?? "Failed to create team");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       invalidate();
       setCreateOpen(false);
       setCreateName("");
       setCreateDesc("");
-      showToast("Team created");
+      router.push(`/round-robins/${data.team.id}`);
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const deleteMutation = useMutation({
@@ -111,9 +106,9 @@ export default function RoundRobinsPage() {
       invalidate();
       setDeleteOpen(false);
       setDeleteTeam(null);
-      showToast("Team deleted");
+      toast.success("Team deleted");
     },
-    onError: () => showToast("Failed to delete team", "error"),
+    onError: () => toast.error("Failed to delete team"),
   });
 
   // ─── Dialog openers ────────────────────────────────────────────────────────
@@ -131,7 +126,7 @@ export default function RoundRobinsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Round Robin Teams</h1>
+          <h1 className="text-2xl font-semibold">Teams</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Create pools of reps for fair, sequential lead distribution.
           </p>
@@ -144,9 +139,7 @@ export default function RoundRobinsPage() {
 
       {/* Team list */}
       {teamsQuery.isLoading && (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          Loading teams...
-        </div>
+        <CardSkeleton count={3} />
       )}
 
       {teamsQuery.isError && (
@@ -157,8 +150,11 @@ export default function RoundRobinsPage() {
 
       {teamsQuery.isSuccess && teams.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <GitFork className="h-10 w-10 text-muted-foreground/30" />
+          <div className="h-20 w-20 rounded-full bg-muted/50 flex items-center justify-center">
+            <GitFork className="h-10 w-10 text-muted-foreground/30" />
+          </div>
           <p className="text-muted-foreground text-sm">No teams yet.</p>
+          <p className="text-xs text-muted-foreground">Teams distribute leads evenly among members using round-robin.</p>
           <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Create your first team
@@ -171,7 +167,7 @@ export default function RoundRobinsPage() {
           {teams.map((team) => (
             <div
               key={team.id}
-              className="rounded-xl border bg-card px-5 py-4 flex items-center gap-4"
+              className="rounded-xl border bg-card px-5 py-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-200 hover:border-primary/20"
             >
               {/* Icon */}
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -238,7 +234,7 @@ export default function RoundRobinsPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New Round Robin Team</DialogTitle>
+            <DialogTitle>New Team</DialogTitle>
             <DialogDescription>
               Give the team a name and an optional description.
             </DialogDescription>
@@ -331,18 +327,6 @@ export default function RoundRobinsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
-            toast.type === "error"
-              ? "bg-destructive text-white"
-              : "bg-foreground text-background"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
     </div>
   );
 }

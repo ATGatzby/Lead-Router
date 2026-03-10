@@ -147,6 +147,7 @@ export async function PUT(
               create: b.conditions.map((c: any, ci: number) => ({
                 groupId: c.groupId,
                 fieldName: c.fieldName,
+                fieldType: c.fieldType ?? "TEXT",
                 operator: c.operator,
                 value: c.value ?? null,
                 sortOrder: c.sortOrder ?? ci,

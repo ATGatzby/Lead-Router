@@ -3,6 +3,7 @@
 import { use, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   RotateCcw,
@@ -33,6 +34,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,8 +81,6 @@ export default function TeamDetailPage({
   const router = useRouter();
   const qc = useQueryClient();
 
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
   // Edit name/description dialog
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
@@ -87,9 +88,12 @@ export default function TeamDetailPage({
 
   // Add members dialog
   const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"individual" | "role" | "profile">("individual");
   const [addSearch, setAddSearch] = useState("");
   const [addDebouncedSearch, setAddDebouncedSearch] = useState("");
   const [addSelected, setAddSelected] = useState<Set<string>>(new Set());
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
+  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set());
 
   // Reset confirmation dialog
   const [resetOpen, setResetOpen] = useState(false);
@@ -121,6 +125,17 @@ export default function TeamDetailPage({
     enabled: addOpen,
   });
 
+  // Filters (roles + profiles) — loaded when add dialog opens in role/profile mode
+  const filtersQuery = useQuery<{ roles: string[]; profiles: string[] }>({
+    queryKey: ["user-filters"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/filters");
+      if (!res.ok) throw new Error("Failed to load filters");
+      return res.json();
+    },
+    enabled: addOpen && (addMode === "role" || addMode === "profile"),
+  });
+
   const team = teamQuery.data?.team;
   const existingUserIds = new Set(team?.members.map((m) => m.userId) ?? []);
 
@@ -130,11 +145,6 @@ export default function TeamDetailPage({
   );
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["teams", teamId] });
 
@@ -147,11 +157,11 @@ export default function TeamDetailPage({
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
   const addMembersMutation = useMutation({
-    mutationFn: async (userIds: string[]) => {
+    mutationFn: async (payload: { userIds?: string[]; roles?: string[]; profiles?: string[] }) => {
       const res = await fetch(`/api/teams/${teamId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add members");
@@ -161,11 +171,14 @@ export default function TeamDetailPage({
       invalidate();
       setAddOpen(false);
       setAddSelected(new Set());
+      setSelectedRoles(new Set());
+      setSelectedProfiles(new Set());
       setAddSearch("");
       setAddDebouncedSearch("");
-      showToast(`${data.added} member${data.added !== 1 ? "s" : ""} added`);
+      setAddMode("individual");
+      toast.success(`${data.added} member${data.added !== 1 ? "s" : ""} added`);
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const toggleStatusMutation = useMutation({
@@ -180,7 +193,7 @@ export default function TeamDetailPage({
       return data;
     },
     onSuccess: () => invalidate(),
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const removeMemberMutation = useMutation({
@@ -193,9 +206,9 @@ export default function TeamDetailPage({
     onSuccess: () => {
       invalidate();
       setRemoveMember(null);
-      showToast("Member removed");
+      toast.success("Member removed");
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const resetMutation = useMutation({
@@ -208,9 +221,9 @@ export default function TeamDetailPage({
     onSuccess: () => {
       invalidate();
       setResetOpen(false);
-      showToast("Rotation reset — next lead goes to position 1");
+      toast.success("Rotation reset — next lead goes to position 1");
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const editMutation = useMutation({
@@ -227,17 +240,22 @@ export default function TeamDetailPage({
     onSuccess: () => {
       invalidate();
       setEditOpen(false);
-      showToast("Team updated");
+      toast.success("Team updated");
     },
-    onError: (err: Error) => showToast(err.message, "error"),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   if (teamQuery.isLoading) {
     return (
-      <div className="text-center py-20 text-muted-foreground text-sm">
-        Loading team...
+      <div className="space-y-6">
+        <div className="flex gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 flex-1 rounded-xl" />
+          ))}
+        </div>
+        <TableSkeleton rows={5} columns={4} />
       </div>
     );
   }
@@ -453,8 +471,11 @@ export default function TeamDetailPage({
           if (!open) {
             setAddOpen(false);
             setAddSelected(new Set());
+            setSelectedRoles(new Set());
+            setSelectedProfiles(new Set());
             setAddSearch("");
             setAddDebouncedSearch("");
+            setAddMode("individual");
           }
         }}
       >
@@ -466,54 +487,149 @@ export default function TeamDetailPage({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search users..."
-                value={addSearch}
-                onChange={(e) => handleAddSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <div className="rounded-md border max-h-64 overflow-y-auto">
-              {usersQuery.isLoading && (
-                <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p>
-              )}
-              {usersQuery.isSuccess && availableUsers.length === 0 && (
-                <p className="text-center py-8 text-sm text-muted-foreground">
-                  {addDebouncedSearch
-                    ? `No users match "${addDebouncedSearch}"`
-                    : "All licensed users are already on this team."}
-                </p>
-              )}
-              {availableUsers.map((user) => (
-                <label
-                  key={user.id}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0"
-                >
-                  <Checkbox
-                    checked={addSelected.has(user.id)}
-                    onCheckedChange={(checked) => {
-                      setAddSelected((prev) => {
-                        const next = new Set(prev);
-                        checked ? next.add(user.id) : next.delete(user.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                  </div>
-                  {user.role && (
-                    <span className="text-xs text-muted-foreground shrink-0">{user.role}</span>
-                  )}
-                </label>
-              ))}
-            </div>
+          {/* Mode selector */}
+          <div className="flex rounded-lg border bg-muted p-0.5">
+            {(["individual", "role", "profile"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  addMode === mode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setAddMode(mode)}
+              >
+                {mode === "individual" ? "Individual" : mode === "role" ? "By Role" : "By Profile"}
+              </button>
+            ))}
           </div>
+
+          {/* Individual mode */}
+          {addMode === "individual" && (
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search users..."
+                  value={addSearch}
+                  onChange={(e) => handleAddSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <div className="rounded-md border max-h-64 overflow-y-auto">
+                {usersQuery.isLoading && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p>
+                )}
+                {usersQuery.isSuccess && availableUsers.length === 0 && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">
+                    {addDebouncedSearch
+                      ? `No users match "${addDebouncedSearch}"`
+                      : "All licensed users are already on this team."}
+                  </p>
+                )}
+                {availableUsers.map((user) => (
+                  <label
+                    key={user.id}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0"
+                  >
+                    <Checkbox
+                      checked={addSelected.has(user.id)}
+                      onCheckedChange={(checked) => {
+                        setAddSelected((prev) => {
+                          const next = new Set(prev);
+                          checked ? next.add(user.id) : next.delete(user.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{user.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    </div>
+                    {user.role && (
+                      <span className="text-xs text-muted-foreground shrink-0">{user.role}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By Role mode */}
+          {addMode === "role" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                All licensed, active users with the selected roles will be added.
+              </p>
+              <div className="rounded-md border max-h-64 overflow-y-auto">
+                {filtersQuery.isLoading && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">Loading roles...</p>
+                )}
+                {filtersQuery.isSuccess && (filtersQuery.data?.roles ?? []).length === 0 && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">
+                    No roles found among licensed users.
+                  </p>
+                )}
+                {(filtersQuery.data?.roles ?? []).map((role) => (
+                  <label
+                    key={role}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0"
+                  >
+                    <Checkbox
+                      checked={selectedRoles.has(role)}
+                      onCheckedChange={(checked) => {
+                        setSelectedRoles((prev) => {
+                          const next = new Set(prev);
+                          checked ? next.add(role) : next.delete(role);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm font-medium">{role}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By Profile mode */}
+          {addMode === "profile" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                All licensed, active users with the selected profiles will be added.
+              </p>
+              <div className="rounded-md border max-h-64 overflow-y-auto">
+                {filtersQuery.isLoading && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">Loading profiles...</p>
+                )}
+                {filtersQuery.isSuccess && (filtersQuery.data?.profiles ?? []).length === 0 && (
+                  <p className="text-center py-8 text-sm text-muted-foreground">
+                    No profiles found among licensed users.
+                  </p>
+                )}
+                {(filtersQuery.data?.profiles ?? []).map((profile) => (
+                  <label
+                    key={profile}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0"
+                  >
+                    <Checkbox
+                      checked={selectedProfiles.has(profile)}
+                      onCheckedChange={(checked) => {
+                        setSelectedProfiles((prev) => {
+                          const next = new Set(prev);
+                          checked ? next.add(profile) : next.delete(profile);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm font-medium">{profile}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button
@@ -521,18 +637,43 @@ export default function TeamDetailPage({
               onClick={() => {
                 setAddOpen(false);
                 setAddSelected(new Set());
+                setSelectedRoles(new Set());
+                setSelectedProfiles(new Set());
+                setAddMode("individual");
               }}
             >
               Cancel
             </Button>
-            <Button
-              disabled={addSelected.size === 0 || addMembersMutation.isPending}
-              onClick={() => addMembersMutation.mutate(Array.from(addSelected))}
-            >
-              {addMembersMutation.isPending
-                ? "Adding..."
-                : `Add ${addSelected.size > 0 ? addSelected.size : ""} Member${addSelected.size !== 1 ? "s" : ""}`}
-            </Button>
+            {addMode === "individual" && (
+              <Button
+                disabled={addSelected.size === 0 || addMembersMutation.isPending}
+                onClick={() => addMembersMutation.mutate({ userIds: Array.from(addSelected) })}
+              >
+                {addMembersMutation.isPending
+                  ? "Adding..."
+                  : `Add ${addSelected.size > 0 ? addSelected.size : ""} Member${addSelected.size !== 1 ? "s" : ""}`}
+              </Button>
+            )}
+            {addMode === "role" && (
+              <Button
+                disabled={selectedRoles.size === 0 || addMembersMutation.isPending}
+                onClick={() => addMembersMutation.mutate({ roles: Array.from(selectedRoles) })}
+              >
+                {addMembersMutation.isPending
+                  ? "Adding..."
+                  : `Add by ${selectedRoles.size} Role${selectedRoles.size !== 1 ? "s" : ""}`}
+              </Button>
+            )}
+            {addMode === "profile" && (
+              <Button
+                disabled={selectedProfiles.size === 0 || addMembersMutation.isPending}
+                onClick={() => addMembersMutation.mutate({ profiles: Array.from(selectedProfiles) })}
+              >
+                {addMembersMutation.isPending
+                  ? "Adding..."
+                  : `Add by ${selectedProfiles.size} Profile${selectedProfiles.size !== 1 ? "s" : ""}`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -630,18 +771,6 @@ export default function TeamDetailPage({
         </DialogContent>
       </Dialog>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
-            toast.type === "error"
-              ? "bg-destructive text-white"
-              : "bg-foreground text-background"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
     </div>
   );
 }

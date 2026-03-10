@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Search, Users, Check, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { RefreshCw, Search, Users, Check, Trash2, Shield, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,7 @@ interface User {
   department: string | null;
   isLicensed: boolean;
   lastRoutedAt: string | null;
+  teamMemberships?: Array<{ team: { id: string; name: string } }>;
 }
 
 interface UsersResponse {
@@ -90,9 +93,6 @@ export default function LicenseUsersPage() {
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Toast / feedback state
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
   // De-license feedback dialog (shows team cascade info)
   const [cascadeOpen, setCascadeOpen] = useState(false);
   const [cascadeInfo, setCascadeInfo] = useState<{ userName: string; teams: string[] } | null>(null);
@@ -105,11 +105,13 @@ export default function LicenseUsersPage() {
 
   // ─── Sync Dialog State ──────────────────────────────────────────────────────
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [syncMode, setSyncMode] = useState<"all" | "select" | null>(null);
+  const [syncMode, setSyncMode] = useState<"all" | "select" | "role" | "profile" | null>(null);
   const [syncStep, setSyncStep] = useState<1 | 2>(1);
   const [syncedUsers, setSyncedUsers] = useState<User[]>([]);
   const [syncDialogSelected, setSyncDialogSelected] = useState<Set<string>>(new Set());
   const [syncDialogSearch, setSyncDialogSearch] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
+  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set());
 
   // Search debounce
   const handleSearchChange = useCallback((val: string) => {
@@ -136,11 +138,6 @@ export default function LicenseUsersPage() {
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["users"] });
   };
@@ -158,7 +155,7 @@ export default function LicenseUsersPage() {
       setSyncedUsers(data.users ?? []);
       setSyncStep(2);
     },
-    onError: () => showToast("Sync failed", "error"),
+    onError: () => toast.error("Sync failed"),
   });
 
   const licenseMutation = useMutation({
@@ -176,7 +173,7 @@ export default function LicenseUsersPage() {
       }
       invalidate();
     },
-    onError: () => showToast("Action failed", "error"),
+    onError: () => toast.error("Action failed"),
   });
 
   const deleteMutation = useMutation({
@@ -189,9 +186,9 @@ export default function LicenseUsersPage() {
     onSuccess: () => {
       invalidate();
       setDeleteUser(null);
-      showToast("User deleted");
+      toast.success("User deleted");
     },
-    onError: () => showToast("Failed to delete user", "error"),
+    onError: () => toast.error("Failed to delete user"),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -209,9 +206,9 @@ export default function LicenseUsersPage() {
       setSelected(new Set());
       setBulkDeleteOpen(false);
       invalidate();
-      showToast(`${data.deleted} user${data.deleted === 1 ? "" : "s"} deleted`);
+      toast.success(`${data.deleted} user${data.deleted === 1 ? "" : "s"} deleted`);
     },
-    onError: () => showToast("Bulk delete failed", "error"),
+    onError: () => toast.error("Bulk delete failed"),
   });
 
   const bulkMutation = useMutation({
@@ -229,9 +226,9 @@ export default function LicenseUsersPage() {
       setSelected(new Set());
       invalidate();
       const action = variables.action === "license" ? "licensed" : "de-licensed";
-      showToast(`${data.affected} user${data.affected === 1 ? "" : "s"} ${action}`);
+      toast.success(`${data.affected} user${data.affected === 1 ? "" : "s"} ${action}`);
     },
-    onError: () => showToast("Bulk action failed", "error"),
+    onError: () => toast.error("Bulk action failed"),
   });
 
   // ─── Sync Dialog handlers ──────────────────────────────────────────────────
@@ -242,6 +239,8 @@ export default function LicenseUsersPage() {
     setSyncedUsers([]);
     setSyncDialogSelected(new Set());
     setSyncDialogSearch("");
+    setSelectedRoles(new Set());
+    setSelectedProfiles(new Set());
     setSyncDialogOpen(true);
   };
 
@@ -252,6 +251,8 @@ export default function LicenseUsersPage() {
     setSyncedUsers([]);
     setSyncDialogSelected(new Set());
     setSyncDialogSearch("");
+    setSelectedRoles(new Set());
+    setSelectedProfiles(new Set());
   };
 
   const handleSyncAndContinue = () => {
@@ -259,32 +260,33 @@ export default function LicenseUsersPage() {
   };
 
   const handleLicenseFromDialog = () => {
+    let userIds: string[] = [];
+
     if (syncMode === "all") {
-      const unlicensedIds = syncedUsers.filter((u) => !u.isLicensed).map((u) => u.id);
-      bulkMutation.mutate(
-        { userIds: unlicensedIds, action: "license" },
-        {
-          onSuccess: (data) => {
-            if (!data.error) {
-              closeSyncDialog();
-              showToast(`${data.affected} user${data.affected === 1 ? "" : "s"} licensed`);
-            }
-          },
-        }
-      );
+      userIds = syncedUsers.filter((u) => !u.isLicensed).map((u) => u.id);
+    } else if (syncMode === "role") {
+      userIds = syncedUsers
+        .filter((u) => !u.isLicensed && u.role && selectedRoles.has(u.role))
+        .map((u) => u.id);
+    } else if (syncMode === "profile") {
+      userIds = syncedUsers
+        .filter((u) => !u.isLicensed && u.profile && selectedProfiles.has(u.profile))
+        .map((u) => u.id);
     } else {
-      bulkMutation.mutate(
-        { userIds: Array.from(syncDialogSelected), action: "license" },
-        {
-          onSuccess: (data) => {
-            if (!data.error) {
-              closeSyncDialog();
-              showToast(`${data.affected} user${data.affected === 1 ? "" : "s"} licensed`);
-            }
-          },
-        }
-      );
+      userIds = Array.from(syncDialogSelected);
     }
+
+    bulkMutation.mutate(
+      { userIds, action: "license" },
+      {
+        onSuccess: (data) => {
+          if (!data.error) {
+            closeSyncDialog();
+            toast.success(`${data.affected} user${data.affected === 1 ? "" : "s"} licensed`);
+          }
+        },
+      }
+    );
   };
 
   // ─── Selection helpers ─────────────────────────────────────────────────────
@@ -346,6 +348,34 @@ export default function LicenseUsersPage() {
     });
   };
 
+  // ─── Role / Profile aggregation for sync dialog ──────────────────────────
+
+  const uniqueRoles = useMemo(() => {
+    const roles = [...new Set(syncedUsers.filter((u) => u.role).map((u) => u.role!))].sort();
+    return roles.map((role) => ({
+      name: role,
+      total: syncedUsers.filter((u) => u.role === role).length,
+      unlicensed: syncedUsers.filter((u) => u.role === role && !u.isLicensed).length,
+    }));
+  }, [syncedUsers]);
+
+  const uniqueProfiles = useMemo(() => {
+    const profiles = [...new Set(syncedUsers.filter((u) => u.profile).map((u) => u.profile!))].sort();
+    return profiles.map((profile) => ({
+      name: profile,
+      total: syncedUsers.filter((u) => u.profile === profile).length,
+      unlicensed: syncedUsers.filter((u) => u.profile === profile && !u.isLicensed).length,
+    }));
+  }, [syncedUsers]);
+
+  const roleLicenseCount = useMemo(() => {
+    return syncedUsers.filter((u) => !u.isLicensed && u.role && selectedRoles.has(u.role)).length;
+  }, [syncedUsers, selectedRoles]);
+
+  const profileLicenseCount = useMemo(() => {
+    return syncedUsers.filter((u) => !u.isLicensed && u.profile && selectedProfiles.has(u.profile)).length;
+  }, [syncedUsers, selectedProfiles]);
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -366,39 +396,41 @@ export default function LicenseUsersPage() {
             onClick={openSyncDialog}
           >
             <RefreshCw />
-            Sync Users
+            License Users
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, role..."
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, email, role..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9"
+            />
+          </div>
 
-        <Select
-          value={licensed}
-          onValueChange={(v) => {
-            setLicensed(v as typeof licensed);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All users</SelectItem>
-            <SelectItem value="licensed">Licensed</SelectItem>
-            <SelectItem value="unlicensed">Unlicensed</SelectItem>
-          </SelectContent>
-        </Select>
+          <Select
+            value={licensed}
+            onValueChange={(v) => {
+              setLicensed(v as typeof licensed);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All users</SelectItem>
+              <SelectItem value="licensed">Licensed</SelectItem>
+              <SelectItem value="unlicensed">Unlicensed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Table */}
@@ -415,6 +447,7 @@ export default function LicenseUsersPage() {
               </TableHead>
               <TableHead>User</TableHead>
               <TableHead className="hidden md:table-cell">Role / Profile</TableHead>
+              <TableHead className="hidden lg:table-cell">Team</TableHead>
               <TableHead className="hidden lg:table-cell">Last Routed</TableHead>
               <TableHead className="text-right w-32">Licensed</TableHead>
               <TableHead className="w-10" />
@@ -424,15 +457,15 @@ export default function LicenseUsersPage() {
           <TableBody>
             {usersQuery.isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                  Loading users...
+                <TableCell colSpan={7} className="p-0">
+                  <TableSkeleton rows={8} columns={5} />
                 </TableCell>
               </TableRow>
             )}
 
             {usersQuery.isError && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-destructive">
+                <TableCell colSpan={7} className="text-center py-12 text-destructive">
                   Failed to load users. Try refreshing.
                 </TableCell>
               </TableRow>
@@ -440,7 +473,7 @@ export default function LicenseUsersPage() {
 
             {usersQuery.isSuccess && users.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                   <Users className="mx-auto mb-2 size-8 opacity-30" />
                   {debouncedSearch
                     ? `No users match "${debouncedSearch}"`
@@ -482,6 +515,20 @@ export default function LicenseUsersPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </div>
+                  </TableCell>
+
+                  <TableCell className="hidden lg:table-cell">
+                    {user.teamMemberships?.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.teamMemberships.map((tm: any) => (
+                          <Badge key={tm.team.id} variant="outline" className="text-xs">
+                            {tm.team.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
 
                   <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
@@ -622,7 +669,7 @@ export default function LicenseUsersPage() {
                     </p>
                   </button>
 
-                  {/* Select Users */}
+                  {/* Individual Users */}
                   <button
                     onClick={() => setSyncMode("select")}
                     className={cn(
@@ -634,9 +681,45 @@ export default function LicenseUsersPage() {
                       <Search className="h-5 w-5 text-primary" />
                       {syncMode === "select" && <Check className="h-4 w-4 text-primary" />}
                     </div>
-                    <p className="text-sm font-medium">Select Users</p>
+                    <p className="text-sm font-medium">Individual Users</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Pick specific users to license
+                    </p>
+                  </button>
+
+                  {/* By Role */}
+                  <button
+                    onClick={() => setSyncMode("role")}
+                    className={cn(
+                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
+                      syncMode === "role" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <Shield className="h-5 w-5 text-primary" />
+                      {syncMode === "role" && <Check className="h-4 w-4 text-primary" />}
+                    </div>
+                    <p className="text-sm font-medium">By Role</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      License users by their Salesforce role
+                    </p>
+                  </button>
+
+                  {/* By Profile */}
+                  <button
+                    onClick={() => setSyncMode("profile")}
+                    className={cn(
+                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
+                      syncMode === "profile" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <UserCog className="h-5 w-5 text-primary" />
+                      {syncMode === "profile" && <Check className="h-4 w-4 text-primary" />}
+                    </div>
+                    <p className="text-sm font-medium">By Profile</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      License users by their Salesforce profile
                     </p>
                   </button>
                 </div>
@@ -797,6 +880,142 @@ export default function LicenseUsersPage() {
               </DialogFooter>
             </>
           )}
+
+          {syncStep === 2 && syncMode === "role" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>License by Role</DialogTitle>
+                <DialogDescription>
+                  {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} synced.
+                  Select which roles to license.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="rounded-md border overflow-hidden">
+                  <div className="max-h-64 overflow-y-auto">
+                    {uniqueRoles.length === 0 && (
+                      <p className="text-center py-8 text-sm text-muted-foreground">
+                        No roles found among synced users.
+                      </p>
+                    )}
+                    {uniqueRoles.map((role) => (
+                      <label
+                        key={role.name}
+                        className="flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 cursor-pointer hover:bg-accent"
+                      >
+                        <Checkbox
+                          checked={selectedRoles.has(role.name)}
+                          onCheckedChange={() => {
+                            setSelectedRoles((prev) => {
+                              const next = new Set(prev);
+                              next.has(role.name) ? next.delete(role.name) : next.add(role.name);
+                              return next;
+                            });
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{role.name}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {role.total} user{role.total !== 1 ? "s" : ""}
+                          {role.unlicensed > 0 && ` (${role.unlicensed} unlicensed)`}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedRoles.size > 0 && (
+                  <p className="text-xs text-muted-foreground text-right">
+                    {roleLicenseCount} user{roleLicenseCount !== 1 ? "s" : ""} will be licensed
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={closeSyncDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={roleLicenseCount === 0 || bulkMutation.isPending}
+                  onClick={handleLicenseFromDialog}
+                >
+                  {bulkMutation.isPending
+                    ? "Licensing..."
+                    : `License ${roleLicenseCount > 0 ? roleLicenseCount : ""} User${roleLicenseCount !== 1 ? "s" : ""}`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {syncStep === 2 && syncMode === "profile" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>License by Profile</DialogTitle>
+                <DialogDescription>
+                  {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} synced.
+                  Select which profiles to license.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="rounded-md border overflow-hidden">
+                  <div className="max-h-64 overflow-y-auto">
+                    {uniqueProfiles.length === 0 && (
+                      <p className="text-center py-8 text-sm text-muted-foreground">
+                        No profiles found among synced users.
+                      </p>
+                    )}
+                    {uniqueProfiles.map((profile) => (
+                      <label
+                        key={profile.name}
+                        className="flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 cursor-pointer hover:bg-accent"
+                      >
+                        <Checkbox
+                          checked={selectedProfiles.has(profile.name)}
+                          onCheckedChange={() => {
+                            setSelectedProfiles((prev) => {
+                              const next = new Set(prev);
+                              next.has(profile.name) ? next.delete(profile.name) : next.add(profile.name);
+                              return next;
+                            });
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{profile.name}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {profile.total} user{profile.total !== 1 ? "s" : ""}
+                          {profile.unlicensed > 0 && ` (${profile.unlicensed} unlicensed)`}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedProfiles.size > 0 && (
+                  <p className="text-xs text-muted-foreground text-right">
+                    {profileLicenseCount} user{profileLicenseCount !== 1 ? "s" : ""} will be licensed
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={closeSyncDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={profileLicenseCount === 0 || bulkMutation.isPending}
+                  onClick={handleLicenseFromDialog}
+                >
+                  {bulkMutation.isPending
+                    ? "Licensing..."
+                    : `License ${profileLicenseCount > 0 ? profileLicenseCount : ""} User${profileLicenseCount !== 1 ? "s" : ""}`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -806,7 +1025,7 @@ export default function LicenseUsersPage() {
           <DialogHeader>
             <DialogTitle>Delete &quot;{deleteUser?.name}&quot;?</DialogTitle>
             <DialogDescription>
-              This will permanently remove the user from the system and all Round Robin teams.
+              This will permanently remove the user from the system and all teams.
               {deleteUser?.isLicensed && " Their licensed seat will be freed."}
               {" "}This cannot be undone.
             </DialogDescription>
@@ -833,7 +1052,7 @@ export default function LicenseUsersPage() {
             <DialogTitle>Delete {selected.size} user{selected.size !== 1 ? "s" : ""}?</DialogTitle>
             <DialogDescription>
               This will permanently remove {selected.size === 1 ? "this user" : `all ${selected.size} selected users`} from
-              the system and any Round Robin teams they belong to. Licensed seats will be freed.
+              the system and any teams they belong to. Licensed seats will be freed.
               This cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -858,7 +1077,7 @@ export default function LicenseUsersPage() {
           <DialogHeader>
             <DialogTitle>User de-licensed</DialogTitle>
             <DialogDescription>
-              {cascadeInfo?.userName} was removed from the following Round Robin team
+              {cascadeInfo?.userName} was removed from the following team
               {(cascadeInfo?.teams.length ?? 0) > 1 ? "s" : ""}:
             </DialogDescription>
           </DialogHeader>
@@ -871,18 +1090,6 @@ export default function LicenseUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all ${
-            toast.type === "error"
-              ? "bg-destructive text-white"
-              : "bg-foreground text-background"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
     </div>
   );
 }

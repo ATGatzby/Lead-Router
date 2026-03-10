@@ -47,17 +47,23 @@ interface MatchConfigInput {
 }
 
 // GET /api/rules?object=LEAD — list rules for object, ordered by priority
+// When no `object` param is provided, returns ALL rules across all object types.
 export async function GET(req: NextRequest) {
   try {
     const orgId = await getOrgIdFromHeaders();
-    const objectType = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? "LEAD";
+    const objectParam = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? null;
 
-    if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
+    if (objectParam && !["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
+    const where: { orgId: string; objectType?: "LEAD" | "CONTACT" | "ACCOUNT" } = { orgId };
+    if (objectParam) {
+      where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT";
+    }
+
     const rules = await prisma.routingRule.findMany({
-      where: { orgId, objectType: objectType as "LEAD" | "CONTACT" | "ACCOUNT" },
+      where,
       orderBy: { priority: "asc" },
       include: {
         conditions: { orderBy: { sortOrder: "asc" } },

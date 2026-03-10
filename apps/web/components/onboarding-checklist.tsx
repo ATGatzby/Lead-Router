@@ -67,10 +67,10 @@ export function OnboardingChecklist() {
   };
 
   return (
-    <div className="mx-2 mb-3 rounded-lg border bg-card overflow-hidden">
+    <div className="mx-2 mb-3 rounded-lg border-sidebar-border bg-sidebar-accent overflow-hidden">
       <button
         onClick={() => setExpanded((p) => !p)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-sidebar-accent/80 transition-colors"
       >
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium leading-none">Getting started</p>
@@ -80,7 +80,7 @@ export function OnboardingChecklist() {
               All done!
             </p>
           ) : (
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-[11px] text-sidebar-muted-foreground mt-0.5">
               {data.completedCount}/{data.total} steps done
             </p>
           )}
@@ -92,22 +92,22 @@ export function OnboardingChecklist() {
               tabIndex={0}
               onClick={handleDismiss}
               onKeyDown={(e) => e.key === "Enter" && handleDismiss(e as unknown as React.MouseEvent)}
-              className="rounded p-0.5 hover:bg-muted text-muted-foreground"
+              className="rounded p-0.5 hover:bg-sidebar-accent text-sidebar-muted-foreground"
               aria-label="Dismiss"
             >
               <X className="h-3 w-3" />
             </span>
           )}
           {expanded ? (
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronUp className="h-3.5 w-3.5 text-sidebar-muted-foreground" />
           ) : (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronDown className="h-3.5 w-3.5 text-sidebar-muted-foreground" />
           )}
         </div>
       </button>
 
       {/* Progress bar */}
-      <div className="h-1 bg-muted">
+      <div className="h-1 bg-sidebar-border">
         <div
           className={cn(
             "h-full transition-all duration-500",
@@ -124,12 +124,12 @@ export function OnboardingChecklist() {
               {item.done ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
               ) : (
-                <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <Circle className="h-3.5 w-3.5 text-sidebar-muted-foreground shrink-0 mt-0.5" />
               )}
               <span
                 className={cn(
                   "text-[11px] leading-normal",
-                  item.done ? "text-muted-foreground line-through" : "text-foreground"
+                  item.done ? "text-sidebar-muted-foreground line-through" : "text-sidebar-foreground"
                 )}
               >
                 {item.label}

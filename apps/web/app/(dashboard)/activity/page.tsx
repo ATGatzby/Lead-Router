@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover } from "radix-ui";
 import { cn } from "@/lib/utils";
+import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -83,15 +84,16 @@ function RecordSnapshotPopover({ snapshot }: { snapshot: Record<string, unknown>
 
 function StatusBadge({ status }: { status: RoutingLog["status"] }) {
   const cfg = {
-    SUCCESS: "bg-green-50 text-green-700 border-green-200",
-    FAILED: "bg-red-50 text-red-700 border-red-200",
-    UNMATCHED: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    RETRY: "bg-blue-50 text-blue-700 border-blue-200",
-    MERGED: "bg-purple-50 text-purple-700 border-purple-200",
+    SUCCESS: "bg-green-50 text-green-700 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800",
+    FAILED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800",
+    UNMATCHED: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/50 dark:text-yellow-400 dark:border-yellow-800",
+    RETRY: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:border-blue-800",
+    MERGED: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-400 dark:border-purple-800",
   }[status];
   const label = { SUCCESS: "Success", FAILED: "Failed", UNMATCHED: "Unmatched", RETRY: "Retry", MERGED: "Merged" }[status];
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", cfg)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium", cfg)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
       {label}
     </span>
   );
@@ -125,6 +127,8 @@ export default function HistoryPage() {
     to: "",
     object: "ALL",
     status: "ALL",
+    ruleId: "ALL",
+    teamId: "ALL",
     assignee: "",
   });
 
@@ -134,6 +138,26 @@ export default function HistoryPage() {
       const res = await fetch(`/api/routing-logs?${buildQuery(filters, page)}`);
       if (!res.ok) throw new Error("Failed to load logs");
       return res.json();
+    },
+  });
+
+  const { data: rules } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["rules-for-filter"],
+    queryFn: async () => {
+      const res = await fetch("/api/rules");
+      if (!res.ok) throw new Error("Failed to load rules");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.rules ?? [];
+    },
+  });
+
+  const { data: teams } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["teams-for-filter"],
+    queryFn: async () => {
+      const res = await fetch("/api/teams");
+      if (!res.ok) throw new Error("Failed to load teams");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.teams ?? [];
     },
   });
 
@@ -171,56 +195,80 @@ export default function HistoryPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <input
-          type="date"
-          value={filters.from}
-          onChange={(e) => setFilter("from", e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
-          placeholder="From"
-        />
-        <input
-          type="date"
-          value={filters.to}
-          onChange={(e) => setFilter("to", e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
-          placeholder="To"
-        />
-        <Select value={filters.object} onValueChange={(v) => setFilter("object", v)}>
-          <SelectTrigger className="h-8 w-36 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Objects</SelectItem>
-            <SelectItem value="LEAD">Lead</SelectItem>
-            <SelectItem value="CONTACT">Contact</SelectItem>
-            <SelectItem value="ACCOUNT">Account</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filters.status} onValueChange={(v) => setFilter("status", v)}>
-          <SelectTrigger className="h-8 w-36 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Statuses</SelectItem>
-            <SelectItem value="SUCCESS">Success</SelectItem>
-            <SelectItem value="FAILED">Failed</SelectItem>
-            <SelectItem value="UNMATCHED">Unmatched</SelectItem>
-            <SelectItem value="RETRY">Retry</SelectItem>
-            <SelectItem value="MERGED">Merged</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          className="h-8 w-44 text-sm"
-          placeholder="Search assignee…"
-          value={filters.assignee}
-          onChange={(e) => setFilter("assignee", e.target.value)}
-        />
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => setFilter("from", e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+            placeholder="From"
+          />
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => setFilter("to", e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+            placeholder="To"
+          />
+          <Select value={filters.object} onValueChange={(v) => setFilter("object", v)}>
+            <SelectTrigger className="h-8 w-36 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Objects</SelectItem>
+              <SelectItem value="LEAD">Lead</SelectItem>
+              <SelectItem value="CONTACT">Contact</SelectItem>
+              <SelectItem value="ACCOUNT">Account</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filters.status} onValueChange={(v) => setFilter("status", v)}>
+            <SelectTrigger className="h-8 w-36 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Statuses</SelectItem>
+              <SelectItem value="SUCCESS">Success</SelectItem>
+              <SelectItem value="FAILED">Failed</SelectItem>
+              <SelectItem value="UNMATCHED">Unmatched</SelectItem>
+              <SelectItem value="RETRY">Retry</SelectItem>
+              <SelectItem value="MERGED">Merged</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filters.ruleId} onValueChange={(v) => setFilter("ruleId", v)}>
+            <SelectTrigger className="h-8 w-44 text-sm">
+              <SelectValue placeholder="All Routes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Routes</SelectItem>
+              {rules?.map((rule) => (
+                <SelectItem key={rule.id} value={rule.id}>{rule.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filters.teamId} onValueChange={(v) => setFilter("teamId", v)}>
+            <SelectTrigger className="h-8 w-44 text-sm">
+              <SelectValue placeholder="All Teams" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Teams</SelectItem>
+              {teams?.map((team) => (
+                <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            className="h-8 w-44 text-sm"
+            placeholder="Search assignee…"
+            value={filters.assignee}
+            onChange={(e) => setFilter("assignee", e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Loading / Error */}
       {query.isLoading && (
-        <div className="text-center py-16 text-muted-foreground text-sm">Loading…</div>
+        <TableSkeleton rows={10} columns={7} />
       )}
       {query.isError && (
         <div className="text-center py-16 text-destructive text-sm">Failed to load history.</div>
@@ -229,8 +277,11 @@ export default function HistoryPage() {
       {/* Empty */}
       {query.isSuccess && logs.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <History className="h-10 w-10 text-muted-foreground/30" />
+          <div className="h-20 w-20 rounded-full bg-muted/50 flex items-center justify-center">
+            <History className="h-10 w-10 text-muted-foreground/30" />
+          </div>
           <p className="text-muted-foreground text-sm">No routing events found.</p>
+          <p className="text-xs text-muted-foreground">Routing events will appear here once your rules start processing records.</p>
         </div>
       )}
 
@@ -279,10 +330,9 @@ export default function HistoryPage() {
 
               {/* Rule */}
               <div className="min-w-0">
-                <span className="text-sm truncate block">{log.ruleName ?? <em className="text-muted-foreground">No match</em>}</span>
-                {log.pathLabel && (
-                  <span className="text-xs text-muted-foreground truncate block">{log.pathLabel}</span>
-                )}
+                <span className="text-sm truncate block">
+                  {log.pathLabel ?? log.ruleName ?? <em className="text-muted-foreground">No match</em>}
+                </span>
               </div>
 
               {/* Assignee */}

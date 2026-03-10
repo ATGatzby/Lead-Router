@@ -1,8 +1,11 @@
 import Fastify from "fastify";
 import { loadAllRules, startCacheInvalidationListener } from "./cache.js";
 import { routePlugin } from "./routes/route.js";
-// Import worker to start it (side-effect: registers BullMQ event handlers)
+import { analyticsPlugin } from "./routes/analytics.js";
+// Import workers to start them (side-effect: registers BullMQ event handlers)
 import "./queue.js";
+import "./batch-queue.js";
+import "./analytics-queue.js";
 
 const app = Fastify({
   logger: {
@@ -35,6 +38,7 @@ app.get("/health", async () => ({
 const start = async () => {
   try {
     await app.register(routePlugin);
+    await app.register(analyticsPlugin);
 
     // Pre-warm rule cache from DB
     await loadAllRules();

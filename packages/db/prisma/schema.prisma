@@ -98,7 +98,9 @@ model Organization {
   auditLogs    AuditLog[]
   sfdcQueues   SfdcQueue[]
   fieldSchemas FieldSchema[]
-  billingInfo  BillingInfo?
+  billingInfo             BillingInfo?
+  routingDailyAggregates  RoutingDailyAggregate[]
+  conversionTracking      ConversionTracking[]
 
   @@map("organizations")
 }
@@ -235,7 +237,8 @@ model RoutingBranch {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  conditions BranchCondition[]
+  conditions  BranchCondition[]
+  routingLogs RoutingLog[]
 
   @@map("routing_branches")
 }
@@ -246,6 +249,7 @@ model BranchCondition {
   branch    RoutingBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
   groupId   String
   fieldName String
+  fieldType String        @default("TEXT")
   operator  String
   value     String?
   sortOrder Int           @default(0)
@@ -327,12 +331,20 @@ model RoutingLog {
   retryCount      Int             @default(0)
   dismissed       Boolean         @default(false)
   recordSnapshot  Json?           // full field payload from SFDC at time of routing
-  createdAt       DateTime        @default(now())
+  teamId             String?
+  teamName           String?
+  routingDurationMs  Int?              // ms from webhook receipt → SFDC assignment
+  branchId           String?           // FK → RoutingBranch for path-level analytics
+  createdAt          DateTime        @default(now())
 
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org                Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branch             RoutingBranch?  @relation(fields: [branchId], references: [id])
+  conversionTracking ConversionTracking?
 
   @@index([orgId, createdAt])
   @@index([orgId, status])
+  @@index([orgId, teamId])
+  @@index([orgId, ruleId])
   @@map("routing_logs")
 }
 
@@ -413,4 +425,62 @@ model Session {
 
   @@index([orgId])
   @@map("sessions")
+}
+
+model RoutingDailyAggregate {
+  id             String          @id @default(cuid())
+  orgId          String
+  date           DateTime        @db.Date
+  ruleId         String?
+  pathLabel      String?
+  branchId       String?
+  teamId         String?
+  assigneeId     String?
+  objectType     SfdcObjectType?
+  successCount   Int             @default(0)
+  failedCount    Int             @default(0)
+  unmatchedCount Int             @default(0)
+  mergedCount    Int             @default(0)
+  totalCount     Int             @default(0)
+  avgDurationMs  Float?
+  minDurationMs  Int?
+  maxDurationMs  Int?
+  p50DurationMs  Int?
+  p95DurationMs  Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, date, ruleId, pathLabel, branchId, teamId, assigneeId, objectType])
+  @@index([orgId, date])
+  @@map("routing_daily_aggregates")
+}
+
+model ConversionTracking {
+  id                   String    @id @default(cuid())
+  orgId                String
+  routingLogId         String    @unique
+  sfdcLeadId           String
+  isConverted          Boolean   @default(false)
+  convertedAt          DateTime?
+  opportunityId        String?
+  opportunityAmount    Float?
+  opportunityStageName String?
+  ruleId               String?
+  ruleName             String?
+  pathLabel            String?
+  teamId               String?
+  assigneeId           String?
+  assigneeName         String?
+  lastCheckedAt        DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  routingLog RoutingLog   @relation(fields: [routingLogId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, isConverted])
+  @@index([orgId, sfdcLeadId])
+  @@map("conversion_tracking")
 }

@@ -26,7 +26,7 @@ export async function Topbar() {
     .toUpperCase();
 
   return (
-    <header className="flex h-14 items-center justify-between border-b px-6 bg-background">
+    <header className="flex h-14 items-center justify-between border-b border-border/50 px-6 bg-background/80 backdrop-blur-sm">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span className="font-medium text-foreground">
           {org?.billingInfo?.entityName ?? org?.sfdcOrgId ?? "—"}

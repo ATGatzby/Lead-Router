@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const status = p.get("status")?.toUpperCase();
     const assignee = p.get("assignee");
     const ruleId = p.get("ruleId");
+    const teamId = p.get("teamId");
 
     const VALID_OBJECTS = ["LEAD", "CONTACT", "ACCOUNT"];
     const VALID_STATUSES = ["SUCCESS", "FAILED", "UNMATCHED", "RETRY", "MERGED"];
@@ -40,6 +41,9 @@ export async function GET(req: NextRequest) {
     }
     if (ruleId) {
       where.ruleId = ruleId;
+    }
+    if (teamId) {
+      where.teamId = teamId;
     }
 
     const [total, logs] = await Promise.all([

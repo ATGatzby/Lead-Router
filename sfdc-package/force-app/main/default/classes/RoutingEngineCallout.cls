@@ -23,10 +23,9 @@ public with sharing class RoutingEngineCallout {
 
         List<SObject> records = queryRecords(objectType, recordIds);
 
-        for (SObject record : records) {
-            String payload = RoutingPayloadBuilder.build(objectType, eventType, record);
-            sendPayload(payload, secret, engineEndpoint);
-        }
+        // Send all records in a single batch HTTP call to /route/batch
+        String batchPayload = RoutingPayloadBuilder.buildBatch(objectType, eventType, records);
+        sendBatchPayload(batchPayload, secret, engineEndpoint);
     }
 
     // ─── Private helpers ───────────────────────────────────────────────────────
@@ -44,6 +43,34 @@ public with sharing class RoutingEngineCallout {
         return Database.query(soql);
     }
 
+    private static void sendBatchPayload(String payload, String secret, String engineEndpoint) {
+        String signature = hmacSha256(payload, secret);
+
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint(engineEndpoint.removeEnd('/') + '/route/batch');
+        req.setMethod('POST');
+        req.setHeader('Content-Type', 'application/json');
+        req.setHeader('X-Sfdc-Org-Id', UserInfo.getOrganizationId());
+        req.setHeader('X-Signature-256', 'sha256=' + signature);
+        req.setBody(payload);
+        req.setTimeout(30000); // 30s for batch
+
+        Http http = new Http();
+        HttpResponse res;
+
+        try {
+            res = http.send(req);
+        } catch (Exception e) {
+            logError(payload, 0, 'Batch callout exception: ' + e.getMessage());
+            return;
+        }
+
+        if (res.getStatusCode() != 200 && res.getStatusCode() != 202) {
+            logError(payload, res.getStatusCode(), res.getBody());
+        }
+    }
+
+    // Kept for backward compatibility (single-record POST to /route)
     private static void sendPayload(String payload, String secret, String engineEndpoint) {
         String signature = hmacSha256(payload, secret);
 

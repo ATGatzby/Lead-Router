@@ -46,6 +46,10 @@ export async function GET(req: NextRequest) {
           isLicensed: true,
           lastRoutedAt: true,
           syncedAt: true,
+          teamMemberships: {
+            where: { status: "ACTIVE" },
+            select: { team: { select: { id: true, name: true } } },
+          },
         },
       }),
       prisma.user.count({ where }),

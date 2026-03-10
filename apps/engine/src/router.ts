@@ -6,6 +6,7 @@ import { getNextMember } from "./round-robin.js";
 import { getOrgConnection, getSfdcUserId, getSfdcQueueId } from "./sfdc.js";
 import { enqueueRetry } from "./queue.js";
 import { fireWebhook } from "./webhook.js";
+import { updateAggregates, createConversionTracking } from "./aggregate.js";
 
 // ─── Payload type ─────────────────────────────────────────────────────────
 
@@ -32,6 +33,8 @@ interface AssigneeInfo {
   assigneeId: string;   // internal DB ID (for logging)
   assigneeName: string;
   assignmentType: string;
+  teamId?: string;
+  teamName?: string;
 }
 
 async function resolveAssigneeFromFields(
@@ -56,11 +59,17 @@ async function resolveAssigneeFromFields(
   }
 
   if (assignmentType === "ROUND_ROBIN" && assigneeTeamId) {
-    const activeMembers = await prisma.teamMember.findMany({
-      where: { teamId: assigneeTeamId, status: "ACTIVE" },
-      orderBy: { createdAt: "asc" },
-      include: { user: { select: { id: true, sfdcUserId: true, name: true, email: true } } },
-    });
+    const [activeMembers, team] = await Promise.all([
+      prisma.teamMember.findMany({
+        where: { teamId: assigneeTeamId, status: "ACTIVE" },
+        orderBy: { createdAt: "asc" },
+        include: { user: { select: { id: true, sfdcUserId: true, name: true, email: true } } },
+      }),
+      prisma.roundRobinTeam.findUnique({
+        where: { id: assigneeTeamId },
+        select: { id: true, name: true },
+      }),
+    ]);
 
     if (activeMembers.length === 0) return null;
 
@@ -92,6 +101,8 @@ async function resolveAssigneeFromFields(
       assigneeId: next.userId,
       assigneeName: next.name,
       assignmentType: "ROUND_ROBIN",
+      teamId: team?.id,
+      teamName: team?.name,
     };
   }
 
@@ -147,7 +158,8 @@ interface MatchResult {
 async function runMatcher(
   fields: Record<string, unknown>,
   matchConfig: CachedMatchConfig,
-  conn: any
+  conn: any,
+  currentRecordId: string
 ): Promise<MatchResult | null> {
   const email = String(fields["Email"] ?? fields["email"] ?? "").toLowerCase().trim();
   const phone = String(fields["Phone"] ?? fields["phone"] ?? fields["MobilePhone"] ?? "").trim();
@@ -171,7 +183,7 @@ async function runMatcher(
   // 1. Check Leads
   if (matchConfig.checkLeads && email) {
     const lead = await soqlFirst(
-      `SELECT Id, OwnerId FROM Lead WHERE Email = '${email.replace(/'/g, "\\'")}' AND IsConverted = false LIMIT 1`
+      `SELECT Id, OwnerId FROM Lead WHERE Email = '${email.replace(/'/g, "\\'")}' AND IsConverted = false AND Id != '${currentRecordId}' LIMIT 1`
     );
     if (lead) return { type: "LEAD", ownerId: lead.OwnerId, recordId: lead.Id };
   }
@@ -196,7 +208,7 @@ async function runMatcher(
   if (matchConfig.matchPhone && phone) {
     if (matchConfig.checkLeads) {
       const lead = await soqlFirst(
-        `SELECT Id, OwnerId FROM Lead WHERE Phone = '${phone.replace(/'/g, "\\'")}' AND IsConverted = false LIMIT 1`
+        `SELECT Id, OwnerId FROM Lead WHERE Phone = '${phone.replace(/'/g, "\\'")}' AND IsConverted = false AND Id != '${currentRecordId}' LIMIT 1`
       );
       if (lead) return { type: "LEAD", ownerId: lead.OwnerId, recordId: lead.Id };
     }
@@ -213,7 +225,7 @@ async function runMatcher(
 
 // ─── Main router ─────────────────────────────────────────────────────────
 
-export async function routeRecord(payload: RoutingPayload): Promise<RoutingResult> {
+export async function routeRecord(payload: RoutingPayload, startMs?: number): Promise<RoutingResult> {
   const { orgId, objectType, eventType, recordId, fields } = payload;
   const rules = getActiveRules(orgId, objectType);
 
@@ -227,13 +239,13 @@ export async function routeRecord(payload: RoutingPayload): Promise<RoutingResul
     const isNewStyle = rule.branches.length > 0 || rule.matchConfig !== null || rule.defaultOwnerType !== null;
 
     if (isNewStyle) {
-      const result = await routeNewStyle(rule, payload);
+      const result = await routeNewStyle(rule, payload, startMs);
       if (result !== null) return result;
       // null = this rule produced no outcome, try next rule (shouldn't happen for new-style but safety)
     } else {
       // Legacy routing: evaluate conditions + single assignee
       if (evaluateRule(fields, rule.conditions)) {
-        const result = await routeLegacy(rule, payload);
+        const result = await routeLegacy(rule, payload, startMs);
         if (result !== null) return result;
       }
     }
@@ -247,9 +259,15 @@ export async function routeRecord(payload: RoutingPayload): Promise<RoutingResul
       objectType,
       eventType,
       status: "UNMATCHED",
+      routingDurationMs: startMs ? Date.now() - startMs : null,
       recordSnapshot: fields,
     },
   });
+  updateAggregates({
+    orgId, date: new Date(), ruleId: null, pathLabel: null, branchId: null,
+    teamId: null, assigneeId: null, objectType, status: "UNMATCHED",
+    durationMs: startMs ? Date.now() - startMs : null,
+  }).catch(() => {});
   return "unmatched";
 }
 
@@ -257,7 +275,8 @@ export async function routeRecord(payload: RoutingPayload): Promise<RoutingResul
 
 async function routeNewStyle(
   rule: CachedRule,
-  payload: RoutingPayload
+  payload: RoutingPayload,
+  startMs?: number
 ): Promise<RoutingResult | null> {
   const { orgId, objectType, eventType, recordId, fields } = payload;
 
@@ -271,7 +290,7 @@ async function routeNewStyle(
     }
 
     if (conn) {
-      const matchResult = await runMatcher(fields, rule.matchConfig, conn);
+      const matchResult = await runMatcher(fields, rule.matchConfig, conn, recordId);
 
       if (matchResult) {
         const mc = rule.matchConfig;
@@ -289,19 +308,31 @@ async function routeNewStyle(
                     orgId, sfdcRecordId: recordId, objectType, eventType,
                     ruleId: rule.id, ruleName: rule.name,
                     status: "FAILED", errorMessage: String(err),
+                    routingDurationMs: startMs ? Date.now() - startMs : null,
                     isDryRun: rule.isDryRun, recordSnapshot: fields,
                   },
                 });
+                updateAggregates({
+                  orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+                  teamId: null, assigneeId: null, objectType, status: "FAILED",
+                  durationMs: startMs ? Date.now() - startMs : null,
+                }).catch(() => {});
                 return "unmatched";
               }
             }
-            await prisma.routingLog.create({
+            const mergeLog = await prisma.routingLog.create({
               data: {
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
-                status: "MERGED", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                status: "MERGED", routingDurationMs: startMs ? Date.now() - startMs : null,
+                isDryRun: rule.isDryRun, recordSnapshot: fields,
               },
             });
+            updateAggregates({
+              orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+              teamId: null, assigneeId: null, objectType, status: "MERGED",
+              durationMs: startMs ? Date.now() - startMs : null,
+            }).catch(() => {});
             return "merged";
           }
 
@@ -309,14 +340,27 @@ async function routeNewStyle(
             if (!rule.isDryRun) {
               await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
             }
-            await prisma.routingLog.create({
+            const leadOwnerLog = await prisma.routingLog.create({
               data: {
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
-                status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                isDryRun: rule.isDryRun, recordSnapshot: fields,
               },
             });
+            updateAggregates({
+              orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+              teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
+              durationMs: startMs ? Date.now() - startMs : null,
+            }).catch(() => {});
+            if (objectType === "LEAD") {
+              createConversionTracking({
+                orgId, routingLogId: leadOwnerLog.id, sfdcLeadId: recordId,
+                ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
+              }).catch(() => {});
+            }
             return "routed";
           }
 
@@ -328,15 +372,29 @@ async function routeNewStyle(
               if (!rule.isDryRun) {
                 await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
               }
-              await prisma.routingLog.create({
+              const leadCustomLog = await prisma.routingLog.create({
                 data: {
                   orgId, sfdcRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-                  status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  teamId: assignee.teamId, teamName: assignee.teamName,
+                  status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                  isDryRun: rule.isDryRun, recordSnapshot: fields,
                 },
               });
+              updateAggregates({
+                orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+                teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+                durationMs: startMs ? Date.now() - startMs : null,
+              }).catch(() => {});
+              if (objectType === "LEAD") {
+                createConversionTracking({
+                  orgId, routingLogId: leadCustomLog.id, sfdcLeadId: recordId,
+                  ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                  teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+                }).catch(() => {});
+              }
               return "routed";
             }
           }
@@ -348,14 +406,27 @@ async function routeNewStyle(
             if (!rule.isDryRun) {
               await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
             }
-            await prisma.routingLog.create({
+            const contactOwnerLog = await prisma.routingLog.create({
               data: {
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
-                status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                isDryRun: rule.isDryRun, recordSnapshot: fields,
               },
             });
+            updateAggregates({
+              orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+              teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
+              durationMs: startMs ? Date.now() - startMs : null,
+            }).catch(() => {});
+            if (objectType === "LEAD") {
+              createConversionTracking({
+                orgId, routingLogId: contactOwnerLog.id, sfdcLeadId: recordId,
+                ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
+              }).catch(() => {});
+            }
             return "routed";
           }
 
@@ -367,15 +438,29 @@ async function routeNewStyle(
               if (!rule.isDryRun) {
                 await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
               }
-              await prisma.routingLog.create({
+              const contactCustomLog = await prisma.routingLog.create({
                 data: {
                   orgId, sfdcRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-                  status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  teamId: assignee.teamId, teamName: assignee.teamName,
+                  status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                  isDryRun: rule.isDryRun, recordSnapshot: fields,
                 },
               });
+              updateAggregates({
+                orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+                teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+                durationMs: startMs ? Date.now() - startMs : null,
+              }).catch(() => {});
+              if (objectType === "LEAD") {
+                createConversionTracking({
+                  orgId, routingLogId: contactCustomLog.id, sfdcLeadId: recordId,
+                  ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                  teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+                }).catch(() => {});
+              }
               return "routed";
             }
           }
@@ -388,14 +473,27 @@ async function routeNewStyle(
             if (!rule.isDryRun) {
               await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
             }
-            await prisma.routingLog.create({
+            const accountOwnerLog = await prisma.routingLog.create({
               data: {
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
-                status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                isDryRun: rule.isDryRun, recordSnapshot: fields,
               },
             });
+            updateAggregates({
+              orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+              teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
+              durationMs: startMs ? Date.now() - startMs : null,
+            }).catch(() => {});
+            if (objectType === "LEAD") {
+              createConversionTracking({
+                orgId, routingLogId: accountOwnerLog.id, sfdcLeadId: recordId,
+                ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
+              }).catch(() => {});
+            }
             return "routed";
           }
 
@@ -407,15 +505,29 @@ async function routeNewStyle(
               if (!rule.isDryRun) {
                 await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
               }
-              await prisma.routingLog.create({
+              const accountCustomLog = await prisma.routingLog.create({
                 data: {
                   orgId, sfdcRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-                  status: "SUCCESS", isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  teamId: assignee.teamId, teamName: assignee.teamName,
+                  status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
+                  isDryRun: rule.isDryRun, recordSnapshot: fields,
                 },
               });
+              updateAggregates({
+                orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+                teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+                durationMs: startMs ? Date.now() - startMs : null,
+              }).catch(() => {});
+              if (objectType === "LEAD") {
+                createConversionTracking({
+                  orgId, routingLogId: accountCustomLog.id, sfdcLeadId: recordId,
+                  ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+                  teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+                }).catch(() => {});
+              }
               return "routed";
             }
           }
@@ -431,19 +543,35 @@ async function routeNewStyle(
       const assignee = await resolveBranchAssignee(branch, orgId);
       if (!assignee) continue; // branch has no eligible assignee, try next
 
+      const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
       const log = await prisma.routingLog.create({
         data: {
           orgId, sfdcRecordId: recordId, objectType, eventType,
           ruleId: rule.id, ruleName: rule.name,
-          pathLabel: branch.label || `Path ${rule.branches.indexOf(branch) + 1}`,
+          pathLabel: branchLabel, branchId: branch.id,
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-          isDryRun: rule.isDryRun, status: "RETRY", recordSnapshot: fields,
+          teamId: assignee.teamId, teamName: assignee.teamName,
+          isDryRun: rule.isDryRun, status: "RETRY",
+          routingDurationMs: startMs ? Date.now() - startMs : null,
+          recordSnapshot: fields,
         },
       });
 
       if (rule.isDryRun) {
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+        updateAggregates({
+          orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
+          teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+          durationMs: startMs ? Date.now() - startMs : null,
+        }).catch(() => {});
+        if (objectType === "LEAD") {
+          createConversionTracking({
+            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
+            teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+          }).catch(() => {});
+        }
         return "dry_run";
       }
 
@@ -451,6 +579,18 @@ async function routeNewStyle(
         const conn = await getOrgConnection(orgId);
         await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+        updateAggregates({
+          orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
+          teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+          durationMs: startMs ? Date.now() - startMs : null,
+        }).catch(() => {});
+        if (objectType === "LEAD") {
+          createConversionTracking({
+            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
+            teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+          }).catch(() => {});
+        }
         fireWebhook(orgId, {
           event: `${objectType}_ROUTED`,
           recordId, objectType,
@@ -490,12 +630,27 @@ async function routeNewStyle(
           pathLabel: "Default Owner",
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-          isDryRun: rule.isDryRun, status: "RETRY", recordSnapshot: fields,
+          teamId: assignee.teamId, teamName: assignee.teamName,
+          isDryRun: rule.isDryRun, status: "RETRY",
+          routingDurationMs: startMs ? Date.now() - startMs : null,
+          recordSnapshot: fields,
         },
       });
 
       if (rule.isDryRun) {
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+        updateAggregates({
+          orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
+          teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+          durationMs: startMs ? Date.now() - startMs : null,
+        }).catch(() => {});
+        if (objectType === "LEAD") {
+          createConversionTracking({
+            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
+            teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+          }).catch(() => {});
+        }
         return "dry_run";
       }
 
@@ -503,6 +658,18 @@ async function routeNewStyle(
         const conn = await getOrgConnection(orgId);
         await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+        updateAggregates({
+          orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
+          teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+          durationMs: startMs ? Date.now() - startMs : null,
+        }).catch(() => {});
+        if (objectType === "LEAD") {
+          createConversionTracking({
+            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
+            teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+          }).catch(() => {});
+        }
         return "routed";
       } catch (err) {
         await enqueueRetry({
@@ -520,9 +687,15 @@ async function routeNewStyle(
     data: {
       orgId, sfdcRecordId: recordId, objectType, eventType,
       ruleId: rule.id, ruleName: rule.name,
-      status: "UNMATCHED", isDryRun: rule.isDryRun, recordSnapshot: fields,
+      status: "UNMATCHED", routingDurationMs: startMs ? Date.now() - startMs : null,
+      isDryRun: rule.isDryRun, recordSnapshot: fields,
     },
   });
+  updateAggregates({
+    orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+    teamId: null, assigneeId: null, objectType, status: "UNMATCHED",
+    durationMs: startMs ? Date.now() - startMs : null,
+  }).catch(() => {});
   return "unmatched";
 }
 
@@ -530,7 +703,8 @@ async function routeNewStyle(
 
 async function routeLegacy(
   rule: CachedRule,
-  payload: RoutingPayload
+  payload: RoutingPayload,
+  startMs?: number
 ): Promise<RoutingResult | null> {
   const { orgId, objectType, eventType, recordId, fields } = payload;
 
@@ -541,9 +715,15 @@ async function routeLegacy(
         orgId, sfdcRecordId: recordId, objectType, eventType,
         ruleId: rule.id, ruleName: rule.name,
         status: "FAILED", errorMessage: "No eligible assignee found",
+        routingDurationMs: startMs ? Date.now() - startMs : null,
         isDryRun: rule.isDryRun, recordSnapshot: fields,
       },
     });
+    updateAggregates({
+      orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+      teamId: null, assigneeId: null, objectType, status: "FAILED",
+      durationMs: startMs ? Date.now() - startMs : null,
+    }).catch(() => {});
     return "unmatched";
   }
 
@@ -553,12 +733,27 @@ async function routeLegacy(
       ruleId: rule.id, ruleName: rule.name,
       assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
       assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
-      isDryRun: rule.isDryRun, status: "RETRY", recordSnapshot: fields,
+      teamId: assignee.teamId, teamName: assignee.teamName,
+      isDryRun: rule.isDryRun, status: "RETRY",
+      routingDurationMs: startMs ? Date.now() - startMs : null,
+      recordSnapshot: fields,
     },
   });
 
   if (rule.isDryRun) {
     await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+    updateAggregates({
+      orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+      teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+      durationMs: startMs ? Date.now() - startMs : null,
+    }).catch(() => {});
+    if (objectType === "LEAD") {
+      createConversionTracking({
+        orgId, routingLogId: log.id, sfdcLeadId: recordId,
+        ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+        teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+      }).catch(() => {});
+    }
     return "dry_run";
   }
 
@@ -566,6 +761,18 @@ async function routeLegacy(
     const conn = await getOrgConnection(orgId);
     await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
     await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+    updateAggregates({
+      orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
+      teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
+      durationMs: startMs ? Date.now() - startMs : null,
+    }).catch(() => {});
+    if (objectType === "LEAD") {
+      createConversionTracking({
+        orgId, routingLogId: log.id, sfdcLeadId: recordId,
+        ruleId: rule.id, ruleName: rule.name, pathLabel: null,
+        teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
+      }).catch(() => {});
+    }
     fireWebhook(orgId, {
       event: `${objectType}_ROUTED`,
       recordId, objectType,

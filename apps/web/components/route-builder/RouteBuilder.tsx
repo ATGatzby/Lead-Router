@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save } from "lucide-react"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StepRegistry, type CanvasNodeType } from "./StepRegistry"
 import { TriggerConfigSheet } from "./config/TriggerConfigSheet"
@@ -24,6 +24,12 @@ const NODE_WIDTH = 220
 const NODE_HEIGHT = 72
 const TOP_BAR_HEIGHT = 56
 const FILTER_GAP = NODE_WIDTH + 40   // horizontal gap between parallel path columns
+
+// Zoom/pan constants
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 2
+const ZOOM_STEP = 0.1
+const ZOOM_WHEEL_SENSITIVITY = 0.001
 
 // ─── Canvas node / edge types ─────────────────────────────────────────────────
 
@@ -248,6 +254,7 @@ function CanvasNodeCard({
 
   return (
     <div
+      data-canvas-node
       style={{
         position: "absolute",
         left: node.x,
@@ -398,8 +405,150 @@ export function RouteBuilder({
 
   const canvasRef = useRef<HTMLDivElement>(null)
 
+  // ── Zoom / pan state ──────────────────────────────────────────────────────
+  const [scale, setScale] = useState(1)
+  const [panX, setPanX] = useState(0)
+  const [panY, setPanY] = useState(0)
+
+  // Keep refs in sync so native event listeners always read current values
+  const panXRef = useRef(panX)
+  const panYRef = useRef(panY)
+  useEffect(() => { panXRef.current = panX }, [panX])
+  useEffect(() => { panYRef.current = panY }, [panY])
+
+  // Pan via middle-click drag or space+left-click
+  const panRef = useRef<{
+    startMouseX: number
+    startMouseY: number
+    startPanX: number
+    startPanY: number
+  } | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
+  const spaceHeldRef = useRef(false)
+
+  // Space key tracking for space+drag pan
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        spaceHeldRef.current = true
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        spaceHeldRef.current = false
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keyup", onKeyUp)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("keyup", onKeyUp)
+    }
+  }, [])
+
+  // Wheel handler — Ctrl/Cmd+wheel = zoom (centered on cursor), plain wheel = no-op (let page scroll naturally)
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    // Only zoom on pinch (ctrlKey is true for trackpad pinch) or Cmd/Ctrl+scroll
+    if (!e.ctrlKey && !e.metaKey) return
+
+    e.preventDefault()
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    const cursorX = e.clientX - rect.left
+    const cursorY = e.clientY - rect.top
+
+    const worldX = (cursorX - panX) / scale
+    const worldY = (cursorY - panY) / scale
+
+    const delta = -e.deltaY * ZOOM_WHEEL_SENSITIVITY
+    const newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, scale * (1 + delta)))
+
+    const newPanX = cursorX - worldX * newScale
+    const newPanY = cursorY - worldY * newScale
+
+    setScale(newScale)
+    setPanX(newPanX)
+    setPanY(newPanY)
+  }, [scale, panX, panY])
+
+  // Canvas pan — mouse down on empty canvas starts panning
+  const handleCanvasPanStart = useCallback((e: React.MouseEvent) => {
+    // Skip if clicking on a node (let node drag handle it)
+    const target = e.target as HTMLElement
+    if (target.closest("[data-canvas-node]")) return
+
+    if (e.button === 0 || e.button === 1) {
+      e.preventDefault()
+      panRef.current = {
+        startMouseX: e.clientX,
+        startMouseY: e.clientY,
+        startPanX: panXRef.current,
+        startPanY: panYRef.current,
+      }
+      setIsPanning(true)
+    }
+  }, [])
+
+  // Pan move / up (window-level)
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!panRef.current) return
+      const dx = e.clientX - panRef.current.startMouseX
+      const dy = e.clientY - panRef.current.startMouseY
+      setPanX(panRef.current.startPanX + dx)
+      setPanY(panRef.current.startPanY + dy)
+    }
+    const onUp = () => {
+      panRef.current = null
+      setIsPanning(false)
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    return () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+  }, [])
+
+  // Zoom control helpers
+  const zoomIn = useCallback(() => {
+    setScale((s) => Math.min(MAX_ZOOM, s + ZOOM_STEP))
+  }, [])
+  const zoomOut = useCallback(() => {
+    setScale((s) => Math.max(MIN_ZOOM, s - ZOOM_STEP))
+  }, [])
+  const resetZoom = useCallback(() => {
+    setScale(1)
+    setPanX(0)
+    setPanY(0)
+  }, [])
+  const fitToView = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || nodes.length === 0) return
+    const rect = canvas.getBoundingClientRect()
+    const minNodeX = Math.min(...nodes.map((n) => n.x))
+    const minNodeY = Math.min(...nodes.map((n) => n.y))
+    const maxNodeX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH))
+    const maxNodeY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT))
+    const contentW = maxNodeX - minNodeX + 80 // padding
+    const contentH = maxNodeY - minNodeY + 80
+    const scaleX = rect.width / contentW
+    const scaleY = rect.height / contentH
+    const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), MIN_ZOOM), MAX_ZOOM)
+    const newPanX = (rect.width - contentW * newScale) / 2 - minNodeX * newScale + 40 * newScale
+    const newPanY = (rect.height - contentH * newScale) / 2 - minNodeY * newScale + 40 * newScale
+    setScale(newScale)
+    setPanX(newPanX)
+    setPanY(newPanY)
+  }, [nodes])
+
   // ── Node drag handlers ──────────────────────────────────────────────────────
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
+    // If space is held, let the canvas pan handler take over
+    if (spaceHeldRef.current) return
     e.preventDefault()
     e.stopPropagation()
     const node = nodes.find((n) => n.id === nodeId)
@@ -414,11 +563,15 @@ export function RouteBuilder({
     }
   }, [nodes])
 
+  // We need scale in the drag effect but don't want to re-register listeners on every scale change
+  const scaleRef = useRef(scale)
+  useEffect(() => { scaleRef.current = scale }, [scale])
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragRef.current) return
-      const dx = e.clientX - dragRef.current.startMouseX
-      const dy = e.clientY - dragRef.current.startMouseY
+      const dx = (e.clientX - dragRef.current.startMouseX) / scaleRef.current
+      const dy = (e.clientY - dragRef.current.startMouseY) / scaleRef.current
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         dragRef.current.hasMoved = true
       }
@@ -454,6 +607,17 @@ export function RouteBuilder({
       setActiveSheet({ type: node.type, nodeId: node.id })
     }
   }, [nodes])
+
+  // ── Convert screen coords to canvas (world) coords ─────────────────────────
+  const screenToCanvas = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: clientX, y: clientY }
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: (clientX - rect.left - panX) / scale,
+      y: (clientY - rect.top - panY) / scale,
+    }
+  }, [scale, panX, panY])
 
   // ── Drop from registry onto canvas ─────────────────────────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -646,8 +810,8 @@ export function RouteBuilder({
 
   return (
     <div
-      className="flex flex-col bg-background"
-      style={{ height: "100vh", overflow: "hidden" }}
+      className="flex flex-col bg-background -m-6"
+      style={{ height: "calc(100% + 3rem)", overflow: "hidden" }}
     >
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div
@@ -689,18 +853,29 @@ export function RouteBuilder({
         {/* Canvas */}
         <div
           ref={canvasRef}
-          className="flex-1 overflow-auto relative"
+          className="flex-1 overflow-hidden relative"
           style={{
             backgroundImage:
               "radial-gradient(circle, #d1d5db 1.5px, transparent 1.5px)",
-            backgroundSize: "24px 24px",
+            backgroundSize: `${24 * scale}px ${24 * scale}px`,
+            backgroundPosition: `${panX}px ${panY}px`,
+            cursor: isPanning ? "grabbing" : "grab",
           }}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          onWheel={handleWheel}
+          onMouseDown={handleCanvasPanStart}
         >
           <div
             className="relative"
-            style={{ width: maxX, height: maxY, minWidth: "100%", minHeight: "100%" }}
+            style={{
+              transformOrigin: "0 0",
+              transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
+              minWidth: maxX,
+              minHeight: maxY,
+              width: "100%",
+              height: "100%",
+            }}
           >
             {/* SVG overlay for edges */}
             <svg
@@ -762,6 +937,46 @@ export function RouteBuilder({
                 />
               )
             })}
+          </div>
+
+          {/* ── Zoom controls ──────────────────────────────────────────────── */}
+          <div className="absolute bottom-4 left-4 flex items-center gap-1 rounded-lg border bg-white/90 backdrop-blur-sm shadow-sm p-1 z-50">
+            <button
+              type="button"
+              onClick={zoomOut}
+              className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Zoom out"
+            >
+              <ZoomOut className="size-3.5" />
+            </button>
+            <span className="text-[11px] font-medium text-muted-foreground min-w-[3rem] text-center tabular-nums">
+              {Math.round(scale * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={zoomIn}
+              className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Zoom in"
+            >
+              <ZoomIn className="size-3.5" />
+            </button>
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <button
+              type="button"
+              onClick={fitToView}
+              className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Fit to view"
+            >
+              <Maximize2 className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={resetZoom}
+              className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Reset zoom (100%)"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
           </div>
         </div>
 
