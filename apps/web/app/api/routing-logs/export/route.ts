@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, type Prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders } from "@/lib/auth";
+import { sanitizeCsvCell } from "@/lib/csv";
 
 const MAX_ROWS = 100_000;
 
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         log.createdAt.toISOString(),
         log.status,
         (log.errorMessage ?? "").replace(/"/g, '""'),
-      ];
+      ].map((c) => sanitizeCsvCell(String(c)));
       return cols.map((c) => `"${c}"`).join(",");
     });
 

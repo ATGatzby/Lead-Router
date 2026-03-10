@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 
-// GET /api/routing-logs/failed — non-dismissed FAILED logs
+// GET /api/routing-logs/failed — non-dismissed FAILED and stuck RETRY logs
 export async function GET() {
   try {
     const orgId = await getOrgIdFromHeaders();
 
     const logs = await prisma.routingLog.findMany({
-      where: { orgId, status: "FAILED", dismissed: false },
+      where: { orgId, status: { in: ["FAILED", "RETRY"] }, dismissed: false },
       orderBy: { createdAt: "desc" },
     });
 

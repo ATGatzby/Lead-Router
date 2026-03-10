@@ -95,6 +95,12 @@ export async function GET(req: NextRequest) {
     const session = await getSession();
     if (!session.orgId) throw new Error("Not authenticated");
 
+    // Validate OAuth state parameter (CSRF protection)
+    const savedState = req.cookies.get("sfdc_oauth_state")?.value;
+    if (!state || !savedState || state !== savedState) {
+      return NextResponse.json({ error: "Invalid OAuth state" }, { status: 403 });
+    }
+
     const codeVerifier = req.cookies.get("sfdc_pkce_verifier")?.value;
 
     const { tokens, orgId: sfdcOrgId } = await exchangeCodeForTokens(code, codeVerifier);
@@ -132,6 +138,7 @@ export async function GET(req: NextRequest) {
 
     const successRedirect = NextResponse.redirect(new URL("/dashboard?crm_connected=1", appUrl));
     successRedirect.cookies.delete("sfdc_pkce_verifier");
+    successRedirect.cookies.delete("sfdc_oauth_state");
     return successRedirect;
   } catch (err) {
     console.error("SFDC OAuth callback error:", err);

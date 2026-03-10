@@ -41,6 +41,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     managedDb: cfg.managedDb,
     managedRedis: cfg.managedRedis,
     dbPassword: cfg.dbPassword,
+    redisPassword: cfg.redisPassword,
   })
   const composeFile = join(dir, 'docker-compose.yml')
   writeFileSync(composeFile, composeContent, 'utf8')
@@ -66,6 +67,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     adminSecret: cfg.adminSecret,
     adminEmail: cfg.adminEmail,
     adminPassword: cfg.adminPassword,
+    internalApiKey: cfg.internalApiKey,
     resendApiKey: cfg.resendApiKey || undefined,
     feedbackToEmail: cfg.feedbackToEmail || undefined,
   })
@@ -81,6 +83,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     sfdcClientSecret: cfg.sfdcClientSecret,
     sfdcLoginUrl: cfg.sfdcLoginUrl,
     engineWebhookSecret: cfg.engineWebhookSecret,
+    internalApiKey: cfg.internalApiKey,
   })
   const envEngine = join(dir, '.env.engine')
   writeFileSync(envEngine, envEngineContent, 'utf8')
@@ -107,6 +110,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     // Stored so `lead-routing sfdc deploy` can re-authenticate without re-prompting
     sfdcClientId: cfg.sfdcClientId,
     sfdcLoginUrl: cfg.sfdcLoginUrl,
+    engineWebhookSecret: cfg.engineWebhookSecret,
     installedAt: new Date().toISOString(),
     version: getCliVersion(),
   })

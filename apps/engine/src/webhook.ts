@@ -1,4 +1,5 @@
 import { prisma } from "@lead-routing/db";
+import { assertSafeUrl } from "./lib/ssrf-guard.js";
 
 const WEBHOOK_TIMEOUT_MS = 3000;
 
@@ -32,6 +33,8 @@ async function _fire(orgId: string, payload: WebhookPayload): Promise<void> {
 
   const url = org?.notificationWebhookUrl;
   if (!url) return; // not configured
+
+  await assertSafeUrl(url);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);

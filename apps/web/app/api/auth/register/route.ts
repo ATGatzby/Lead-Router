@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
           email: invite.email,
           name: name.trim(),
           passwordHash,
-          role: "ADMIN",
+          role: "MEMBER",
         },
       }),
       prisma.invite.update({

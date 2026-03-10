@@ -25,6 +25,8 @@ export interface SfdcDeployParams {
   sfdcLoginUrl: string
   /** Where to copy the patched package — defaults to tmpdir */
   installDir?: string
+  /** Webhook secret for HMAC validation — written to Routing_Settings__c.Webhook_Secret__c */
+  webhookSecret?: string
 }
 
 /**
@@ -174,16 +176,18 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
       'SELECT Id FROM Routing_Settings__c LIMIT 1'
     )
 
+    const settingsData: Record<string, string> = {
+      App_Url__c: appUrl,
+      Engine_Endpoint__c: engineUrl,
+    }
+    if (params.webhookSecret) {
+      settingsData.Webhook_Secret__c = params.webhookSecret
+    }
+
     if (existing.length > 0) {
-      await sf.update('Routing_Settings__c', existing[0].Id, {
-        App_Url__c: appUrl,
-        Engine_Endpoint__c: engineUrl,
-      })
+      await sf.update('Routing_Settings__c', existing[0].Id, settingsData)
     } else {
-      await sf.create('Routing_Settings__c', {
-        App_Url__c: appUrl,
-        Engine_Endpoint__c: engineUrl,
-      })
+      await sf.create('Routing_Settings__c', settingsData)
     }
     s.stop('Org settings written')
   } catch (err) {

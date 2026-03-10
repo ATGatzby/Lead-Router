@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RouteBuilder } from "@/components/route-builder/RouteBuilder";
 import { apiRuleToBuilderState, builderToApiBody } from "@/lib/builder-to-rule";
 import type { RouteBuilderState } from "@/components/route-builder/types";
@@ -9,6 +9,7 @@ import type { RouteBuilderState } from "@/components/route-builder/types";
 export default function RouteFlowPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const ruleQuery = useQuery<{ rule: any }>({
     queryKey: ["rule", id],
@@ -31,7 +32,9 @@ export default function RouteFlowPage() {
       if (!res.ok) throw new Error(data.error ?? "Failed to save route");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Update the cache with the fresh response (includes branches)
+      queryClient.setQueryData(["rule", id], data);
       router.push("/routing-rules");
     },
   });
@@ -56,6 +59,7 @@ export default function RouteFlowPage() {
 
   return (
     <RouteBuilder
+      key={ruleQuery.dataUpdatedAt}
       ruleId={id}
       initialState={initialState}
       onSave={async (state) => {

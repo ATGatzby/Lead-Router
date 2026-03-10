@@ -43,10 +43,13 @@ vi.mock("@lead-routing/db", () => ({ prisma: mockPrisma }));
 vi.mock("./cache.js", () => ({ getActiveRules: mockGetActiveRules }));
 vi.mock("./evaluator.js", () => ({ evaluateRule: mockEvaluateRule }));
 vi.mock("./round-robin.js", () => ({ getNextMember: mockGetNextMember }));
+const mockEvictOrgConnection = vi.hoisted(() => vi.fn());
+
 vi.mock("./sfdc.js", () => ({
   getOrgConnection: mockGetOrgConnection,
   getSfdcUserId: mockGetSfdcUserId,
   getSfdcQueueId: mockGetSfdcQueueId,
+  evictOrgConnection: mockEvictOrgConnection,
 }));
 vi.mock("./queue.js", () => ({ enqueueRetry: mockEnqueueRetry }));
 vi.mock("./webhook.js", () => ({ fireWebhook: mockFireWebhook }));
@@ -741,14 +744,13 @@ describe("routeRecord — new-style default owner fallback", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("routeRecord — match step: lead matching", () => {
-  function makeSfdcConn(queryResult: any = { records: [] }) {
-    return { query: vi.fn().mockResolvedValue(queryResult) };
+  function makeSfdcConn(findOneResult: any = null) {
+    const mockFindOne = vi.fn().mockResolvedValue(findOneResult);
+    return { sobject: vi.fn(() => ({ findOne: mockFindOne })), _mockFindOne: mockFindOne };
   }
 
   it("assigns to matched lead owner with onLeadMatch=ASSIGN_TO_OWNER", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD2", OwnerId: "005LEAD_OWNER" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD2", OwnerId: "005LEAD_OWNER" });
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ onLeadMatch: "ASSIGN_TO_OWNER" });
@@ -770,9 +772,7 @@ describe("routeRecord — match step: lead matching", () => {
   });
 
   it("skips SFDC update in dry-run for lead match ASSIGN_TO_OWNER", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD2", OwnerId: "005LEAD_OWNER" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD2", OwnerId: "005LEAD_OWNER" });
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ onLeadMatch: "ASSIGN_TO_OWNER" });
@@ -786,9 +786,7 @@ describe("routeRecord — match step: lead matching", () => {
   });
 
   it("merges lead with onLeadMatch=SFDC_MERGE", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD_MASTER", OwnerId: "005X" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD_MASTER", OwnerId: "005X" });
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ onLeadMatch: "SFDC_MERGE" });
@@ -807,9 +805,7 @@ describe("routeRecord — match step: lead matching", () => {
   });
 
   it("skips merge in dry-run for SFDC_MERGE and still returns 'merged'", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD_MASTER", OwnerId: "005X" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD_MASTER", OwnerId: "005X" });
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ onLeadMatch: "SFDC_MERGE" });
@@ -823,9 +819,7 @@ describe("routeRecord — match step: lead matching", () => {
   });
 
   it("logs FAILED and returns 'unmatched' when merge throws", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD_MASTER", OwnerId: "005X" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD_MASTER", OwnerId: "005X" });
     mockGetOrgConnection.mockResolvedValue(conn);
     mockMergeLead.mockRejectedValue(new Error("Merge conflict"));
 
@@ -844,9 +838,7 @@ describe("routeRecord — match step: lead matching", () => {
   });
 
   it("routes to custom assignee with onLeadMatch=ASSIGN_CUSTOM", async () => {
-    const conn = makeSfdcConn({
-      records: [{ Id: "00QLEAD2", OwnerId: "005X" }],
-    });
+    const conn = makeSfdcConn({ Id: "00QLEAD2", OwnerId: "005X" });
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({
@@ -871,16 +863,15 @@ describe("routeRecord — match step: lead matching", () => {
 
 describe("routeRecord — match step: contact matching", () => {
   function makeSfdcConn(leadResult: any, contactResult: any) {
-    const queryFn = vi.fn();
-    // First call = lead query, second call = contact query
-    queryFn.mockResolvedValueOnce(leadResult).mockResolvedValueOnce(contactResult);
-    return { query: queryFn };
+    const mockFindOne = vi.fn();
+    mockFindOne.mockResolvedValueOnce(leadResult).mockResolvedValueOnce(contactResult);
+    return { sobject: vi.fn(() => ({ findOne: mockFindOne })), _mockFindOne: mockFindOne };
   }
 
   it("assigns to matched contact owner with onContactMatch=ASSIGN_TO_OWNER", async () => {
     const conn = makeSfdcConn(
-      { records: [] }, // no lead match
-      { records: [{ Id: "003CONTACT1", OwnerId: "005CONTACT_OWNER" }] },
+      null, // no lead match
+      { Id: "003CONTACT1", OwnerId: "005CONTACT_OWNER" },
     );
     mockGetOrgConnection.mockResolvedValue(conn);
 
@@ -901,8 +892,8 @@ describe("routeRecord — match step: contact matching", () => {
 
   it("routes to custom assignee with onContactMatch=ASSIGN_CUSTOM", async () => {
     const conn = makeSfdcConn(
-      { records: [] },
-      { records: [{ Id: "003CONTACT1", OwnerId: "005X" }] },
+      null,
+      { Id: "003CONTACT1", OwnerId: "005X" },
     );
     mockGetOrgConnection.mockResolvedValue(conn);
 
@@ -922,8 +913,8 @@ describe("routeRecord — match step: contact matching", () => {
 
   it("falls through to branches with onContactMatch=SKIP", async () => {
     const conn = makeSfdcConn(
-      { records: [] },
-      { records: [{ Id: "003CONTACT1", OwnerId: "005X" }] },
+      null,
+      { Id: "003CONTACT1", OwnerId: "005X" },
     );
     mockGetOrgConnection.mockResolvedValue(conn);
 
@@ -949,19 +940,19 @@ describe("routeRecord — match step: contact matching", () => {
 
 describe("routeRecord — match step: account matching", () => {
   function makeSfdcConn(leadResult: any, contactResult: any, accountResult: any) {
-    const queryFn = vi.fn();
-    queryFn
+    const mockFindOne = vi.fn();
+    mockFindOne
       .mockResolvedValueOnce(leadResult)
       .mockResolvedValueOnce(contactResult)
       .mockResolvedValueOnce(accountResult);
-    return { query: queryFn };
+    return { sobject: vi.fn(() => ({ findOne: mockFindOne })), _mockFindOne: mockFindOne };
   }
 
   it("assigns to matched account owner with onAccountMatch=ASSIGN_TO_OWNER", async () => {
     const conn = makeSfdcConn(
-      { records: [] },
-      { records: [] },
-      { records: [{ Id: "001ACCOUNT1", OwnerId: "005ACCT_OWNER" }] },
+      null,
+      null,
+      { Id: "001ACCOUNT1", OwnerId: "005ACCT_OWNER" },
     );
     mockGetOrgConnection.mockResolvedValue(conn);
 
@@ -986,9 +977,9 @@ describe("routeRecord — match step: account matching", () => {
 
   it("routes to custom assignee with onAccountMatch=ASSIGN_CUSTOM", async () => {
     const conn = makeSfdcConn(
-      { records: [] },
-      { records: [] },
-      { records: [{ Id: "001ACCOUNT1", OwnerId: "005X" }] },
+      null,
+      null,
+      { Id: "001ACCOUNT1", OwnerId: "005X" },
     );
     mockGetOrgConnection.mockResolvedValue(conn);
 
@@ -1041,7 +1032,8 @@ describe("routeRecord — match step connection failure", () => {
 
 describe("routeRecord — match step no match found", () => {
   it("proceeds to branches when no SFDC match is found", async () => {
-    const conn = { query: vi.fn().mockResolvedValue({ records: [] }) };
+    const mockFindOne = vi.fn().mockResolvedValue(null);
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig();
@@ -1063,13 +1055,13 @@ describe("routeRecord — match step no match found", () => {
 
 describe("routeRecord — match step: phone matching", () => {
   it("matches a lead by phone when matchPhone is true", async () => {
-    const queryFn = vi.fn();
+    const mockFindOne = vi.fn();
     // email lead check = no match, email contact check = no match, phone lead check = match
-    queryFn
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [{ Id: "00QPHONE_LEAD", OwnerId: "005PHONE_OWNER" }] });
-    const conn = { query: queryFn };
+    mockFindOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ Id: "00QPHONE_LEAD", OwnerId: "005PHONE_OWNER" });
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({
@@ -1093,12 +1085,12 @@ describe("routeRecord — match step: phone matching", () => {
   });
 
   it("matches a contact by phone when matchPhone is true and checkLeads is false", async () => {
-    const queryFn = vi.fn();
+    const mockFindOne = vi.fn();
     // checkLeads=false so no lead queries; email contact = no match, phone contact = match
-    queryFn
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [{ Id: "003PHONE_CONTACT", OwnerId: "005PHONE_COWNER" }] });
-    const conn = { query: queryFn };
+    mockFindOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ Id: "003PHONE_CONTACT", OwnerId: "005PHONE_COWNER" });
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({
@@ -1179,7 +1171,8 @@ describe("routeRecord — new-style vs legacy detection", () => {
   });
 
   it("treats rule as new-style when it has matchConfig", async () => {
-    const conn = { query: vi.fn().mockResolvedValue({ records: [] }) };
+    const mockFindOne = vi.fn().mockResolvedValue(null);
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const rule = makeLegacyRule({
@@ -1223,8 +1216,9 @@ describe("routeRecord — new-style vs legacy detection", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("routeRecord — match step SOQL errors", () => {
-  it("returns null match when SOQL query throws, falls through to branches", async () => {
-    const conn = { query: vi.fn().mockRejectedValue(new Error("SOQL syntax error")) };
+  it("returns null match when query throws, falls through to branches", async () => {
+    const mockFindOne = vi.fn().mockRejectedValue(new Error("Query error"));
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig();
@@ -1246,7 +1240,8 @@ describe("routeRecord — match step SOQL errors", () => {
 
 describe("routeRecord — match step with missing email/phone", () => {
   it("skips email-based checks when Email field is empty", async () => {
-    const conn = { query: vi.fn().mockResolvedValue({ records: [] }) };
+    const mockFindOne = vi.fn().mockResolvedValue(null);
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ checkLeads: true, checkContacts: true });
@@ -1260,15 +1255,15 @@ describe("routeRecord — match step with missing email/phone", () => {
 
     await routeRecord(makePayload({ fields: { Company: "Acme" } }));
 
-    // No SOQL queries should be made (no email)
-    expect(conn.query).not.toHaveBeenCalled();
+    // No findOne calls should be made (no email)
+    expect(mockFindOne).not.toHaveBeenCalled();
   });
 
   it("skips phone-based checks when Phone field is empty", async () => {
-    const queryFn = vi.fn();
+    const mockFindOne = vi.fn();
     // email lead check + email contact check
-    queryFn.mockResolvedValue({ records: [] });
-    const conn = { query: queryFn };
+    mockFindOne.mockResolvedValue(null);
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({ matchPhone: true, checkAccounts: false });
@@ -1283,8 +1278,8 @@ describe("routeRecord — match step with missing email/phone", () => {
     await routeRecord(makePayload({ fields: { Email: "test@example.com" } }));
 
     // Should have email queries but no phone queries
-    // Lead by email + Contact by email = 2 queries (no phone queries)
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    // Lead by email + Contact by email = 2 findOne calls (no phone queries)
+    expect(mockFindOne).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -1293,14 +1288,17 @@ describe("routeRecord — match step with missing email/phone", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("routeRecord — recordSnapshot in logs", () => {
-  it("includes fields as recordSnapshot in all log entries", async () => {
+  it("includes stripPii(fields) as recordSnapshot in all log entries", async () => {
     mockGetActiveRules.mockReturnValue([]);
     const fields = { Email: "test@example.com", Company: "Acme", Revenue: 100000 };
     await routeRecord(makePayload({ fields }));
 
+    // Email is a PII field and gets redacted by stripPii()
     expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ recordSnapshot: fields }),
+        data: expect.objectContaining({
+          recordSnapshot: { Email: "[REDACTED]", Company: "Acme", Revenue: 100000 },
+        }),
       })
     );
   });
@@ -1421,11 +1419,11 @@ describe("routeRecord — default owner ROUND_ROBIN", () => {
 
 describe("routeRecord — match step dry-run for custom assignment", () => {
   it("skips updateOwner in dry-run for contact ASSIGN_CUSTOM", async () => {
-    const queryFn = vi.fn();
-    queryFn
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [{ Id: "003C", OwnerId: "005X" }] });
-    const conn = { query: queryFn };
+    const mockFindOne = vi.fn();
+    mockFindOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ Id: "003C", OwnerId: "005X" });
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({
@@ -1443,12 +1441,12 @@ describe("routeRecord — match step dry-run for custom assignment", () => {
   });
 
   it("skips updateOwner in dry-run for account ASSIGN_TO_OWNER", async () => {
-    const queryFn = vi.fn();
-    queryFn
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [] })
-      .mockResolvedValueOnce({ records: [{ Id: "001A", OwnerId: "005ACCT" }] });
-    const conn = { query: queryFn };
+    const mockFindOne = vi.fn();
+    mockFindOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ Id: "001A", OwnerId: "005ACCT" });
+    const conn = { sobject: vi.fn(() => ({ findOne: mockFindOne })) };
     mockGetOrgConnection.mockResolvedValue(conn);
 
     const mc = makeMatchConfig({

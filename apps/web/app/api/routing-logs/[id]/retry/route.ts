@@ -20,8 +20,8 @@ export async function POST(
     if (log.orgId !== orgId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    if (log.status !== "FAILED") {
-      return NextResponse.json({ error: "Only FAILED logs can be retried" }, { status: 400 });
+    if (log.status !== "FAILED" && log.status !== "RETRY") {
+      return NextResponse.json({ error: "Only FAILED or RETRY logs can be retried" }, { status: 400 });
     }
     if (!log.assigneeId) {
       return NextResponse.json({ error: "No assignee to retry" }, { status: 400 });

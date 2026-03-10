@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
-import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
+import { getOrgIdFromHeaders, getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 
 // GET /api/teams/:id — team detail with members + per-member stats
 export async function GET(
@@ -125,12 +125,15 @@ export async function PUT(
   }
 }
 
-// DELETE /api/teams/:id — delete team (blocked if referenced by active rules)
+// DELETE /api/teams/:id — delete team (ADMIN only, blocked if referenced by active rules)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireSession();
+    requireRole(session, "ADMIN");
+
     const { id } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorId, userName: actorName } = actor;

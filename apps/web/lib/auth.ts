@@ -32,3 +32,13 @@ export async function getActorFromHeaders(): Promise<{
   }
   return { orgId, userId, userName };
 }
+
+/**
+ * Throws if the session role does not match the required role.
+ * Use in destructive API endpoints to enforce RBAC.
+ */
+export function requireRole(session: { role: string }, requiredRole: string): void {
+  if (session.role !== requiredRole) {
+    throw new Error("Insufficient permissions");
+  }
+}

@@ -5,6 +5,16 @@ import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 const CATEGORIES = ["General", "Bug Report", "Feature Request"] as const;
 type Category = (typeof CATEGORIES)[number];
 
+/** Escape HTML special characters to prevent injection in email body */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const orgId = await getOrgIdFromHeaders();
@@ -30,20 +40,20 @@ export async function POST(req: NextRequest) {
 
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
-        <h2 style="color:#18181b;margin-bottom:4px;">New Feedback — ${category}</h2>
+        <h2 style="color:#18181b;margin-bottom:4px;">New Feedback — ${escapeHtml(category)}</h2>
         <p style="color:#71717a;font-size:13px;margin-top:0;">Received from the Lead Router app</p>
         <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;">
           <tr>
             <td style="padding:8px 0;color:#71717a;width:100px;">From</td>
-            <td style="padding:8px 0;color:#18181b;font-weight:500;">${actor.userName}</td>
+            <td style="padding:8px 0;color:#18181b;font-weight:500;">${escapeHtml(actor.userName)}</td>
           </tr>
           <tr>
             <td style="padding:8px 0;color:#71717a;">Category</td>
-            <td style="padding:8px 0;color:#18181b;">${category}</td>
+            <td style="padding:8px 0;color:#18181b;">${escapeHtml(category)}</td>
           </tr>
           <tr>
             <td style="padding:8px 0;color:#71717a;">Org ID</td>
-            <td style="padding:8px 0;color:#18181b;font-family:monospace;font-size:12px;">${orgId}</td>
+            <td style="padding:8px 0;color:#18181b;font-family:monospace;font-size:12px;">${escapeHtml(orgId)}</td>
           </tr>
           <tr>
             <td style="padding:8px 0;color:#71717a;">Sent at</td>
@@ -51,7 +61,7 @@ export async function POST(req: NextRequest) {
           </tr>
         </table>
         <hr style="border:none;border-top:1px solid #e4e4e7;margin:20px 0;" />
-        <p style="font-size:14px;color:#18181b;white-space:pre-wrap;line-height:1.6;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+        <p style="font-size:14px;color:#18181b;white-space:pre-wrap;line-height:1.6;">${escapeHtml(message)}</p>
       </div>
     `;
 

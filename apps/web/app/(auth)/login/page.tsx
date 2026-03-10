@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { LoginError } from "./login-error";
 
+/** Only allow relative paths (no protocol-relative URLs like //evil.com) */
+function isSafeRedirect(url: string): boolean {
+  if (url.startsWith("/") && !url.startsWith("//")) return true;
+  return false;
+}
+
 function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,7 +34,9 @@ function LoginForm() {
         setError(data.error ?? "Login failed");
         return;
       }
-      router.push("/dashboard");
+      const next = searchParams.get("next");
+      const destination = next && isSafeRedirect(next) ? next : "/dashboard";
+      router.push(destination);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -108,7 +117,9 @@ export default function LoginPage() {
             <LoginError />
           </Suspense>
 
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
 
           <p className="text-center text-xs text-muted-foreground">
             Don&apos;t have an account? Contact your administrator for an invite.

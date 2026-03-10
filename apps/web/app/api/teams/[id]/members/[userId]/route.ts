@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
-import { getActorFromHeaders } from "@/lib/auth";
+import { getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 
 // PATCH /api/teams/:id/members/:userId — toggle member status (ACTIVE ↔ PAUSED)
 export async function PATCH(
@@ -64,12 +64,15 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/teams/:id/members/:userId — remove member from team
+// DELETE /api/teams/:id/members/:userId — remove member from team (ADMIN only)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
+    const session = await requireSession();
+    requireRole(session, "ADMIN");
+
     const { id: teamId, userId } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorId, userName: actorName } = actor;

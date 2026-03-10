@@ -2,7 +2,7 @@ import { Queue, Worker, type Job } from "bullmq";
 import { redis } from "./redis.js";
 import { prisma } from "@lead-routing/db";
 import { updateOwner } from "@lead-routing/sfdc";
-import { getOrgConnection } from "./sfdc.js";
+import { getOrgConnection, evictOrgConnection } from "./sfdc.js";
 
 const QUEUE_NAME = "routing-retries";
 
@@ -59,6 +59,14 @@ routingWorker.on("completed", async (job: Job<RetryJobData>) => {
 
 routingWorker.on("failed", async (job: Job<RetryJobData> | undefined, err: Error) => {
   if (!job) return;
+
+  // If the failure is an auth error, evict the cached connection so the next
+  // retry (or next routing event) creates a fresh connection with latest DB tokens.
+  const msg = err.message ?? "";
+  if (msg.includes("invalid_grant") || msg.includes("expired") || msg.includes("INVALID_SESSION_ID")) {
+    evictOrgConnection(job.data.orgId);
+    console.warn(`[queue] Evicted stale SFDC connection for org ${job.data.orgId} (${msg})`);
+  }
 
   if (job.attemptsMade >= 3) {
     // All retries exhausted → mark as FAILED (DLQ)

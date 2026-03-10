@@ -115,16 +115,33 @@ export async function exchangeCodeForTokens(
 }
 
 /**
+ * Callback invoked when jsforce auto-refreshes the access token.
+ * Consumers (engine, web) can use this to persist the new token to the DB.
+ */
+export type OnTokenRefresh = (accessToken: string, res: unknown) => void;
+
+/**
  * Create a jsforce connection from stored tokens.
  * Handles token refresh automatically.
+ *
+ * Pass `onTokenRefresh` to be notified when jsforce obtains a fresh access
+ * token — use this to persist the new token back to the database so it
+ * survives process restarts.
  */
-export function createConnection(tokens: OAuthTokens): Connection {
+export function createConnection(
+  tokens: OAuthTokens,
+  onTokenRefresh?: OnTokenRefresh
+): Connection {
   const conn = new ConnectionClass({
     oauth2: getOAuth2Config(),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     instanceUrl: tokens.instanceUrl,
   });
+
+  if (onTokenRefresh) {
+    conn.on("refresh", onTokenRefresh);
+  }
 
   return conn;
 }

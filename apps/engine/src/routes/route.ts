@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { prisma, getPlanLimits, startOfNextMonth } from "@lead-routing/db";
 import { validateHmac } from "../middleware/validate-signature.js";
+import { engineRateLimit } from "../middleware/rate-limit.js";
 import { claimIdempotencyKey, claimIdempotencyKeys } from "../idempotency.js";
 import { routeRecord, type RoutingPayload } from "../router.js";
 import { enqueueBatchJobs, type BatchJobData } from "../batch-queue.js";
 import { randomUUID } from "node:crypto";
+import { routePayloadSchema, batchPayloadSchema } from "../lib/schemas.js";
+import { stripPii } from "../lib/strip-pii.js";
 
 interface WebhookBody {
   sfdcOrgId: string;   // Salesforce org ID (18-char), used to look up internal orgId
@@ -16,24 +19,19 @@ interface WebhookBody {
 }
 
 export async function routePlugin(app: FastifyInstance): Promise<void> {
+  app.addHook("onRequest", engineRateLimit);
+
   app.post<{ Body: WebhookBody }>("/route", {
     config: { rawBody: true },
   }, async (request, reply) => {
     const startMs = Date.now();
 
-    // ── 1. Parse body ──────────────────────────────────────────────────
-    const body = request.body;
-
-    if (
-      !body?.sfdcOrgId ||
-      !body?.objectType ||
-      !body?.eventType ||
-      !body?.recordId ||
-      !body?.timestamp ||
-      !body?.fields
-    ) {
-      return reply.status(400).send({ error: "Missing required fields" });
+    // ── 1. Parse & validate body ───────────────────────────────────────
+    const parsed = routePayloadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid payload", details: parsed.error.issues });
     }
+    const body = parsed.data;
 
     const { sfdcOrgId, objectType, eventType, recordId, timestamp, fields } = body;
 
@@ -77,7 +75,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED",
           errorMessage: "Organization is suspended",
-          recordSnapshot: fields as any,
+          recordSnapshot: stripPii(fields) as any,
         },
       });
       return reply.status(403).send({ error: "Organization is suspended" });
@@ -106,7 +104,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED",
           errorMessage: `Quota exceeded: ${quotaUsed.toLocaleString()}/${limits.routingLeadsPerMonth.toLocaleString()} leads used this month`,
-          recordSnapshot: fields as any,
+          recordSnapshot: stripPii(fields) as any,
         },
       });
       return reply.status(429).send({
@@ -148,7 +146,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED",
           errorMessage: `Internal routing error: ${err instanceof Error ? err.message : String(err)}`,
-          recordSnapshot: fields as any,
+          recordSnapshot: stripPii(fields) as any,
         },
       });
       return reply.status(500).send({ error: "Internal routing error" });
@@ -170,23 +168,12 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
   app.post<{ Body: BatchBody }>("/route/batch", {
     config: { rawBody: true },
   }, async (request, reply) => {
-    const body = request.body;
-
     // ── 1. Validate ─────────────────────────────────────────────────────
-    if (
-      !body?.sfdcOrgId ||
-      !body?.objectType ||
-      !body?.eventType ||
-      !body?.timestamp ||
-      !Array.isArray(body?.records) ||
-      body.records.length === 0
-    ) {
-      return reply.status(400).send({ error: "Missing required fields or empty records array" });
+    const parsed = batchPayloadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid payload", details: parsed.error.issues });
     }
-
-    if (body.records.length > 200) {
-      return reply.status(400).send({ error: "Batch size exceeds maximum of 200 records" });
-    }
+    const body = parsed.data;
 
     const { sfdcOrgId, objectType, eventType, timestamp, records } = body;
 
@@ -230,7 +217,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED" as const,
           errorMessage: "Organization is suspended",
-          recordSnapshot: r.fields as any,
+          recordSnapshot: stripPii(r.fields) as any,
         })),
       });
       return reply.status(403).send({ error: "Organization is suspended" });
@@ -259,7 +246,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED" as const,
           errorMessage: errorMsg,
-          recordSnapshot: r.fields as any,
+          recordSnapshot: stripPii(r.fields) as any,
         })),
       });
       return reply.status(429).send({
@@ -299,7 +286,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
           eventType,
           status: "FAILED" as const,
           errorMessage: errorMsg,
-          recordSnapshot: r.fields as any,
+          recordSnapshot: stripPii(r.fields) as any,
         })),
       });
     }

@@ -45,6 +45,18 @@ vi.mock("../router.js", () => ({
   routeRecord: vi.fn().mockResolvedValue("routed"),
 }));
 
+vi.mock("../redis.js", () => ({
+  redis: {
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+    ttl: vi.fn().mockResolvedValue(60),
+  },
+}));
+
+vi.mock("../lib/strip-pii.js", () => ({
+  stripPii: vi.fn((fields: Record<string, unknown>) => fields),
+}));
+
 // ─── Fastify setup ────────────────────────────────────────────────────────
 
 import Fastify from "fastify";

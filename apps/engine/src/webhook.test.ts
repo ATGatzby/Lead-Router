@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { mockFindUnique } = vi.hoisted(() => ({
+const { mockFindUnique, mockAssertSafeUrl } = vi.hoisted(() => ({
   mockFindUnique: vi.fn(),
+  mockAssertSafeUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@lead-routing/db", () => ({
@@ -10,6 +11,10 @@ vi.mock("@lead-routing/db", () => ({
       findUnique: mockFindUnique,
     },
   },
+}));
+
+vi.mock("./lib/ssrf-guard.js", () => ({
+  assertSafeUrl: mockAssertSafeUrl,
 }));
 
 import { fireWebhook, type WebhookPayload } from "./webhook.js";

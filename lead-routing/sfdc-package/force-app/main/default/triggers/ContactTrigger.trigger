@@ -19,10 +19,20 @@ trigger ContactTrigger on Contact (after insert, after update) {
         }
     }
 
-    if (!insertIds.isEmpty()) {
-        RoutingEngineCallout.sendAsync('Contact', insertIds, 'INSERT');
+    for (Integer i = 0; i < insertIds.size(); i += 100) {
+        Integer endIdx = Math.min(i + 100, insertIds.size());
+        List<Id> chunk = new List<Id>();
+        for (Integer j = i; j < endIdx; j++) {
+            chunk.add(insertIds[j]);
+        }
+        RoutingEngineCallout.sendAsync('Contact', chunk, 'INSERT');
     }
-    if (!updateIds.isEmpty()) {
-        RoutingEngineCallout.sendAsync('Contact', updateIds, 'UPDATE');
+    for (Integer i = 0; i < updateIds.size(); i += 100) {
+        Integer endIdx = Math.min(i + 100, updateIds.size());
+        List<Id> chunk = new List<Id>();
+        for (Integer j = i; j < endIdx; j++) {
+            chunk.add(updateIds[j]);
+        }
+        RoutingEngineCallout.sendAsync('Contact', chunk, 'UPDATE');
     }
 }

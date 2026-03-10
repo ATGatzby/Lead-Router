@@ -15,7 +15,7 @@ interface RoutingLog {
   retryCount: number;
   errorMessage: string | null;
   createdAt: string;
-  status: "FAILED";
+  status: "FAILED" | "RETRY";
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -52,6 +52,20 @@ export default function FailedRoutingsPage() {
     onError: (err: Error) => showToast(err.message, "error"),
   });
 
+  const retryAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/routing-logs/retry-all", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Retry all failed");
+      return data as { retried: number };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["routing-logs-failed"] });
+      showToast(`Re-enqueued ${data.retried} records for retry`);
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
   const dismissMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/routing-logs/${id}/dismiss`, { method: "POST" });
@@ -71,11 +85,24 @@ export default function FailedRoutingsPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold">Failed Routings</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          Records that could not be routed after all retry attempts.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Failed Routings</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Records that could not be routed after all retry attempts.
+          </p>
+        </div>
+        {logs.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={retryAllMutation.isPending}
+            onClick={() => retryAllMutation.mutate()}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", retryAllMutation.isPending && "animate-spin")} />
+            {retryAllMutation.isPending ? "Retrying…" : `Retry All (${logs.length})`}
+          </Button>
+        )}
       </div>
 
       {/* Banner */}
@@ -110,9 +137,10 @@ export default function FailedRoutingsPage() {
       {logs.length > 0 && (
         <div className="rounded-xl border overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1.4fr_90px_90px_2fr_160px] items-center gap-3 px-4 py-2.5 bg-muted/40 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="grid grid-cols-[1.4fr_80px_80px_80px_2fr_160px] items-center gap-3 px-4 py-2.5 bg-muted/40 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
             <span>Record ID</span>
             <span>Object</span>
+            <span>Status</span>
             <span>Attempts</span>
             <span>Error</span>
             <span className="text-right">Actions</span>
@@ -121,11 +149,14 @@ export default function FailedRoutingsPage() {
           {logs.map((log) => (
             <div
               key={log.id}
-              className="grid grid-cols-[1.4fr_90px_90px_2fr_160px] items-center gap-3 px-4 py-3 border-b last:border-b-0 bg-card"
+              className="grid grid-cols-[1.4fr_80px_80px_80px_2fr_160px] items-center gap-3 px-4 py-3 border-b last:border-b-0 bg-card"
             >
               <span className="font-mono text-xs">{log.sfdcRecordId}</span>
               <span className="text-sm text-muted-foreground capitalize">
                 {log.objectType.charAt(0) + log.objectType.slice(1).toLowerCase()}
+              </span>
+              <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded-full w-fit", log.status === "FAILED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700")}>
+                {log.status === "FAILED" ? "Failed" : "Retry"}
               </span>
               <span className="text-sm text-muted-foreground">{log.retryCount} {log.retryCount === 1 ? "retry" : "retries"}</span>
               <span className="text-sm text-destructive truncate">{log.errorMessage ?? "Unknown error"}</span>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
-import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
+import { getOrgIdFromHeaders, getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 
 // GET /api/settings/notifications
 export async function GET(_req: NextRequest) {
@@ -19,9 +19,12 @@ export async function GET(_req: NextRequest) {
   }
 }
 
-// PUT /api/settings/notifications
+// PUT /api/settings/notifications (ADMIN only)
 export async function PUT(req: NextRequest) {
   try {
+    const session = await requireSession();
+    requireRole(session, "ADMIN");
+
     const orgId = await getOrgIdFromHeaders();
     const actor = await getActorFromHeaders();
 

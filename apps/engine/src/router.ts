@@ -3,10 +3,11 @@ import { updateOwner, mergeLead } from "@lead-routing/sfdc";
 import { getActiveRules, type CachedRule, type CachedBranch, type CachedMatchConfig } from "./cache.js";
 import { evaluateRule } from "./evaluator.js";
 import { getNextMember } from "./round-robin.js";
-import { getOrgConnection, getSfdcUserId, getSfdcQueueId } from "./sfdc.js";
+import { getOrgConnection, getSfdcUserId, getSfdcQueueId, evictOrgConnection } from "./sfdc.js";
 import { enqueueRetry } from "./queue.js";
 import { fireWebhook } from "./webhook.js";
 import { updateAggregates, createConversionTracking } from "./aggregate.js";
+import { stripPii } from "./lib/strip-pii.js";
 
 // ─── Payload type ─────────────────────────────────────────────────────────
 
@@ -167,55 +168,51 @@ async function runMatcher(
 
   const emailDomain = email.includes("@") ? email.split("@")[1] : null;
 
-  // Helper: run SOQL and get first matching record's OwnerId
-  async function soqlFirst(soql: string): Promise<{ Id: string; OwnerId: string } | null> {
+  // Helper: parameterised query via jsforce .sobject().findOne() — no raw SOQL
+  async function findFirst(
+    objectName: string,
+    conditions: Record<string, unknown>,
+    excludeId?: string
+  ): Promise<{ Id: string; OwnerId: string } | null> {
     try {
-      const res = await conn.query(soql);
-      if (res.records && res.records.length > 0) {
-        return res.records[0] as { Id: string; OwnerId: string };
+      const where = { ...conditions };
+      if (excludeId) {
+        where.Id = { $ne: excludeId };
       }
+      const record = await conn.sobject(objectName).findOne(where, ['Id', 'OwnerId']);
+      return record ? (record as { Id: string; OwnerId: string }) : null;
     } catch (err) {
-      console.error("[matcher] SOQL error:", err);
+      console.error("[matcher] Query error:", err);
+      return null;
     }
-    return null;
   }
 
   // 1. Check Leads
   if (matchConfig.checkLeads && email) {
-    const lead = await soqlFirst(
-      `SELECT Id, OwnerId FROM Lead WHERE Email = '${email.replace(/'/g, "\\'")}' AND IsConverted = false AND Id != '${currentRecordId}' LIMIT 1`
-    );
+    const lead = await findFirst('Lead', { Email: email, IsConverted: false }, currentRecordId);
     if (lead) return { type: "LEAD", ownerId: lead.OwnerId, recordId: lead.Id };
   }
 
   // 2. Check Contacts
   if (matchConfig.checkContacts && email) {
-    const contact = await soqlFirst(
-      `SELECT Id, OwnerId FROM Contact WHERE Email = '${email.replace(/'/g, "\\'")}' LIMIT 1`
-    );
+    const contact = await findFirst('Contact', { Email: email });
     if (contact) return { type: "CONTACT", ownerId: contact.OwnerId, recordId: contact.Id };
   }
 
   // 3. Check Accounts by domain
   if (matchConfig.checkAccounts && matchConfig.matchDomain && emailDomain) {
-    const account = await soqlFirst(
-      `SELECT Id, OwnerId FROM Account WHERE Website LIKE '%${emailDomain.replace(/'/g, "\\'")}%' LIMIT 1`
-    );
+    const account = await findFirst('Account', { Website: { $like: `%${emailDomain}%` } });
     if (account) return { type: "ACCOUNT", ownerId: account.OwnerId, recordId: account.Id };
   }
 
   // Phone-based checks
   if (matchConfig.matchPhone && phone) {
     if (matchConfig.checkLeads) {
-      const lead = await soqlFirst(
-        `SELECT Id, OwnerId FROM Lead WHERE Phone = '${phone.replace(/'/g, "\\'")}' AND IsConverted = false AND Id != '${currentRecordId}' LIMIT 1`
-      );
+      const lead = await findFirst('Lead', { Phone: phone, IsConverted: false }, currentRecordId);
       if (lead) return { type: "LEAD", ownerId: lead.OwnerId, recordId: lead.Id };
     }
     if (matchConfig.checkContacts) {
-      const contact = await soqlFirst(
-        `SELECT Id, OwnerId FROM Contact WHERE Phone = '${phone.replace(/'/g, "\\'")}' LIMIT 1`
-      );
+      const contact = await findFirst('Contact', { Phone: phone });
       if (contact) return { type: "CONTACT", ownerId: contact.OwnerId, recordId: contact.Id };
     }
   }
@@ -260,7 +257,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
       eventType,
       status: "UNMATCHED",
       routingDurationMs: startMs ? Date.now() - startMs : null,
-      recordSnapshot: fields,
+      recordSnapshot: stripPii(fields),
     },
   });
   updateAggregates({
@@ -309,7 +306,7 @@ async function routeNewStyle(
                     ruleId: rule.id, ruleName: rule.name,
                     status: "FAILED", errorMessage: String(err),
                     routingDurationMs: startMs ? Date.now() - startMs : null,
-                    isDryRun: rule.isDryRun, recordSnapshot: fields,
+                    isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
                   },
                 });
                 updateAggregates({
@@ -325,7 +322,7 @@ async function routeNewStyle(
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 status: "MERGED", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: fields,
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
               },
             });
             updateAggregates({
@@ -346,7 +343,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: fields,
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
               },
             });
             updateAggregates({
@@ -380,7 +377,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
                 },
               });
               updateAggregates({
@@ -412,7 +409,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: fields,
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
               },
             });
             updateAggregates({
@@ -446,7 +443,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
                 },
               });
               updateAggregates({
@@ -479,7 +476,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: fields,
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
               },
             });
             updateAggregates({
@@ -513,7 +510,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: fields,
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
                 },
               });
               updateAggregates({
@@ -554,7 +551,7 @@ async function routeNewStyle(
           teamId: assignee.teamId, teamName: assignee.teamName,
           isDryRun: rule.isDryRun, status: "RETRY",
           routingDurationMs: startMs ? Date.now() - startMs : null,
-          recordSnapshot: fields,
+          recordSnapshot: stripPii(fields),
         },
       });
 
@@ -601,6 +598,7 @@ async function routeNewStyle(
         });
         return "routed";
       } catch (err) {
+        evictOrgConnection(orgId);
         await enqueueRetry({
           logId: log.id, orgId, recordId,
           objectType: toSfdcObjectName(objectType),
@@ -633,7 +631,7 @@ async function routeNewStyle(
           teamId: assignee.teamId, teamName: assignee.teamName,
           isDryRun: rule.isDryRun, status: "RETRY",
           routingDurationMs: startMs ? Date.now() - startMs : null,
-          recordSnapshot: fields,
+          recordSnapshot: stripPii(fields),
         },
       });
 
@@ -672,6 +670,7 @@ async function routeNewStyle(
         }
         return "routed";
       } catch (err) {
+        evictOrgConnection(orgId);
         await enqueueRetry({
           logId: log.id, orgId, recordId,
           objectType: toSfdcObjectName(objectType),
@@ -688,7 +687,7 @@ async function routeNewStyle(
       orgId, sfdcRecordId: recordId, objectType, eventType,
       ruleId: rule.id, ruleName: rule.name,
       status: "UNMATCHED", routingDurationMs: startMs ? Date.now() - startMs : null,
-      isDryRun: rule.isDryRun, recordSnapshot: fields,
+      isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
     },
   });
   updateAggregates({
@@ -716,7 +715,7 @@ async function routeLegacy(
         ruleId: rule.id, ruleName: rule.name,
         status: "FAILED", errorMessage: "No eligible assignee found",
         routingDurationMs: startMs ? Date.now() - startMs : null,
-        isDryRun: rule.isDryRun, recordSnapshot: fields,
+        isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
       },
     });
     updateAggregates({
@@ -736,7 +735,7 @@ async function routeLegacy(
       teamId: assignee.teamId, teamName: assignee.teamName,
       isDryRun: rule.isDryRun, status: "RETRY",
       routingDurationMs: startMs ? Date.now() - startMs : null,
-      recordSnapshot: fields,
+      recordSnapshot: stripPii(fields),
     },
   });
 
@@ -783,6 +782,7 @@ async function routeLegacy(
     });
     return "routed";
   } catch (err) {
+    evictOrgConnection(orgId);
     await enqueueRetry({
       logId: log.id, orgId, recordId,
       objectType: toSfdcObjectName(objectType),

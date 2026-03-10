@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@lead-routing/db";
 import { createConnection, syncFieldSchema } from "@lead-routing/sfdc";
+import { validateSfdcHmac } from "@/lib/validate-sfdc-hmac";
 
 // POST /api/fields/sync?object=LEAD — trigger SFDC describeSObject sync
 // Called by the LWC onboarding wizard (Apex HTTP callout) using X-Sfdc-Org-Id,
@@ -12,6 +13,16 @@ export async function POST(req: NextRequest) {
     const sfdcOrgId = hdrs.get("x-sfdc-org-id");
     if (!sfdcOrgId) {
       return NextResponse.json({ error: "Missing X-Sfdc-Org-Id header" }, { status: 401 });
+    }
+
+    // Validate HMAC if signature is present (forward-compatible)
+    const body = await req.text();
+    const signature = hdrs.get("x-signature-256");
+    if (signature) {
+      const valid = await validateSfdcHmac(sfdcOrgId, body, signature);
+      if (!valid) {
+        return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+      }
     }
 
     const org = await prisma.organization.findUnique({

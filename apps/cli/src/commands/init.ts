@@ -1,4 +1,6 @@
 import { promises as dns } from 'node:dns'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { intro, outro, note, log, confirm, cancel, isCancel, password as promptPassword } from '@clack/prompts'
 import chalk from 'chalk'
 import { checkPrerequisites } from '../steps/prerequisites.js'
@@ -108,6 +110,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         sfdcClientId: saved.sfdcClientId ?? '',
         sfdcLoginUrl: saved.sfdcLoginUrl ?? 'https://login.salesforce.com',
         installDir: dir,
+        webhookSecret: saved.engineWebhookSecret,
       })
 
       await guideAppLauncherSetup(saved.appUrl)
@@ -208,6 +211,20 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     log.step('Step 7/8  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
+    // Remove ADMIN_PASSWORD from .env.web now that the seed has run
+    try {
+      const envWebPath = join(dir, '.env.web')
+      const envContent = readFileSync(envWebPath, 'utf-8')
+      const cleaned = envContent
+        .split('\n')
+        .filter((line) => !line.startsWith('ADMIN_PASSWORD='))
+        .join('\n')
+      writeFileSync(envWebPath, cleaned, 'utf-8')
+      log.success('Removed ADMIN_PASSWORD from .env.web (no longer needed after seed)')
+    } catch {
+      // Non-fatal — password stays in .env.web but won't cause issues
+    }
+
     // Step 8 — Deploy Salesforce package (sf runs locally — no VPS requirement)
     log.step('Step 8/8  Deploying Salesforce package')
     await sfdcDeployInline({
@@ -217,6 +234,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       sfdcClientId: cfg.sfdcClientId,
       sfdcLoginUrl: cfg.sfdcLoginUrl,
       installDir: dir,
+      webhookSecret: cfg.engineWebhookSecret,
     })
 
     // Guided App Launcher wizard

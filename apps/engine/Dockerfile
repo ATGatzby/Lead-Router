@@ -14,7 +14,7 @@ COPY packages/sfdc/package.json   ./packages/sfdc/
 
 # Install all deps (including devDeps — needed for tsc, tsup, prisma)
 # --shamefully-hoist flattens node_modules so files can be COPY'd cleanly
-RUN pnpm install --no-frozen-lockfile --shamefully-hoist
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Copy full source after deps are cached
 COPY apps/engine/   ./apps/engine/
@@ -43,7 +43,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/engine/package.json  ./apps/engine/
 COPY packages/db/package.json  ./packages/db/
 COPY packages/sfdc/package.json ./packages/sfdc/
-RUN pnpm install --no-frozen-lockfile --prod --shamefully-hoist
+RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 
 # Bundled engine (workspace packages inlined by tsup)
 COPY --from=builder /app/apps/engine/dist ./dist
@@ -54,6 +54,9 @@ COPY --from=builder /app/node_modules/@prisma      ./node_modules/@prisma
 
 # Prisma schema — required by `prisma migrate deploy` run from the CLI
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
+
+RUN addgroup -S app && adduser -S app -G app
+USER app
 
 EXPOSE 3001
 

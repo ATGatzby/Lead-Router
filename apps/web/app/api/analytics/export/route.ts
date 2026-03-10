@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { parseFilters } from "../filters";
+import { sanitizeCsvCell } from "@/lib/csv";
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
         csv =
           "Date,Success,Failed,Unmatched,Merged,Total,Avg Duration (ms)\n";
         for (const r of rows) {
-          csv += `${r.date},${r.success},${r.failed},${r.unmatched},${r.merged},${r.total},${r.avg_duration_ms ?? ""}\n`;
+          csv += `${sanitizeCsvCell(String(r.date))},${r.success},${r.failed},${r.unmatched},${r.merged},${r.total},${r.avg_duration_ms ?? ""}\n`;
         }
         filename = "analytics-overview.csv";
         break;
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
             Number(r.total) > 0
               ? ((Number(r.success) / Number(r.total)) * 100).toFixed(1)
               : "0";
-          csv += `${r.ruleId},"${(r.rule_name || "").replace(/"/g, '""')}",${r.total},${r.success},${r.failed},${r.unmatched},${rate},${r.avg_duration_ms ?? ""},${r.p50_duration_ms ?? ""},${r.p95_duration_ms ?? ""}\n`;
+          csv += `${sanitizeCsvCell(String(r.ruleId))},"${sanitizeCsvCell((r.rule_name || "").replace(/"/g, '""'))}",${r.total},${r.success},${r.failed},${r.unmatched},${rate},${r.avg_duration_ms ?? ""},${r.p50_duration_ms ?? ""},${r.p95_duration_ms ?? ""}\n`;
         }
         filename = "analytics-rules.csv";
         break;
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
         csv =
           "Team ID,Team Name,Assignee ID,Assignee Name,Total Routed,Success\n";
         for (const r of rows) {
-          csv += `${r.teamId},"${(r.team_name || "").replace(/"/g, '""')}",${r.assigneeId},"${(r.assignee_name || "").replace(/"/g, '""')}",${r.total},${r.success}\n`;
+          csv += `${sanitizeCsvCell(String(r.teamId))},"${sanitizeCsvCell((r.team_name || "").replace(/"/g, '""'))}",${sanitizeCsvCell(String(r.assigneeId))},"${sanitizeCsvCell((r.assignee_name || "").replace(/"/g, '""'))}",${r.total},${r.success}\n`;
         }
         filename = "analytics-teams.csv";
         break;
@@ -150,7 +151,7 @@ export async function GET(req: NextRequest) {
         csv =
           "Lead ID,Rule,Path,Assignee,Converted,Converted At,Opportunity ID,Amount,Stage,Tracked At\n";
         for (const r of rows) {
-          csv += `${r.sfdcLeadId},"${(r.ruleName || "").replace(/"/g, '""')}","${(r.pathLabel || "").replace(/"/g, '""')}","${(r.assigneeName || "").replace(/"/g, '""')}",${r.isConverted},${r.convertedAt || ""},${r.opportunityId || ""},${r.opportunityAmount || ""},"${(r.opportunityStageName || "").replace(/"/g, '""')}",${r.createdAt}\n`;
+          csv += `${sanitizeCsvCell(String(r.sfdcLeadId))},"${sanitizeCsvCell((r.ruleName || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.pathLabel || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.assigneeName || "").replace(/"/g, '""'))}",${r.isConverted},${r.convertedAt || ""},${sanitizeCsvCell(String(r.opportunityId || ""))},${r.opportunityAmount || ""},"${sanitizeCsvCell((r.opportunityStageName || "").replace(/"/g, '""'))}",${r.createdAt}\n`;
         }
         filename = "analytics-conversions.csv";
         break;

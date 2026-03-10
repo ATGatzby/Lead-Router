@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, Prisma } from "@lead-routing/db";
-import { getActorFromHeaders } from "@/lib/auth";
+import { getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 
-// DELETE /api/users/:id — permanently remove a user from the system
+// DELETE /api/users/:id — permanently remove a user from the system (ADMIN only)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireSession();
+    requireRole(session, "ADMIN");
+
     const { id } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorSfdcId, userName: actorName } = actor;

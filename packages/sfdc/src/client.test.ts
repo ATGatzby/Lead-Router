@@ -90,21 +90,25 @@ describe("getSfdcAuthUrl", () => {
 });
 
 describe("createConnection", () => {
+  const mockOn = vi.fn();
+
   beforeEach(() => {
     mockConnection.mockClear();
+    mockOn.mockClear();
+    mockConnection.mockImplementation(() => ({ on: mockOn }));
     process.env.SFDC_LOGIN_URL = "https://login.salesforce.com";
     process.env.SFDC_CLIENT_ID = "test-client-id";
     process.env.SFDC_CLIENT_SECRET = "test-client-secret";
     process.env.SFDC_REDIRECT_URI = "https://app.example.com/callback";
   });
 
-  it("returns a jsforce Connection with correct tokens", () => {
-    const tokens = {
-      accessToken: "access-123",
-      refreshToken: "refresh-456",
-      instanceUrl: "https://na1.salesforce.com",
-    };
+  const tokens = {
+    accessToken: "access-123",
+    refreshToken: "refresh-456",
+    instanceUrl: "https://na1.salesforce.com",
+  };
 
+  it("returns a jsforce Connection with correct tokens", () => {
     createConnection(tokens);
 
     expect(mockConnection).toHaveBeenCalledWith({
@@ -118,5 +122,24 @@ describe("createConnection", () => {
       refreshToken: "refresh-456",
       instanceUrl: "https://na1.salesforce.com",
     });
+  });
+
+  it("registers refresh event listener when onTokenRefresh is provided", () => {
+    const onRefresh = vi.fn();
+    createConnection(tokens, onRefresh);
+
+    expect(mockOn).toHaveBeenCalledWith("refresh", onRefresh);
+  });
+
+  it("does NOT register refresh event listener when onTokenRefresh is omitted", () => {
+    createConnection(tokens);
+
+    expect(mockOn).not.toHaveBeenCalled();
+  });
+
+  it("does NOT register refresh event listener when onTokenRefresh is undefined", () => {
+    createConnection(tokens, undefined);
+
+    expect(mockOn).not.toHaveBeenCalled();
   });
 });

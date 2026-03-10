@@ -8,9 +8,13 @@ global class RoutingEngineMock implements HttpCalloutMock {
     private Integer statusCode;
     private String responseBody;
 
+    // Captured from last request for test assertions
+    global String lastEndpoint { get; private set; }
+    global String lastBody { get; private set; }
+
     global RoutingEngineMock() {
-        this.statusCode = 200;
-        this.responseBody = '{"ok":true}';
+        this.statusCode = 202;
+        this.responseBody = '{"accepted":1,"duplicates":0}';
     }
 
     global RoutingEngineMock(Integer statusCode, String responseBody) {
@@ -19,6 +23,9 @@ global class RoutingEngineMock implements HttpCalloutMock {
     }
 
     global HTTPResponse respond(HTTPRequest req) {
+        lastEndpoint = req.getEndpoint();
+        lastBody = req.getBody();
+
         HttpResponse res = new HttpResponse();
         res.setStatusCode(this.statusCode);
         res.setHeader('Content-Type', 'application/json');

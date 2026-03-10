@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
-import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
+import { getOrgIdFromHeaders, getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 import { buildMatchConfigData } from "@/app/api/rules/route";
 
@@ -161,6 +161,14 @@ export async function PUT(
             }
           : undefined,
       },
+      include: {
+        conditions: { orderBy: { sortOrder: "asc" } },
+        branches: {
+          orderBy: { priority: "asc" },
+          include: { conditions: { orderBy: { sortOrder: "asc" } } },
+        },
+        matchConfig: true,
+      },
     });
 
     await prisma.auditLog.create({
@@ -192,12 +200,15 @@ export async function PUT(
   }
 }
 
-// DELETE /api/rules/:id — delete rule
+// DELETE /api/rules/:id — delete rule (ADMIN only)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireSession();
+    requireRole(session, "ADMIN");
+
     const { id } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorId, userName: actorName } = actor;

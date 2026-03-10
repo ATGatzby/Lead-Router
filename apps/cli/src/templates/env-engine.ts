@@ -5,6 +5,7 @@ export interface EngineEnvConfig {
   sfdcClientSecret: string
   sfdcLoginUrl: string
   engineWebhookSecret: string
+  internalApiKey: string
   enginePort?: number
   logLevel?: string
 }
@@ -32,5 +33,8 @@ export function renderEnvEngine(c: EngineEnvConfig): string {
     ``,
     `# Webhook`,
     `ENGINE_WEBHOOK_SECRET=${c.engineWebhookSecret}`,
+    ``,
+    `# Internal API key (Bearer token for analytics endpoints)`,
+    `INTERNAL_API_KEY=${c.internalApiKey}`,
   ].join('\n')
 }

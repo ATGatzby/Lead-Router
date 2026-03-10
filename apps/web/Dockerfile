@@ -12,7 +12,7 @@ COPY packages/db/package.json   ./packages/db/
 COPY packages/sfdc/package.json ./packages/sfdc/
 
 # Install all deps (devDeps included — needed for next build, prisma generate)
-RUN pnpm install --no-frozen-lockfile --shamefully-hoist
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Copy full source
 COPY apps/web/     ./apps/web/
@@ -61,6 +61,9 @@ COPY --from=builder /app/packages/db/prisma          ./packages/db/prisma
 COPY apps/web/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY apps/web/seed.js              ./apps/web/seed.js
 RUN chmod +x docker-entrypoint.sh
+
+RUN addgroup -S app && adduser -S app -G app
+USER app
 
 EXPOSE 3000
 ENTRYPOINT ["./docker-entrypoint.sh"]

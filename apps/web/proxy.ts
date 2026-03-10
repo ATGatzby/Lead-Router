@@ -10,6 +10,7 @@ const SESSION_OPTIONS = {
   cookieOptions: {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
+    sameSite: "lax" as const,
     maxAge: 60 * 60 * 24 * 7,
   },
 };
@@ -56,11 +57,32 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // CSRF: validate Origin for mutating requests on session-protected routes
+  const method = req.method;
+  if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
+    const origin = req.headers.get("origin");
+    const appUrl = process.env.APP_URL;
+    if (origin && appUrl) {
+      const allowed = new URL(appUrl).origin;
+      if (origin !== allowed) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+  }
+
   // Decrypt session and inject headers for protected routes
   const res = NextResponse.next();
   const session = await getIronSession<SessionData>(req, res, SESSION_OPTIONS);
 
-  if (!session.orgId) {
+  // Check session existence and token age (30-day hard expiry)
+  const MAX_SESSION_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+  const sessionExpired =
+    !session.orgId ||
+    (session.issuedAt != null &&
+      Math.floor(Date.now() / 1000) - session.issuedAt > MAX_SESSION_AGE_SECONDS);
+
+  if (sessionExpired) {
+    if (session.orgId) session.destroy(); // Clear stale session
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
@@ -80,11 +102,14 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // Strip CR/LF from header values to prevent header injection
+  const safeHeader = (value: string): string => value.replace(/[\r\n]/g, "");
+
   // Inject session fields as cheap headers for route handlers
   const reqHeaders = new Headers(req.headers);
-  reqHeaders.set("x-org-id", session.orgId);
-  reqHeaders.set("x-user-id", session.appUserId);   // AppUser.id (was x-sfdc-user-id)
-  reqHeaders.set("x-user-name", session.userName);
+  reqHeaders.set("x-org-id", safeHeader(session.orgId));
+  reqHeaders.set("x-user-id", safeHeader(session.appUserId));   // AppUser.id (was x-sfdc-user-id)
+  reqHeaders.set("x-user-name", safeHeader(session.userName));
 
   return NextResponse.next({
     request: { headers: reqHeaders },

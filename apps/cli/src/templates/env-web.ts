@@ -12,6 +12,7 @@ export interface WebEnvConfig {
   adminSecret: string
   adminEmail: string
   adminPassword: string
+  internalApiKey: string
   resendApiKey?: string
   feedbackToEmail?: string
 }
@@ -49,6 +50,9 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     `ADMIN_SECRET=${c.adminSecret}`,
     `ADMIN_EMAIL=${c.adminEmail}`,
     `ADMIN_PASSWORD=${c.adminPassword}`,
+    ``,
+    `# Internal API key (shared with engine for analytics)`,
+    `INTERNAL_API_KEY=${c.internalApiKey}`,
     ``,
     `# Email (optional)`,
     `RESEND_API_KEY=${c.resendApiKey ?? ''}`,

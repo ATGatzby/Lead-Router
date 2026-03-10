@@ -2,6 +2,7 @@ export interface ComposeConfig {
   managedDb: boolean
   managedRedis: boolean
   dbPassword?: string
+  redisPassword?: string
   webPort?: number
   enginePort?: number
 }
@@ -32,15 +33,16 @@ export function renderDockerCompose(c: ComposeConfig): string {
 `
     : ''
 
+  const redisPassword = c.redisPassword ?? ''
   const redisService = c.managedRedis
     ? `
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: unless-stopped${redisPassword ? `\n    command: redis-server --requirepass ${redisPassword}` : ''}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli${redisPassword ? ` -a ${redisPassword}` : ''} ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 10

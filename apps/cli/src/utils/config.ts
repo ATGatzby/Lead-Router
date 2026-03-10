@@ -26,6 +26,8 @@ export interface InstallConfig {
   sfdcClientId?: string
   /** Salesforce login URL (https://login.salesforce.com or https://test.salesforce.com) */
   sfdcLoginUrl?: string
+  /** Engine webhook secret — used for HMAC validation in SFDC callouts */
+  engineWebhookSecret?: string
   installedAt: string
   version: string
 }

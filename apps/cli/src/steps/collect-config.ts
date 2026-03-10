@@ -12,6 +12,7 @@ export interface CollectedConfig {
   dbPassword: string
   managedRedis: boolean
   redisUrl: string
+  redisPassword: string
   adminEmail: string
   adminPassword: string
   /** Always empty string — configure Resend post-install via config update */
@@ -21,6 +22,7 @@ export interface CollectedConfig {
   sessionSecret: string
   engineWebhookSecret: string
   adminSecret: string
+  internalApiKey: string
 }
 
 export interface ConfigCollectOptions {
@@ -124,9 +126,10 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     opts.externalDb ?? `postgresql://leadrouting:${dbPassword}@postgres:5432/leadrouting`
 
   // ── Redis ──────────────────────────────────────────────────────────────────
-  // Default: managed Docker container. Override with --external-redis <url>.
+  // Default: managed Docker container with password auth. Override with --external-redis <url>.
+  const redisPassword = generateSecret(16)
   const managedRedis = !opts.externalRedis
-  const redisUrl = opts.externalRedis ?? 'redis://redis:6379'
+  const redisUrl = opts.externalRedis ?? `redis://:${redisPassword}@redis:6379`
 
   // ── Admin Account ──────────────────────────────────────────────────────────
   note('This creates the first admin user for the web app.', 'Admin Account')
@@ -154,6 +157,7 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   const sessionSecret = generateSecret(32)
   const engineWebhookSecret = generateSecret(32)
   const adminSecret = generateSecret(16)
+  const internalApiKey = generateSecret(32)
 
   return {
     appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
@@ -166,6 +170,7 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     dbPassword: managedDb ? dbPassword : '',
     managedRedis,
     redisUrl,
+    redisPassword: managedRedis ? redisPassword : '',
     adminEmail: adminEmail as string,
     adminPassword: adminPassword as string,
     resendApiKey: '',
@@ -173,5 +178,6 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     sessionSecret,
     engineWebhookSecret,
     adminSecret,
+    internalApiKey,
   }
 }

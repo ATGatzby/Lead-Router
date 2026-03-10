@@ -105,7 +105,6 @@ export class SalesforceApi {
       deployOptions: {
         rollbackOnError: true,
         singlePackage: true,
-        rest: true,
       },
     })
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { getSfdcAuthUrl, generatePkceVerifier, generatePkceChallenge } from "@lead-routing/sfdc";
 
 // GET /api/auth/sfdc/login — redirect to Salesforce OAuth with PKCE
@@ -6,7 +7,10 @@ export async function GET() {
   const codeVerifier  = generatePkceVerifier();
   const codeChallenge = generatePkceChallenge(codeVerifier);
 
-  const authUrl = getSfdcAuthUrl(codeChallenge);
+  // Generate CSRF state parameter
+  const state = crypto.randomBytes(16).toString("hex");
+
+  const authUrl = getSfdcAuthUrl(codeChallenge) + `&state=${state}`;
   const response = NextResponse.redirect(authUrl);
 
   // Store verifier in a dedicated short-lived cookie on the redirect response.
@@ -18,6 +22,15 @@ export async function GET() {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 60 * 10, // 10 minutes — enough for any OAuth round-trip
+    path: "/",
+  });
+
+  // Store OAuth state in a dedicated cookie for CSRF validation in callback
+  response.cookies.set("sfdc_oauth_state", state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 10,
     path: "/",
   });
 

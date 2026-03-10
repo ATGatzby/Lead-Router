@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { createConnection, pushSettings } from "@lead-routing/sfdc";
+import { validateSfdcHmac } from "@/lib/validate-sfdc-hmac";
 
 // POST /api/setup/onboarding-done
 // Called by OnboardingController.markOnboardingDone() after Step 4 completes.
@@ -11,6 +12,16 @@ export async function POST(req: NextRequest) {
 
     if (!sfdcOrgId) {
       return NextResponse.json({ error: "Missing X-Sfdc-Org-Id header" }, { status: 400 });
+    }
+
+    // Validate HMAC if signature is present (forward-compatible)
+    const body = await req.text();
+    const signature = req.headers.get("x-signature-256");
+    if (signature) {
+      const valid = await validateSfdcHmac(sfdcOrgId, body, signature);
+      if (!valid) {
+        return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+      }
     }
 
     const org = await prisma.organization.findUnique({

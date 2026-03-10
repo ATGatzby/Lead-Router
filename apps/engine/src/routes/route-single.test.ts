@@ -47,6 +47,18 @@ vi.mock("../batch-queue.js", () => ({
   batchWorker: { on: vi.fn() },
 }));
 
+vi.mock("../redis.js", () => ({
+  redis: {
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+    ttl: vi.fn().mockResolvedValue(60),
+  },
+}));
+
+vi.mock("../lib/strip-pii.js", () => ({
+  stripPii: vi.fn((fields: Record<string, unknown>) => fields),
+}));
+
 // ─── Fastify setup ────────────────────────────────────────────────────────
 
 import Fastify from "fastify";
@@ -132,7 +144,7 @@ describe("POST /route (single)", () => {
   it("returns 400 when sfdcOrgId is missing", async () => {
     const res = await injectSingle(app, makeSingleBody({ sfdcOrgId: undefined }));
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe("Missing required fields");
+    expect(JSON.parse(res.body).error).toBe("Invalid payload");
   });
 
   it("returns 400 when objectType is missing", async () => {

@@ -56,6 +56,7 @@ export async function runSfdcDeploy(): Promise<void> {
       sfdcClientId: config?.sfdcClientId ?? '',
       sfdcLoginUrl: config?.sfdcLoginUrl ?? 'https://login.salesforce.com',
       installDir: dir ?? undefined,
+      webhookSecret: config?.engineWebhookSecret,
     })
   } catch (err) {
     log.error(err instanceof Error ? err.message : String(err))

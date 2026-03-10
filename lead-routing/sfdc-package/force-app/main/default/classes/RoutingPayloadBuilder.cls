@@ -27,6 +27,42 @@ public with sharing class RoutingPayloadBuilder {
         return JSON.serialize(payload);
     }
 
+    /**
+     * Serialises a batch of SObject records into the JSON payload format
+     * expected by the engine's POST /route/batch endpoint.
+     *
+     * Schema:
+     * {
+     *   "objectType": "LEAD",
+     *   "eventType":  "INSERT",
+     *   "sfdcOrgId":  "00D000000000001EAA",
+     *   "timestamp":  "2026-02-23T10:32:00Z",
+     *   "records": [
+     *     { "recordId": "00Q...", "fields": { ... } },
+     *     ...
+     *   ]
+     * }
+     */
+    public static String buildBatch(String objectType, String eventType, List<SObject> records) {
+        List<Map<String, Object>> recordList = new List<Map<String, Object>>();
+        for (SObject record : records) {
+            recordList.add(new Map<String, Object>{
+                'recordId' => String.valueOf(record.get('Id')),
+                'fields'   => extractFields(record)
+            });
+        }
+
+        Map<String, Object> payload = new Map<String, Object>{
+            'objectType' => objectType.toUpperCase(),
+            'eventType'  => eventType.toUpperCase(),
+            'sfdcOrgId'  => UserInfo.getOrganizationId(),
+            'timestamp'  => Datetime.now().formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\''),
+            'records'    => recordList
+        };
+
+        return JSON.serialize(payload);
+    }
+
     // ─── Private ───────────────────────────────────────────────────────────────
 
     private static Map<String, Object> extractFields(SObject record) {

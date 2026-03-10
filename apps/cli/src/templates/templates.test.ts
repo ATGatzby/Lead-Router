@@ -18,6 +18,9 @@ const baseWebConfig = {
   sessionSecret: 'session_secret_here',
   engineWebhookSecret: 'webhook_secret_here',
   adminSecret: 'admin_secret_here',
+  adminEmail: 'admin@acme.com',
+  adminPassword: 'password123',
+  internalApiKey: 'internal_api_key_here',
 }
 
 // ─── renderEnvWeb ─────────────────────────────────────────────────────────────
@@ -250,6 +253,7 @@ const baseEngineConfig = {
   sfdcClientSecret: 'SFDC_SECRET',
   sfdcLoginUrl: 'https://login.salesforce.com',
   engineWebhookSecret: 'webhook_secret_here',
+  internalApiKey: 'internal_api_key_here',
 }
 
 describe('renderEnvEngine', () => {
