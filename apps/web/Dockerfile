@@ -6,7 +6,7 @@ RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 WORKDIR /app
 
 # Copy manifests first (better layer caching)
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
 COPY apps/web/package.json      ./apps/web/
 COPY packages/db/package.json   ./packages/db/
 COPY packages/sfdc/package.json ./packages/sfdc/

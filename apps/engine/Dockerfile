@@ -7,7 +7,7 @@ RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 WORKDIR /app
 
 # Copy monorepo manifests first (layer-cache friendly)
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
 COPY apps/engine/package.json ./apps/engine/
 COPY packages/db/package.json     ./packages/db/
 COPY packages/sfdc/package.json   ./packages/sfdc/
@@ -39,7 +39,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy manifests to install production deps (fastify, bullmq, ioredis, etc.)
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
 COPY apps/engine/package.json  ./apps/engine/
 COPY packages/db/package.json  ./packages/db/
 COPY packages/sfdc/package.json ./packages/sfdc/
