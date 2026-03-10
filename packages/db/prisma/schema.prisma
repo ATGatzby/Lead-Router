@@ -230,7 +230,7 @@ model RoutingBranch {
   rule            RoutingRule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   label           String?
   priority        Int            @default(0)
-  assignmentType  AssignmentType
+  assignmentType  AssignmentType?
   assigneeUserId  String?
   assigneeTeamId  String?
   assigneeQueueId String?

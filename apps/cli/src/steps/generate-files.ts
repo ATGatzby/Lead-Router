@@ -64,6 +64,8 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     sessionSecret: cfg.sessionSecret,
     engineWebhookSecret: cfg.engineWebhookSecret,
     adminSecret: cfg.adminSecret,
+    adminEmail: cfg.adminEmail,
+    adminPassword: cfg.adminPassword,
     resendApiKey: cfg.resendApiKey || undefined,
     feedbackToEmail: cfg.feedbackToEmail || undefined,
   })

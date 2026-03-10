@@ -1,5 +1,4 @@
 import { log } from '@clack/prompts'
-import { runSilent } from '../utils/exec.js'
 
 interface CheckResult {
   ok: boolean
@@ -12,11 +11,13 @@ interface CheckResult {
  *
  * Docker, Docker Compose, and port availability are now checked on the
  * remote server in check-remote-prerequisites.ts (after SSH connect).
+ *
+ * Salesforce CLI (`sf`) is no longer required — the CLI uses the
+ * Salesforce REST API directly via built-in fetch().
  */
 export async function checkPrerequisites(): Promise<void> {
   const results: CheckResult[] = await Promise.all([
     checkNodeVersion(),
-    checkSalesforceCLI(),
   ])
 
   const failed = results.filter((r) => !r.ok)
@@ -43,16 +44,4 @@ async function checkNodeVersion(): Promise<CheckResult> {
     return { ok: false, label: `Node.js ${version}`, detail: 'version 20+ required' }
   }
   return { ok: true, label: `Node.js ${version}` }
-}
-
-async function checkSalesforceCLI(): Promise<CheckResult> {
-  const out = await runSilent('sf', ['--version'])
-  if (!out) {
-    return {
-      ok: false,
-      label: 'Salesforce CLI (sf) — not found',
-      detail: 'install from https://developer.salesforce.com/tools/salesforcecli',
-    }
-  }
-  return { ok: true, label: `Salesforce CLI — ${out.trim()}` }
 }

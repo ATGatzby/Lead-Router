@@ -2,8 +2,10 @@ import { readFileSync, writeFileSync, existsSync, cpSync, rmSync } from 'node:fs
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { execSync } from 'node:child_process'
 import { spinner, log } from '@clack/prompts'
-import { execa } from 'execa'
+import { SalesforceApi, DuplicateError } from '../utils/sfdc-api.js'
+import { zipSourcePackage } from '../utils/zip-source.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -29,37 +31,15 @@ export interface SfdcDeployParams {
  * Core Salesforce deploy logic shared between `init` (inline) and the
  * standalone `sfdc deploy` command.
  *
- * Assumes `sf` CLI is already verified by the caller (either prerequisites
- * check in init, or the explicit check in sfdc.ts).
+ * Uses the Salesforce REST API directly — no `sf` CLI required.
  */
 export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> {
-  const { appUrl, engineUrl, orgAlias, installDir } = params
+  const { appUrl, engineUrl, installDir } = params
   const s = spinner()
 
   // ── 1. Web login via app bridge ────────────────────────────────────────────
-  // Check if already authenticated to this org alias — skip browser login if so.
-  const { exitCode: authCheck } = await execa(
-    'sf', ['org', 'display', '--target-org', orgAlias, '--json'],
-    { reject: false }
-  )
-  const alreadyAuthed = authCheck === 0
-
-  // sfCredEnv: passed to every sf execa call so the session token is available
-  // even if alias storage failed. targetOrgArgs: dropped when the alias wasn't
-  // persisted — SF_ACCESS_TOKEN + SF_ORG_INSTANCE_URL identify the org instead.
-  let sfCredEnv: Record<string, string> = {}
-  let targetOrgArgs: string[] = ['--target-org', orgAlias]
-
-  if (alreadyAuthed) {
-    log.success('Using existing Salesforce authentication')
-  } else {
-    const { accessToken, instanceUrl, aliasStored } = await loginViaAppBridge(appUrl, orgAlias)
-    sfCredEnv = { SF_ACCESS_TOKEN: accessToken, SF_ORG_INSTANCE_URL: instanceUrl }
-    if (!aliasStored) {
-      // Alias lookup will fail — omit --target-org and let env vars specify the org
-      targetOrgArgs = []
-    }
-  }
+  const { accessToken, instanceUrl } = await loginViaAppBridge(appUrl)
+  const sf = new SalesforceApi(instanceUrl, accessToken)
 
   // ── 2. Copy + patch sfdc-package ───────────────────────────────────────────
   s.start('Copying Salesforce package…')
@@ -119,41 +99,67 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
 
   log.success('Remote Site Settings patched')
 
-  // ── 3. Deploy package ──────────────────────────────────────────────────────
+  // ── 3. Deploy package via REST API ─────────────────────────────────────────
   s.start('Deploying Salesforce package (this may take ~2 min)…')
   try {
-    await execa(
-      'sf',
-      ['project', 'deploy', 'start', ...targetOrgArgs, '--source-dir', 'force-app'],
-      { cwd: destPkg, stdio: 'inherit', env: { ...process.env, ...sfCredEnv } }
-    )
-    s.stop('Package deployed')
+    const zipBuffer = await zipSourcePackage(destPkg)
+    const deployId = await sf.deployMetadata(zipBuffer)
+    const result = await sf.waitForDeploy(deployId)
+
+    if (!result.success) {
+      const failures = result.details?.componentFailures ?? []
+      const failureMsg = failures
+        .map((f) => `  ${f.componentType}/${f.fullName}: ${f.problem}`)
+        .join('\n')
+      s.stop('Deployment failed')
+      throw new Error(
+        `Metadata deploy failed (${result.numberComponentErrors} error(s)):\n${failureMsg || result.errorMessage || 'Unknown error'}`
+      )
+    }
+
+    s.stop(`Package deployed (${result.numberComponentsDeployed} components)`)
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Metadata deploy failed')) {
+      throw err
+    }
     s.stop('Deployment failed')
     throw new Error(
-      `sf project deploy failed: ${String(err)}\n\n` +
-      `  Retry manually:\n` +
-      `  cd ${destPkg}\n` +
-      `  sf project deploy start --target-org ${orgAlias} --source-dir force-app`
+      `Metadata deploy failed: ${String(err)}\n\n` +
+      `  The patched package is at: ${destPkg}\n` +
+      `  You can retry with: sf project deploy start --source-dir force-app`
     )
   }
 
   // ── 4. Assign LeadRouterAdmin permission set ───────────────────────────────
   s.start('Assigning LeadRouterAdmin permission set…')
   try {
-    await execa(
-      'sf',
-      ['org', 'assign', 'permset', '--name', 'LeadRouterAdmin', ...targetOrgArgs],
-      { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } }
+    // Look up the permission set ID
+    const permSets = await sf.query<{ Id: string }>(
+      "SELECT Id FROM PermissionSet WHERE Name = 'LeadRouterAdmin' LIMIT 1"
     )
-    s.stop('Permission set assigned — Lead Router Setup will appear in the App Launcher')
-  } catch (err) {
-    const msg = String(err)
-    if (msg.includes('Duplicate PermissionSetAssignment')) {
-      s.stop('Permission set already assigned')
+    if (permSets.length === 0) {
+      s.stop('LeadRouterAdmin permission set not found (non-fatal)')
+      log.warn('The permission set may not have been included in the deploy.')
     } else {
+      const userId = await sf.getCurrentUserId()
+      try {
+        await sf.create('PermissionSetAssignment', {
+          AssigneeId: userId,
+          PermissionSetId: permSets[0].Id,
+        })
+        s.stop('Permission set assigned — Lead Router Setup will appear in the App Launcher')
+      } catch (err) {
+        if (err instanceof DuplicateError) {
+          s.stop('Permission set already assigned')
+        } else {
+          throw err
+        }
+      }
+    }
+  } catch (err) {
+    if (!(err instanceof DuplicateError)) {
       s.stop('Permission set assignment failed (non-fatal)')
-      log.warn(msg)
+      log.warn(String(err))
       log.info(
         'Grant access manually:\n' +
         '  Salesforce Setup → Users → Permission Sets → Lead Router Admin → Manage Assignments'
@@ -164,35 +170,20 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
   // ── 5. Write Routing_Settings__c ──────────────────────────────────────────
   s.start('Writing org settings to Routing_Settings__c…')
   try {
-    let existingId: string | undefined
-    try {
-      const qr = await execa('sf', [
-        'data', 'query',
-        ...targetOrgArgs,
-        '--query', 'SELECT Id FROM Routing_Settings__c LIMIT 1',
-        '--json',
-      ], { env: { ...process.env, ...sfCredEnv } })
-      const parsed = JSON.parse(qr.stdout)
-      existingId = parsed?.result?.records?.[0]?.Id
-    } catch {
-      // no record yet — will create below
-    }
+    const existing = await sf.query<{ Id: string }>(
+      'SELECT Id FROM Routing_Settings__c LIMIT 1'
+    )
 
-    if (existingId) {
-      await execa('sf', [
-        'data', 'update', 'record',
-        ...targetOrgArgs,
-        '--sobject', 'Routing_Settings__c',
-        '--record-id', existingId,
-        '--values', `App_Url__c='${appUrl}' Engine_Endpoint__c='${engineUrl}'`,
-      ], { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } })
+    if (existing.length > 0) {
+      await sf.update('Routing_Settings__c', existing[0].Id, {
+        App_Url__c: appUrl,
+        Engine_Endpoint__c: engineUrl,
+      })
     } else {
-      await execa('sf', [
-        'data', 'create', 'record',
-        ...targetOrgArgs,
-        '--sobject', 'Routing_Settings__c',
-        '--values', `App_Url__c='${appUrl}' Engine_Endpoint__c='${engineUrl}'`,
-      ], { stdio: 'inherit', env: { ...process.env, ...sfCredEnv } })
+      await sf.create('Routing_Settings__c', {
+        App_Url__c: appUrl,
+        Engine_Endpoint__c: engineUrl,
+      })
     }
     s.stop('Org settings written')
   } catch (err) {
@@ -210,19 +201,12 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
  *  2. Open authUrl in browser (Salesforce login → redirects to {appUrl}/api/auth/callback)
  *  3. Web app exchanges code, stores token under sessionId
  *  4. Poll {appUrl}/api/cli-auth/poll/{sessionId} until token arrives
- *  5. Store token in sf CLI via `sf org login access-token`
  *
- * Uses only {appUrl}/api/auth/callback as redirect_uri — no extra URLs needed
- * in the Connected App beyond the one already registered for the web app login.
- *
- * Returns { accessToken, instanceUrl, aliasStored } so the caller can pass
- * SF_ACCESS_TOKEN / SF_ORG_INSTANCE_URL env vars to subsequent sf commands
- * as a fallback when alias storage fails.
+ * Returns { accessToken, instanceUrl } for direct REST API usage.
  */
 async function loginViaAppBridge(
-  rawAppUrl: string,
-  orgAlias: string
-): Promise<{ accessToken: string; instanceUrl: string; aliasStored: boolean }> {
+  rawAppUrl: string
+): Promise<{ accessToken: string; instanceUrl: string }> {
   // Strip trailing slash so URLs like "https://example.com/" don't produce double-slashes
   const appUrl = rawAppUrl.replace(/\/+$/, '')
   const s = spinner()
@@ -255,13 +239,15 @@ async function loginViaAppBridge(
   log.info(`Open this URL in your browser to authenticate with Salesforce:\n\n  ${authUrl}\n`)
   log.info('If Chrome shows a "Dangerous site" warning with no proceed option, paste the URL into Safari or Firefox.')
 
-  // Open browser (platform-agnostic)
+  // Open browser (platform-agnostic, using child_process to avoid execa dep)
   const opener = process.platform === 'win32' ? 'start'
     : process.platform === 'darwin' ? 'open'
     : 'xdg-open'
-  await execa(opener, [authUrl], { reject: false }).catch(() => {
+  try {
+    execSync(`${opener} "${authUrl}"`, { stdio: 'ignore' })
+  } catch {
     // Silently ignore — URL is already printed above
-  })
+  }
 
   // Poll until token arrives (up to 5 minutes, every 2 s)
   s.start('Waiting for Salesforce authentication in browser…')
@@ -303,23 +289,5 @@ async function loginViaAppBridge(
 
   s.stop('Authenticated with Salesforce')
 
-  // Store credentials in sf CLI via access-token login.
-  // SFDX_ACCESS_TOKEN env var is the reliable way to pass the token —
-  // stdin + --no-prompt can fail depending on Salesforce token format.
-  let aliasStored = false
-  try {
-    await execa(
-      'sf',
-      ['org', 'login', 'access-token', '--instance-url', instanceUrl, '--alias', orgAlias, '--no-prompt'],
-      { env: { ...process.env, SFDX_ACCESS_TOKEN: accessToken } }
-    )
-    log.success(`Salesforce org saved as "${orgAlias}"`)
-    aliasStored = true
-  } catch (err) {
-    // Non-fatal — deploy commands will authenticate via SF_ACCESS_TOKEN env var
-    log.warn(`Could not persist sf CLI credentials: ${String(err)}`)
-    log.info('Continuing with direct token auth for this session.')
-  }
-
-  return { accessToken: accessToken!, instanceUrl: instanceUrl!, aliasStored }
+  return { accessToken, instanceUrl }
 }

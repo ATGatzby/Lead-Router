@@ -1,6 +1,5 @@
-import { intro, outro, text, spinner, log } from '@clack/prompts'
+import { intro, outro, text, log } from '@clack/prompts'
 import chalk from 'chalk'
-import { execa } from 'execa'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { sfdcDeployInline } from '../steps/sfdc-deploy-inline.js'
 import { guideAppLauncherSetup } from '../steps/app-launcher-guide.js'
@@ -38,23 +37,7 @@ export async function runSfdcDeploy(): Promise<void> {
     engineUrl = (rawEngine as string).trim()
   }
 
-  // ── 2. Check sf CLI ────────────────────────────────────────────────────────
-  // (Not covered by prerequisites here — sfdc deploy can run standalone)
-  const s = spinner()
-  s.start('Checking Salesforce CLI…')
-  try {
-    await execa('sf', ['--version'], { all: true })
-    s.stop('Salesforce CLI found')
-  } catch {
-    s.stop('Salesforce CLI (sf) not found')
-    log.error(
-      'Install the Salesforce CLI and re-run this command:\n' +
-      '  https://developer.salesforce.com/tools/salesforcecli'
-    )
-    process.exit(1)
-  }
-
-  // ── 3. Prompt for org alias ────────────────────────────────────────────────
+  // ── 2. Prompt for org alias ────────────────────────────────────────────────
   const alias = await text({
     message: 'Salesforce org alias (used to log in)',
     placeholder: 'lead-routing',
@@ -63,13 +46,13 @@ export async function runSfdcDeploy(): Promise<void> {
   })
   if (typeof alias === 'symbol') process.exit(0)
 
-  // ── 4. Run shared deploy logic ─────────────────────────────────────────────
+  // ── 3. Run shared deploy logic ─────────────────────────────────────────────
   try {
     await sfdcDeployInline({
       appUrl,
       engineUrl,
       orgAlias: alias as string,
-      // Read from config if available; alreadyAuthed check will skip login if already logged in
+      // Read from config if available
       sfdcClientId: config?.sfdcClientId ?? '',
       sfdcLoginUrl: config?.sfdcLoginUrl ?? 'https://login.salesforce.com',
       installDir: dir ?? undefined,
@@ -79,7 +62,7 @@ export async function runSfdcDeploy(): Promise<void> {
     process.exit(1)
   }
 
-  // ── 5. Interactive App Launcher wizard ─────────────────────────────────────
+  // ── 4. Interactive App Launcher wizard ─────────────────────────────────────
   await guideAppLauncherSetup(appUrl)
 
   // ── Done ────────────────────────────────────────────────────────────────────

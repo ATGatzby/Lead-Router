@@ -5,7 +5,6 @@ import { intro, outro, log, password as promptPassword } from '@clack/prompts'
 import chalk from 'chalk'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { SshConnection } from '../utils/ssh.js'
-import { runMigrations } from '../steps/run-migrations.js'
 import { renderCaddyfile } from '../templates/caddy.js'
 
 export async function runDeploy(): Promise<void> {
@@ -76,10 +75,7 @@ export async function runDeploy(): Promise<void> {
     await ssh.exec('docker compose up -d --remove-orphans', remoteDir)
     log.success('Services restarted')
 
-    // ── Run migrations ────────────────────────────────────────────────────
-    // No adminEmail/password — deploy only applies schema migrations, never re-seeds.
-    log.step('Running database migrations')
-    await runMigrations(ssh, dir)
+    // Migrations now run inside the web container on startup (docker-entrypoint.sh)
 
     outro(
       chalk.green('✔  Deployment complete!') +

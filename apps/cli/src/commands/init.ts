@@ -8,7 +8,6 @@ import { generateFiles } from '../steps/generate-files.js'
 import { checkRemotePrerequisites } from '../steps/check-remote-prerequisites.js'
 import { uploadFiles } from '../steps/upload-files.js'
 import { startServices } from '../steps/start-services.js'
-import { runMigrations } from '../steps/run-migrations.js'
 import { verifyHealth } from '../steps/verify-health.js'
 import { sfdcDeployInline } from '../steps/sfdc-deploy-inline.js'
 import { guideAppLauncherSetup } from '../steps/app-launcher-guide.js'
@@ -98,10 +97,10 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       log.success(`Connected to ${saved.ssh.host}`)
       const remoteDir = await ssh.resolveHome(saved.remoteDir)
 
-      log.step('Step 8/9  Verifying health')
+      log.step('Step 7/8  Verifying health')
       await verifyHealth(saved.appUrl, saved.engineUrl, ssh, remoteDir)
 
-      log.step('Step 9/9  Deploying Salesforce package')
+      log.step('Step 8/8  Deploying Salesforce package')
       await sfdcDeployInline({
         appUrl: saved.appUrl,
         engineUrl: saved.engineUrl,
@@ -137,13 +136,13 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   // ── Full init flow ───────────────────────────────────────────────────────────
   try {
     // Step 1 — Local prerequisites (Node.js + sf CLI)
-    log.step('Step 1/9  Checking local prerequisites')
+    log.step('Step 1/8  Checking local prerequisites')
     await checkPrerequisites()
 
     // Step 2 — SSH connection details + immediate connection test
     // Connect before collecting app config so SSH errors surface early
     // (not after the user has spent 5 minutes filling in URLs and credentials).
-    log.step('Step 2/9  SSH connection')
+    log.step('Step 2/8  SSH connection')
     const sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
@@ -163,7 +162,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     }
 
     // Step 3 — App configuration (only reached after SSH is confirmed working)
-    log.step('Step 3/9  Configuration')
+    log.step('Step 3/8  Configuration')
     const cfg = await collectConfig({
       sandbox: options.sandbox,
       externalDb: options.externalDb,
@@ -174,7 +173,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
     // Step 4 — Generate config files locally
-    log.step('Step 4/9  Generating config files')
+    log.step('Step 4/8  Generating config files')
     const { dir, adminSecret } = generateFiles(cfg, sshCfg)
 
     note(
@@ -194,26 +193,23 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     }
 
     // Step 5 — Remote setup (already connected from step 2)
-    log.step('Step 5/9  Remote setup')
+    log.step('Step 5/8  Remote setup')
     const remoteDir = await ssh.resolveHome(sshCfg.remoteDir)
     await checkRemotePrerequisites(ssh)
     await uploadFiles(ssh, dir, remoteDir)
 
     // Step 6 — Start services on remote server
-    log.step('Step 6/9  Starting services')
+    // (migrations + seed now run inside the web container on startup)
+    log.step('Step 6/8  Starting services')
     await startServices(ssh, remoteDir)
 
-    // Step 7 — Migrations via SSH tunnel to remote Postgres
-    log.step('Step 7/9  Database migrations')
-    await runMigrations(ssh, dir, cfg.adminEmail, cfg.adminPassword)
-
-    // Step 8 — Health check on public HTTPS URLs
+    // Step 7 — Health check on public HTTPS URLs
     // (Caddy TLS cert provisioning takes ~30s — maxAttempts bumped to 24)
-    log.step('Step 8/9  Verifying health')
+    log.step('Step 7/8  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
-    // Step 9 — Deploy Salesforce package (sf runs locally — no VPS requirement)
-    log.step('Step 9/9  Deploying Salesforce package')
+    // Step 8 — Deploy Salesforce package (sf runs locally — no VPS requirement)
+    log.step('Step 8/8  Deploying Salesforce package')
     await sfdcDeployInline({
       appUrl: cfg.appUrl,
       engineUrl: cfg.engineUrl,

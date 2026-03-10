@@ -27,30 +27,40 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @lead-routing/web build
 
 
-# ── Stage 2: Production runner ────────────────────────────────────────────────
+# ── Stage 2: Install Prisma CLI cleanly (no pnpm interference) ───────────────
+FROM node:24-alpine AS prisma-installer
+
+WORKDIR /prisma-pkg
+RUN npm init -y && npm install prisma@6
+
+
+# ── Stage 3: Production runner ───────────────────────────────────────────────
 FROM node:24-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Standalone output includes its own minimal node_modules
+# 1) Standalone output FIRST (includes Next.js runtime + minimal node_modules)
 COPY --from=builder /app/apps/web/.next/standalone ./
 
-# Static assets and public files must be copied separately
+# 2) Prisma CLI + all deps ON TOP (overwrites any broken prisma traces from standalone)
+COPY --from=prisma-installer /prisma-pkg/node_modules ./node_modules
+
+# 3) Generated Prisma client — needed for runtime database queries
+COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
+
+# Static assets and public files
 COPY --from=builder /app/apps/web/.next/static  ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public        ./apps/web/public
 
-# Prisma CLI + engines + generated client — needed for `prisma migrate deploy`
-# and for the Next.js app's database queries at runtime.
-# @prisma/engines contains the native migration engine binary (not traced by Next.js standalone).
-COPY --from=builder /app/node_modules/.bin/prisma    ./node_modules/.bin/prisma
-COPY --from=builder /app/node_modules/prisma         ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma        ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
+# Prisma schema + migrations — needed for `prisma migrate deploy`
 COPY --from=builder /app/packages/db/prisma          ./packages/db/prisma
 
-EXPOSE 3000
+# Entrypoint: run migrations + seed, then start Next.js
+COPY apps/web/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY apps/web/seed.js              ./apps/web/seed.js
+RUN chmod +x docker-entrypoint.sh
 
-# Next.js standalone server entry point
-CMD ["node", "apps/web/server.js"]
+EXPOSE 3000
+ENTRYPOINT ["./docker-entrypoint.sh"]

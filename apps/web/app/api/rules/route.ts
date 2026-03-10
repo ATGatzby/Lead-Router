@@ -16,6 +16,7 @@ interface BranchInput {
   conditions: Array<{
     groupId: string;
     fieldName: string;
+    fieldType?: string;
     operator: string;
     value?: string | null;
     sortOrder?: number;
@@ -216,6 +217,7 @@ export async function POST(req: NextRequest) {
               create: b.conditions.map((c, ci) => ({
                 groupId: c.groupId,
                 fieldName: c.fieldName,
+                fieldType: c.fieldType ?? "TEXT",
                 operator: c.operator,
                 value: c.value ?? null,
                 sortOrder: c.sortOrder ?? ci,
