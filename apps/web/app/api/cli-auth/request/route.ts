@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from "node:crypto";
 import { createCliAuthSession } from "@/lib/cli-auth-store";
+import { MANAGED_PACKAGE_CLIENT_ID, OAUTH_REDIRECT_URL } from "@lead-routing/sfdc";
 
 // POST /api/cli-auth/request
 // Called by the CLI before opening the Salesforce browser auth flow.
@@ -19,15 +20,21 @@ export async function POST() {
 
   const loginUrl =
     process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
-  const clientId = process.env.SFDC_CLIENT_ID ?? "";
-  const redirectUri = process.env.SFDC_REDIRECT_URI ?? "";
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+
+  // Build compound state for the central redirect service.
+  // The redirect service decodes this, extracts targetUrl to know where to forward,
+  // and passes originalState through to the callback.
+  const compoundState = Buffer.from(
+    JSON.stringify({ targetUrl: appUrl, originalState: `cli:${sessionId}` })
+  ).toString("base64url");
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: clientId,
-    redirect_uri: redirectUri,
+    client_id: MANAGED_PACKAGE_CLIENT_ID,
+    redirect_uri: OAUTH_REDIRECT_URL,
     scope: "api refresh_token",
-    state: `cli:${sessionId}`,
+    state: compoundState,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
   });

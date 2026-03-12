@@ -7,7 +7,8 @@ class ContactTriggerTest {
             Contact_Routing_Enabled__c  = true,
             Contact_Insert_Enabled__c   = true,
             Contact_Update_Enabled__c   = true,
-            Webhook_Secret__c           = 'test-secret-key'
+            Webhook_Secret__c           = 'test-secret-key',
+            Engine_Endpoint__c          = 'https://engine.example.com'
         );
         upsert settings;
     }

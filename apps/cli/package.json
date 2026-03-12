@@ -1,6 +1,6 @@
 {
   "name": "@lead-routing/cli",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "description": "Self-hosted deployment CLI for Lead Routing",
   "homepage": "https://github.com/lead-routing/lead-routing",
   "keywords": [
@@ -12,7 +12,7 @@
   ],
   "type": "module",
   "bin": {
-    "lead-routing": "./dist/index.js"
+    "lead-routing": "dist/index.js"
   },
   "engines": {
     "node": ">=20"

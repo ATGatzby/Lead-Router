@@ -59,9 +59,6 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     publicEngineUrl: cfg.engineUrl,
     databaseUrl: cfg.databaseUrl,
     redisUrl: cfg.redisUrl,
-    sfdcClientId: cfg.sfdcClientId,
-    sfdcClientSecret: cfg.sfdcClientSecret,
-    sfdcLoginUrl: cfg.sfdcLoginUrl,
     sessionSecret: cfg.sessionSecret,
     engineWebhookSecret: cfg.engineWebhookSecret,
     adminSecret: cfg.adminSecret,
@@ -79,9 +76,6 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
   const envEngineContent = renderEnvEngine({
     databaseUrl: cfg.databaseUrl,
     redisUrl: cfg.redisUrl,
-    sfdcClientId: cfg.sfdcClientId,
-    sfdcClientSecret: cfg.sfdcClientSecret,
-    sfdcLoginUrl: cfg.sfdcLoginUrl,
     engineWebhookSecret: cfg.engineWebhookSecret,
     internalApiKey: cfg.internalApiKey,
   })
@@ -107,9 +101,6 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
       db: cfg.managedDb,
       redis: cfg.managedRedis,
     },
-    // Stored so `lead-routing sfdc deploy` can re-authenticate without re-prompting
-    sfdcClientId: cfg.sfdcClientId,
-    sfdcLoginUrl: cfg.sfdcLoginUrl,
     engineWebhookSecret: cfg.engineWebhookSecret,
     installedAt: new Date().toISOString(),
     version: getCliVersion(),

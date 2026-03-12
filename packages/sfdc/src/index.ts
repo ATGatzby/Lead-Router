@@ -1,4 +1,6 @@
 export * from "./client";
+export * from "./constants";
+export * from "./namespace";
 export * from "./users";
 export * from "./operators";
 export * from "./schema";

@@ -52,9 +52,6 @@ export async function runSfdcDeploy(): Promise<void> {
       appUrl,
       engineUrl,
       orgAlias: alias as string,
-      // Read from config if available
-      sfdcClientId: config?.sfdcClientId ?? '',
-      sfdcLoginUrl: config?.sfdcLoginUrl ?? 'https://login.salesforce.com',
       installDir: dir ?? undefined,
       webhookSecret: config?.engineWebhookSecret,
     })

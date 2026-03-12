@@ -41,7 +41,7 @@ vi.mock("@lead-routing/sfdc", () => ({
 const mockExistsSync = vi.hoisted(() => vi.fn());
 const mockReadFileSync = vi.hoisted(() => vi.fn());
 const mockWriteFileSync = vi.hoisted(() => vi.fn());
-const mockCpSync = vi.hoisted(() => vi.fn());
+const mockMkdirSync = vi.hoisted(() => vi.fn());
 const mockRmSync = vi.hoisted(() => vi.fn());
 
 vi.mock("node:fs", () => ({
@@ -49,13 +49,13 @@ vi.mock("node:fs", () => ({
     existsSync: mockExistsSync,
     readFileSync: mockReadFileSync,
     writeFileSync: mockWriteFileSync,
-    cpSync: mockCpSync,
+    mkdirSync: mockMkdirSync,
     rmSync: mockRmSync,
   },
   existsSync: mockExistsSync,
   readFileSync: mockReadFileSync,
   writeFileSync: mockWriteFileSync,
-  cpSync: mockCpSync,
+  mkdirSync: mockMkdirSync,
   rmSync: mockRmSync,
 }));
 
@@ -71,12 +71,6 @@ import { POST } from "./route";
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetOrgIdFromHeaders.mockResolvedValue("org-1");
-  // By default, Docker path exists
-  mockExistsSync.mockImplementation((p: string) => {
-    if (p.endsWith("sfdc-package") && !p.includes("apps/cli")) return true;
-    return false;
-  });
-  mockReadFileSync.mockReturnValue("<xml><endpoint>PLACEHOLDER</endpoint></xml>");
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -113,7 +107,7 @@ describe("POST /api/integrations/salesforce/deploy", () => {
     expect(body.error).toContain("not connected");
   });
 
-  it("returns 422 when deploy fails", async () => {
+  it("handles Remote Site Settings deploy failure gracefully", async () => {
     mockPrisma.organization.findUnique.mockResolvedValue({
       id: "org-1",
       oauthAccessToken: "token",
@@ -128,12 +122,21 @@ describe("POST /api/integrations/salesforce/deploy", () => {
       errorMessage: "Bad metadata",
       details: { componentFailures: [] },
     });
+    // Permission set + settings queries
+    mockQuery.mockResolvedValueOnce([{ Id: "perm-1" }]);
+    mockGetCurrentUserId.mockResolvedValue("user-1");
+    mockCreate.mockResolvedValue("assignment-1");
+    mockQuery.mockResolvedValueOnce([{ Id: "settings-1" }]);
+    mockSfUpdate.mockResolvedValue(undefined);
+    mockPrisma.organization.update.mockResolvedValue({});
 
     const res = await POST();
     const body = await parseJson(res);
 
-    expect(res.status).toBe(422);
-    expect(body.error).toBe("Metadata deploy failed");
+    // Route returns 200 with status flags — deploy failure is non-fatal
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.remoteSitesDeployed).toBe(false);
   });
 
   it("deploys successfully and updates org record", async () => {
@@ -147,7 +150,7 @@ describe("POST /api/integrations/salesforce/deploy", () => {
     mockDeployMetadata.mockResolvedValue("deploy-1");
     mockWaitForDeploy.mockResolvedValue({
       success: true,
-      numberComponentsDeployed: 10,
+      numberComponentsDeployed: 2,
     });
     mockQuery.mockResolvedValueOnce([{ Id: "perm-1" }]); // permission set
     mockGetCurrentUserId.mockResolvedValue("user-1");
@@ -161,7 +164,7 @@ describe("POST /api/integrations/salesforce/deploy", () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.componentsDeployed).toBe(10);
+    expect(body.remoteSitesDeployed).toBe(true);
     expect(body.permSetAssigned).toBe(true);
     expect(body.settingsWritten).toBe(true);
 
@@ -170,7 +173,6 @@ describe("POST /api/integrations/salesforce/deploy", () => {
       where: { id: "org-1" },
       data: {
         packageDeployedAt: expect.any(Date),
-        packageDeployId: "deploy-1",
         packageVersion: "1.0.0",
       },
     });

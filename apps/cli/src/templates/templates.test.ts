@@ -12,9 +12,6 @@ const baseWebConfig = {
   publicEngineUrl: 'https://engine.acme.com', // Public HTTPS URL
   databaseUrl: 'postgresql://u:p@postgres:5432/leadrouting',
   redisUrl: 'redis://redis:6379',
-  sfdcClientId: 'SFDC_CLIENT_ID',
-  sfdcClientSecret: 'SFDC_SECRET',
-  sfdcLoginUrl: 'https://login.salesforce.com',
   sessionSecret: 'session_secret_here',
   engineWebhookSecret: 'webhook_secret_here',
   adminSecret: 'admin_secret_here',
@@ -42,28 +39,6 @@ describe('renderEnvWeb', () => {
     const engineLine = lines.find(l => l.startsWith('ENGINE_URL='))!
     const publicLine = lines.find(l => l.startsWith('PUBLIC_ENGINE_URL='))!
     expect(engineLine).not.toEqual(publicLine)
-  })
-
-  it('SFDC_REDIRECT_URI ends with /api/auth/sfdc/callback', () => {
-    const out = renderEnvWeb(baseWebConfig)
-    expect(out).toContain('SFDC_REDIRECT_URI=https://leads.acme.com/api/auth/sfdc/callback')
-  })
-
-  it('strips trailing slash from appUrl in SFDC_REDIRECT_URI', () => {
-    const out = renderEnvWeb({ ...baseWebConfig, appUrl: 'https://leads.acme.com/' })
-    expect(out).toContain('SFDC_REDIRECT_URI=https://leads.acme.com/api/auth/sfdc/callback')
-    // Must not have double slash
-    expect(out).not.toContain('//api/auth/sfdc/callback')
-  })
-
-  it('uses production SFDC_LOGIN_URL by default', () => {
-    const out = renderEnvWeb(baseWebConfig)
-    expect(out).toContain('SFDC_LOGIN_URL=https://login.salesforce.com')
-  })
-
-  it('uses sandbox SFDC_LOGIN_URL when specified', () => {
-    const out = renderEnvWeb({ ...baseWebConfig, sfdcLoginUrl: 'https://test.salesforce.com' })
-    expect(out).toContain('SFDC_LOGIN_URL=https://test.salesforce.com')
   })
 
   it('includes APP_URL', () => {
@@ -249,9 +224,6 @@ describe('renderCaddyfile — Case B: same domain, port-based engine URL', () =>
 const baseEngineConfig = {
   databaseUrl: 'postgresql://u:p@postgres:5432/leadrouting',
   redisUrl: 'redis://redis:6379',
-  sfdcClientId: 'SFDC_CLIENT_ID',
-  sfdcClientSecret: 'SFDC_SECRET',
-  sfdcLoginUrl: 'https://login.salesforce.com',
   engineWebhookSecret: 'webhook_secret_here',
   internalApiKey: 'internal_api_key_here',
 }
@@ -265,9 +237,6 @@ describe('renderEnvEngine', () => {
       'NODE_ENV',
       'DATABASE_URL',
       'REDIS_URL',
-      'SFDC_CLIENT_ID',
-      'SFDC_CLIENT_SECRET',
-      'SFDC_LOGIN_URL',
       'ENGINE_WEBHOOK_SECRET',
     ]
     for (const key of expectedKeys) {
@@ -293,13 +262,6 @@ describe('renderEnvEngine', () => {
   it('includes REDIS_URL', () => {
     const out = renderEnvEngine(baseEngineConfig)
     expect(out).toContain('REDIS_URL=redis://redis:6379')
-  })
-
-  it('includes SFDC credentials', () => {
-    const out = renderEnvEngine(baseEngineConfig)
-    expect(out).toContain('SFDC_CLIENT_ID=SFDC_CLIENT_ID')
-    expect(out).toContain('SFDC_CLIENT_SECRET=SFDC_SECRET')
-    expect(out).toContain('SFDC_LOGIN_URL=https://login.salesforce.com')
   })
 
   it('includes ENGINE_WEBHOOK_SECRET', () => {

@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens, createConnection, pushSettings } from "@lead-routing/sfdc";
+import {
+  MANAGED_PACKAGE_CLIENT_ID,
+  OAUTH_REDIRECT_URL,
+  exchangeCodeForTokens,
+  createConnection,
+  pushSettings,
+} from "@lead-routing/sfdc";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
 import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-store";
+
+/**
+ * Parse the state parameter which may be a compound base64url-encoded JSON
+ * from the central redirect service: { targetUrl, originalState }
+ * Or it may be a plain string (legacy / direct callback).
+ */
+function parseState(raw: string): { originalState: string; isCompound: boolean } {
+  try {
+    const decoded = JSON.parse(Buffer.from(raw, "base64url").toString());
+    if (decoded && typeof decoded === "object" && decoded.targetUrl) {
+      return { originalState: decoded.originalState ?? "", isCompound: true };
+    }
+  } catch {
+    // Not base64url JSON — treat as plain state
+  }
+  return { originalState: raw, isCompound: false };
+}
 
 // CLI flow still uses server-side token exchange (exchangeCodeForTokens).
 // Web flow uses client-side token exchange (browser → Salesforce) to avoid server IP restrictions.
@@ -11,7 +34,7 @@ import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-s
 //
 // Two flows share this URL (SFDC_REDIRECT_URI points here):
 //
-// 1. CLI bridge flow (state starts with "cli:"):
+// 1. CLI bridge flow (state starts with "cli:" or compound state with originalState starting with "cli:"):
 //    The CLI starts a session via POST /api/cli-auth/request, opens the
 //    Salesforce auth URL in the browser, then polls /api/cli-auth/poll/:sessionId.
 //    We exchange the code for tokens here and store them so the CLI can collect
@@ -21,9 +44,12 @@ import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-s
 //    Associates the SFDC org with the already-logged-in user's org via iron-session.
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const state = searchParams.get("state") ?? "";
+  const rawState = searchParams.get("state") ?? "";
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+
+  // Decode compound state from the redirect service if present
+  const { originalState: state } = parseState(rawState);
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -38,10 +64,13 @@ export async function GET(req: NextRequest) {
     const bodyParams: Record<string, string> = {
       grant_type: "authorization_code",
       code,
-      client_id: process.env.SFDC_CLIENT_ID ?? "",
-      client_secret: process.env.SFDC_CLIENT_SECRET ?? "",
-      redirect_uri: process.env.SFDC_REDIRECT_URI ?? "",
+      client_id: MANAGED_PACKAGE_CLIENT_ID,
+      redirect_uri: OAUTH_REDIRECT_URL,
     };
+    // Only include client_secret if set (backward compat — PKCE doesn't need it)
+    if (process.env.SFDC_CLIENT_SECRET) {
+      bodyParams.client_secret = process.env.SFDC_CLIENT_SECRET;
+    }
     if (codeVerifier) {
       bodyParams.code_verifier = codeVerifier;
     }
@@ -96,6 +125,7 @@ export async function GET(req: NextRequest) {
     if (!session.orgId) throw new Error("Not authenticated");
 
     // Validate OAuth state parameter (CSRF protection)
+    // Compare against the original (non-compound) state stored in cookie
     const savedState = req.cookies.get("sfdc_oauth_state")?.value;
     if (!state || !savedState || state !== savedState) {
       return NextResponse.json({ error: "Invalid OAuth state" }, { status: 403 });

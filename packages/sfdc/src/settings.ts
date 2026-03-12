@@ -1,4 +1,5 @@
 import type { Connection } from "jsforce";
+import { ns } from "./namespace";
 
 export interface PushSettingsPayload {
   webhookSecret: string
@@ -8,7 +9,7 @@ export interface PushSettingsPayload {
 
 /**
  * Push all runtime settings to Salesforce after OAuth connect:
- *  - Routing_Settings__c (data API): Webhook_Secret__c, Engine_Endpoint__c, App_Url__c
+ *  - lrt__Routing_Settings__c (data API): lrt__Webhook_Secret__c, lrt__Engine_Endpoint__c, lrt__App_Url__c
  *  - Named Credential "RoutingEngine" (Metadata API): endpoint = engineUrl
  *  - Remote Site Setting "LeadRouterEngine" (Metadata API): url = engineUrl
  *
@@ -19,21 +20,22 @@ export async function pushSettings(conn: Connection, payload: PushSettingsPayloa
   const { webhookSecret, engineUrl, appUrl } = payload
 
   // 1. Update Routing_Settings__c org defaults (data API)
+  const settingsObject = ns("Routing_Settings__c");
   const result = await conn.query<{ Id: string }>(
-    "SELECT Id FROM Routing_Settings__c LIMIT 1"
+    `SELECT Id FROM ${settingsObject} LIMIT 1`
   )
   const record = {
-    Webhook_Secret__c: webhookSecret,
-    Engine_Endpoint__c: engineUrl,
-    App_Url__c: appUrl,
+    [ns("Webhook_Secret__c")]: webhookSecret,
+    [ns("Engine_Endpoint__c")]: engineUrl,
+    [ns("App_Url__c")]: appUrl,
   }
   if (result.totalSize > 0) {
-    await conn.sobject("Routing_Settings__c").update({
+    await conn.sobject(settingsObject).update({
       Id: result.records[0].Id,
       ...record,
     })
   } else {
-    await conn.sobject("Routing_Settings__c").create(record)
+    await conn.sobject(settingsObject).create(record)
   }
 
   // 2. Upsert Named Credential via Metadata API — non-fatal if package not deployed yet

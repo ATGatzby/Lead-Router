@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import jsforce from "jsforce";
 import type { Connection } from "jsforce";
+import { MANAGED_PACKAGE_CLIENT_ID, OAUTH_REDIRECT_URL } from "./constants";
 const { Connection: ConnectionClass } = jsforce;
 
 export type SfdcConnection = Connection;
@@ -13,9 +14,9 @@ export interface OAuthTokens {
 
 const getOAuth2Config = () => ({
   loginUrl: process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com",
-  clientId: process.env.SFDC_CLIENT_ID!,
-  clientSecret: process.env.SFDC_CLIENT_SECRET!,
-  redirectUri: process.env.SFDC_REDIRECT_URI!,
+  clientId: MANAGED_PACKAGE_CLIENT_ID,
+  clientSecret: process.env.SFDC_CLIENT_SECRET || undefined,
+  redirectUri: OAUTH_REDIRECT_URL,
 });
 
 /** Generate a PKCE code_verifier (random URL-safe base64, 43 chars). */
@@ -31,17 +32,25 @@ export function generatePkceChallenge(verifier: string): string {
 /**
  * Build the Salesforce OAuth authorization URL.
  * Pass codeChallenge (from generatePkceChallenge) when PKCE is required.
+ * Pass appUrl to encode compound state for the central OAuth redirect service.
  */
-export function getSfdcAuthUrl(codeChallenge?: string): string {
+export function getSfdcAuthUrl(codeChallenge?: string, appUrl?: string): string {
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: process.env.SFDC_CLIENT_ID!,
-    redirect_uri: process.env.SFDC_REDIRECT_URI!,
+    client_id: MANAGED_PACKAGE_CLIENT_ID,
+    redirect_uri: OAUTH_REDIRECT_URL,
     scope: "api refresh_token",
   });
   if (codeChallenge) {
     params.set("code_challenge", codeChallenge);
     params.set("code_challenge_method", "S256");
+  }
+  if (appUrl) {
+    // Encode compound state so the redirect service knows where to forward
+    const compoundState = Buffer.from(
+      JSON.stringify({ targetUrl: appUrl })
+    ).toString("base64url");
+    params.set("state", compoundState);
   }
   const loginUrl = process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
   return `${loginUrl}/services/oauth2/authorize?${params.toString()}`;
@@ -50,26 +59,32 @@ export function getSfdcAuthUrl(codeChallenge?: string): string {
 /**
  * Exchange an OAuth authorization code for access + refresh tokens.
  * Pass codeVerifier when the auth URL was built with a PKCE challenge.
+ * Pass compoundState to extract the original state from the redirect service.
  */
 export async function exchangeCodeForTokens(
   code: string,
-  codeVerifier?: string
+  codeVerifier?: string,
+  compoundState?: string
 ): Promise<{
   tokens: OAuthTokens;
   orgId: string;
   userId: string;
   userName: string;
   userEmail: string;
+  originalState?: string;
 }> {
   const loginUrl = process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
 
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: process.env.SFDC_CLIENT_ID!,
-    client_secret: process.env.SFDC_CLIENT_SECRET!,
-    redirect_uri: process.env.SFDC_REDIRECT_URI!,
+    client_id: MANAGED_PACKAGE_CLIENT_ID,
+    redirect_uri: OAUTH_REDIRECT_URL,
   });
+  // Only include client_secret if set (backward compat — PKCE doesn't need it)
+  if (process.env.SFDC_CLIENT_SECRET) {
+    body.set("client_secret", process.env.SFDC_CLIENT_SECRET);
+  }
   if (codeVerifier) body.set("code_verifier", codeVerifier);
 
   const res = await fetch(`${loginUrl}/services/oauth2/token`, {
@@ -101,6 +116,19 @@ export async function exchangeCodeForTokens(
     email: string;
   };
 
+  // Extract originalState from compound state if present
+  let originalState: string | undefined;
+  if (compoundState) {
+    try {
+      const decoded = JSON.parse(
+        Buffer.from(compoundState, "base64url").toString()
+      );
+      originalState = decoded.originalState;
+    } catch {
+      // Ignore malformed state
+    }
+  }
+
   return {
     tokens: {
       accessToken: data.access_token,
@@ -111,6 +139,7 @@ export async function exchangeCodeForTokens(
     userId: identity.user_id,
     userName: identity.display_name,
     userEmail: identity.email,
+    originalState,
   };
 }
 

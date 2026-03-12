@@ -4,9 +4,6 @@ import { generateSecret } from '../utils/crypto.js'
 export interface CollectedConfig {
   appUrl: string
   engineUrl: string
-  sfdcClientId: string
-  sfdcClientSecret: string
-  sfdcLoginUrl: string
   managedDb: boolean
   databaseUrl: string
   dbPassword: string
@@ -26,8 +23,6 @@ export interface CollectedConfig {
 }
 
 export interface ConfigCollectOptions {
-  /** Use Salesforce sandbox (test.salesforce.com) instead of production */
-  sandbox?: boolean
   /** External PostgreSQL URL — skips managed Docker container */
   externalDb?: string
   /** External Redis URL — skips managed Docker container */
@@ -45,7 +40,6 @@ function bail(value: unknown): never {
 export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<CollectedConfig> {
   note(
     'You will need:\n' +
-      '  • A Salesforce Connected App (Client ID + Secret) — instructions below\n' +
       '  • Public HTTPS URLs for the web app and routing engine',
     'Before you begin'
   )
@@ -81,42 +75,6 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     },
   })
   if (isCancel(engineUrl)) bail(engineUrl)
-
-  // ── Salesforce Connected App ────────────────────────────────────────────────
-  // Callback URL must match SFDC_REDIRECT_URI in .env.web exactly.
-  const callbackUrl = `${(appUrl as string).trim().replace(/\/+$/, '')}/api/auth/sfdc/callback`
-  note(
-    "You need a Salesforce Connected App. If you haven't created one yet:\n" +
-      '\n' +
-      '  1. Go to Salesforce Setup → App Manager → New Connected App\n' +
-      '  2. Connected App Name: Lead Routing\n' +
-      '  3. Check "Enable OAuth Settings"\n' +
-      `  4. Callback URL (copy exactly — must match):\n` +
-      `       ${callbackUrl}\n` +
-      '  5. Selected Scopes: api  •  refresh_token, offline_access\n' +
-      '  6. Check "Require Secret for Web Server Flow"\n' +
-      '  7. Save — wait ~2 min, then click "Manage Consumer Details"\n' +
-      '  8. Copy the Consumer Key (Client ID) and Consumer Secret below',
-    'Salesforce Connected App setup'
-  )
-
-  const sfdcClientId = await text({
-    message: 'Consumer Key (labelled "Client ID" in newer orgs)',
-    placeholder: '3MVG9...',
-    validate: (v) => (!v ? 'Required' : undefined),
-  })
-  if (isCancel(sfdcClientId)) bail(sfdcClientId)
-
-  const sfdcClientSecret = await password({
-    message: 'Consumer Secret (labelled "Client Secret" in newer orgs)',
-    validate: (v) => (!v ? 'Required' : undefined),
-  })
-  if (isCancel(sfdcClientSecret)) bail(sfdcClientSecret)
-
-  // SFDC login URL: production by default, sandbox via --sandbox flag
-  const sfdcLoginUrl = opts.sandbox
-    ? 'https://test.salesforce.com'
-    : 'https://login.salesforce.com'
 
   // ── Database ───────────────────────────────────────────────────────────────
   // Default: managed Docker container. Override with --external-db <url>.
@@ -162,9 +120,6 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   return {
     appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
     engineUrl: (engineUrl as string).trim().replace(/\/+$/, ''),
-    sfdcClientId: (sfdcClientId as string).trim(),
-    sfdcClientSecret: (sfdcClientSecret as string).trim(),
-    sfdcLoginUrl,
     managedDb,
     databaseUrl,
     dbPassword: managedDb ? dbPassword : '',

@@ -18,11 +18,6 @@ export interface SfdcDeployParams {
   appUrl: string
   engineUrl: string
   orgAlias: string
-  /** Connected App client ID — no longer used for login (web app bridge handles auth),
-   *  kept in the interface for backwards compat with sfdc.ts which reads it from config */
-  sfdcClientId: string
-  /** Salesforce login URL (https://login.salesforce.com or https://test.salesforce.com) */
-  sfdcLoginUrl: string
   /** Where to copy the patched package — defaults to tmpdir */
   installDir?: string
   /** Webhook secret for HMAC validation — written to Routing_Settings__c.Webhook_Secret__c */

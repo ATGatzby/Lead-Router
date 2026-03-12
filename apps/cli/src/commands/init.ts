@@ -17,7 +17,6 @@ import { findInstallDir, readConfig } from '../utils/config.js'
 export interface InitOptions {
   dryRun?: boolean
   resume?: boolean
-  sandbox?: boolean
   sshPort?: number
   sshUser?: string
   sshKey?: string
@@ -159,7 +158,6 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     // Step 3 — App configuration (only reached after SSH is confirmed working)
     log.step('Step 3/7  Configuration')
     const cfg = await collectConfig({
-      sandbox: options.sandbox,
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
     })

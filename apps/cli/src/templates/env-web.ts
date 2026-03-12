@@ -4,9 +4,6 @@ export interface WebEnvConfig {
   publicEngineUrl: string  // Public HTTPS URL — used by pushSettings → Salesforce
   databaseUrl: string
   redisUrl: string
-  sfdcClientId: string
-  sfdcClientSecret: string
-  sfdcLoginUrl: string
   sessionSecret: string
   engineWebhookSecret: string
   adminSecret: string
@@ -36,12 +33,6 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     ``,
     `# Redis`,
     `REDIS_URL=${c.redisUrl}`,
-    ``,
-    `# Salesforce OAuth`,
-    `SFDC_CLIENT_ID=${c.sfdcClientId}`,
-    `SFDC_CLIENT_SECRET=${c.sfdcClientSecret}`,
-    `SFDC_LOGIN_URL=${c.sfdcLoginUrl}`,
-    `SFDC_REDIRECT_URI=${c.appUrl.replace(/\/+$/, '')}/api/auth/sfdc/callback`,
     ``,
     `# Session`,
     `SESSION_SECRET=${c.sessionSecret}`,

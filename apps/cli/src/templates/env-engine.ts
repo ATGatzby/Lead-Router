@@ -1,9 +1,6 @@
 export interface EngineEnvConfig {
   databaseUrl: string
   redisUrl: string
-  sfdcClientId: string
-  sfdcClientSecret: string
-  sfdcLoginUrl: string
   engineWebhookSecret: string
   internalApiKey: string
   enginePort?: number
@@ -25,11 +22,6 @@ export function renderEnvEngine(c: EngineEnvConfig): string {
     ``,
     `# Redis`,
     `REDIS_URL=${c.redisUrl}`,
-    ``,
-    `# Salesforce OAuth`,
-    `SFDC_CLIENT_ID=${c.sfdcClientId}`,
-    `SFDC_CLIENT_SECRET=${c.sfdcClientSecret}`,
-    `SFDC_LOGIN_URL=${c.sfdcLoginUrl}`,
     ``,
     `# Webhook`,
     `ENGINE_WEBHOOK_SECRET=${c.engineWebhookSecret}`,

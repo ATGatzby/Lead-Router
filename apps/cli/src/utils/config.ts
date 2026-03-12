@@ -22,10 +22,6 @@ export interface InstallConfig {
     db: boolean
     redis: boolean
   }
-  /** Salesforce Connected App client ID — stored so `sfdc deploy` can re-auth */
-  sfdcClientId?: string
-  /** Salesforce login URL (https://login.salesforce.com or https://test.salesforce.com) */
-  sfdcLoginUrl?: string
   /** Engine webhook secret — used for HMAC validation in SFDC callouts */
   engineWebhookSecret?: string
   installedAt: string
