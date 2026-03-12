@@ -1,8 +1,13 @@
 import { promises as dns } from 'node:dns'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { exec } from 'node:child_process'
+import { platform } from 'node:os'
 import { join } from 'node:path'
 import { intro, outro, note, log, confirm, cancel, isCancel, password as promptPassword } from '@clack/prompts'
 import chalk from 'chalk'
+
+/** Managed package install URL — mirrors packages/sfdc/src/constants.ts */
+const MANAGED_PACKAGE_INSTALL_URL = 'https://login.salesforce.com/packaging/installPackage.apexp?p0=04tgL000000CTnp'
 import { checkPrerequisites } from '../steps/prerequisites.js'
 import { collectSshConfig } from '../steps/collect-ssh-config.js'
 import { collectConfig } from '../steps/collect-config.js'
@@ -23,6 +28,12 @@ export interface InitOptions {
   remoteDir?: string
   externalDb?: string
   externalRedis?: string
+}
+
+/** Open a URL in the user's default browser. */
+function openBrowser(url: string): void {
+  const cmd = platform() === 'darwin' ? 'open' : 'xdg-open'
+  exec(`${cmd} ${JSON.stringify(url)}`)
 }
 
 // Warn (not error) when a hostname doesn't resolve — DNS can lag on new domains.
@@ -96,27 +107,10 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       log.success(`Connected to ${saved.ssh.host}`)
       const remoteDir = await ssh.resolveHome(saved.remoteDir)
 
-      log.step('Step 7/7  Verifying health')
+      log.step('Verifying health')
       await verifyHealth(saved.appUrl, saved.engineUrl, ssh, remoteDir)
 
-      note(
-        `Open ${saved.appUrl} → Integrations → Salesforce to connect your CRM and deploy the package.`,
-        'Next: Connect Salesforce'
-      )
-
-      outro(
-        chalk.green("✔  You're live!") +
-          '\n\n' +
-          `  Dashboard:      ${chalk.cyan(saved.appUrl)}\n` +
-          `  Routing engine: ${chalk.cyan(saved.engineUrl)}\n\n` +
-          chalk.bold('  Next steps:\n') +
-          `  ${chalk.cyan('1.')} Open ${chalk.cyan(saved.appUrl)} and log in\n` +
-          `  ${chalk.cyan('2.')} Go to Integrations → Salesforce to connect your org\n` +
-          `  ${chalk.cyan('3.')} Deploy the package and configure routing objects\n` +
-          `  ${chalk.cyan('4.')} Create your first routing rule\n\n` +
-          `  Run ${chalk.cyan('lead-routing doctor')} to check service health at any time.\n` +
-          `  Run ${chalk.cyan('lead-routing deploy')} to update to a new version.`
-      )
+      outro(chalk.green("✔  Services are healthy!"))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log.error(`Resume failed: ${message}`)
@@ -129,14 +123,38 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   // ── Full init flow ───────────────────────────────────────────────────────────
   try {
-    // Step 1 — Local prerequisites (Node.js + sf CLI)
-    log.step('Step 1/7  Checking local prerequisites')
+    // Step 1 — Install Salesforce Package
+    log.step('Step 1/8  Install Salesforce Package')
+    note(
+      'The Lead Router managed package installs the required Connected App,\n' +
+        'triggers, and custom objects in your Salesforce org.\n\n' +
+        `Install URL: ${chalk.cyan(MANAGED_PACKAGE_INSTALL_URL)}`,
+      'Salesforce Package'
+    )
+    log.info('Opening install URL in your browser...')
+    openBrowser(MANAGED_PACKAGE_INSTALL_URL)
+    log.info(`${chalk.dim('If the browser didn\'t open, visit the URL above manually.')}`)
+
+    const installed = await confirm({
+      message: 'Have you installed the package? (Click "Install for All Users" in Salesforce)',
+      initialValue: false,
+    })
+    if (isCancel(installed)) {
+      cancel('Setup cancelled.')
+      process.exit(0)
+    }
+    if (!installed) {
+      log.warn('You can install the package later from Integrations → Salesforce in the web app.')
+    } else {
+      log.success('Salesforce package installed')
+    }
+
+    // Step 2 — Local prerequisites (Node.js)
+    log.step('Step 2/8  Checking local prerequisites')
     await checkPrerequisites()
 
-    // Step 2 — SSH connection details + immediate connection test
-    // Connect before collecting app config so SSH errors surface early
-    // (not after the user has spent 5 minutes filling in URLs and credentials).
-    log.step('Step 2/7  SSH connection')
+    // Step 3 — SSH connection details + immediate connection test
+    log.step('Step 3/8  SSH connection')
     const sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
@@ -155,18 +173,18 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       }
     }
 
-    // Step 3 — App configuration (only reached after SSH is confirmed working)
-    log.step('Step 3/7  Configuration')
+    // Step 4 — App configuration
+    log.step('Step 4/8  Configuration')
     const cfg = await collectConfig({
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
     })
 
-    // DNS pre-flight: warn if hostnames don't resolve (non-blocking, asks to continue)
+    // DNS pre-flight
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
-    // Step 4 — Generate config files locally
-    log.step('Step 4/7  Generating config files')
+    // Step 5 — Generate config files locally
+    log.step('Step 5/8  Generating config files')
     const { dir, adminSecret } = generateFiles(cfg, sshCfg)
 
     note(
@@ -185,20 +203,18 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       return
     }
 
-    // Step 5 — Remote setup (already connected from step 2)
-    log.step('Step 5/7  Remote setup')
+    // Step 6 — Remote setup (already connected from step 3)
+    log.step('Step 6/8  Remote setup')
     const remoteDir = await ssh.resolveHome(sshCfg.remoteDir)
     await checkRemotePrerequisites(ssh)
     await uploadFiles(ssh, dir, remoteDir)
 
-    // Step 6 — Start services on remote server
-    // (migrations + seed now run inside the web container on startup)
-    log.step('Step 6/7  Starting services')
+    // Step 7 — Start services on remote server
+    log.step('Step 7/8  Starting services')
     await startServices(ssh, remoteDir)
 
-    // Step 7 — Health check on public HTTPS URLs
-    // (Caddy TLS cert provisioning takes ~30s — maxAttempts bumped to 24)
-    log.step('Step 7/7  Verifying health')
+    // Step 8 — Health check on public HTTPS URLs
+    log.step('Step 8/8  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
     // Remove ADMIN_PASSWORD from .env.web now that the seed has run
@@ -212,11 +228,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       writeFileSync(envWebPath, cleaned, 'utf-8')
       log.success('Removed ADMIN_PASSWORD from .env.web (no longer needed after seed)')
     } catch {
-      // Non-fatal — password stays in .env.web but won't cause issues
+      // Non-fatal
     }
 
     note(
-      `Open ${cfg.appUrl} → Integrations → Salesforce to connect your CRM and deploy the package.`,
+      `Open ${cfg.appUrl} → Integrations → Salesforce to connect your org.\n` +
+        'The managed package is already installed — just click "Connect Salesforce" to authorize.',
       'Next: Connect Salesforce'
     )
 
@@ -231,8 +248,8 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         `                  ${chalk.dim('run `lead-routing config show` to retrieve later')}\n\n` +
         chalk.bold('  Next steps:\n') +
         `  ${chalk.cyan('1.')} Open ${chalk.cyan(cfg.appUrl)} and log in\n` +
-        `  ${chalk.cyan('2.')} Go to Integrations → Salesforce to connect your org\n` +
-        `  ${chalk.cyan('3.')} Deploy the package and configure routing objects\n` +
+        `  ${chalk.cyan('2.')} Go to Integrations → Salesforce → Connect\n` +
+        `  ${chalk.cyan('3.')} Complete the onboarding wizard in Salesforce\n` +
         `  ${chalk.cyan('4.')} Create your first routing rule\n\n` +
         `  Run ${chalk.cyan('lead-routing doctor')} to check service health at any time.\n` +
         `  Run ${chalk.cyan('lead-routing deploy')} to update to a new version.`
