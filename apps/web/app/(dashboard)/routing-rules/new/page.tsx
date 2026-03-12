@@ -28,7 +28,11 @@ function NewRouteContent() {
       if (!res.ok) throw new Error(data.error ?? "Failed to create route");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Sync trigger criteria to Salesforce (fire-and-forget)
+      if (data.rule?.id) {
+        fetch(`/api/rules/${data.rule.id}/sync-criteria`, { method: "POST" }).catch(() => {});
+      }
       router.push("/routing-rules");
     },
   });
@@ -36,9 +40,11 @@ function NewRouteContent() {
   const defaultState: Partial<RouteBuilderState> = {
     name: "Untitled Route",
     trigger: {
+      triggerName: "",
       objectType: validObject,
       triggerEvent: "INSERT",
       isDryRun: false,
+      triggerConditions: [],
     },
     matchConfig: null,
     paths: [],

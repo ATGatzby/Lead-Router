@@ -90,6 +90,8 @@ export async function POST(
                 matchEmail: source.matchConfig.matchEmail,
                 matchPhone: source.matchConfig.matchPhone,
                 matchDomain: source.matchConfig.matchDomain,
+                matchCompanyName: source.matchConfig.matchCompanyName ?? false,
+                fuzzyMatchMode: source.matchConfig.fuzzyMatchMode ?? "STRICT",
                 onLeadMatch: source.matchConfig.onLeadMatch,
                 leadAssignmentType: source.matchConfig.leadAssignmentType,
                 leadAssigneeUserId: source.matchConfig.leadAssigneeUserId,

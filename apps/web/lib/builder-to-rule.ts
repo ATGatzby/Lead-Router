@@ -12,6 +12,18 @@ export function builderToApiBody(
     objectType: state.trigger.objectType,
     triggerEvent: state.trigger.triggerEvent,
     isDryRun: state.trigger.isDryRun,
+    triggerName: state.trigger.triggerName || "",
+
+    triggerConditions: state.trigger.triggerConditions.flatMap((group, gi) =>
+      group.conditions.map((cond, ci) => ({
+        groupId: group.id,
+        fieldName: cond.fieldApiName,
+        fieldType: cond.fieldType ?? "TEXT",
+        operator: cond.operator,
+        value: cond.value || null,
+        sortOrder: gi * 100 + ci,
+      }))
+    ),
 
     matchConfig: state.matchConfig
       ? {
@@ -21,6 +33,8 @@ export function builderToApiBody(
           matchEmail: state.matchConfig.matchEmail,
           matchPhone: state.matchConfig.matchPhone,
           matchDomain: state.matchConfig.matchDomain,
+          matchCompanyName: state.matchConfig.matchCompanyName,
+          fuzzyMatchMode: state.matchConfig.fuzzyMatchMode,
           onLeadMatch: state.matchConfig.onLeadMatch,
           leadAssignmentType:
             state.matchConfig.leadCustomAssignment?.assignmentType ?? null,
@@ -172,6 +186,8 @@ export function apiRuleToBuilderState(rule: any): RouteBuilderState {
       matchEmail: mc.matchEmail ?? true,
       matchPhone: mc.matchPhone ?? false,
       matchDomain: mc.matchDomain ?? false,
+      matchCompanyName: mc.matchCompanyName ?? false,
+      fuzzyMatchMode: mc.fuzzyMatchMode ?? "STRICT",
       onLeadMatch: mc.onLeadMatch ?? "SFDC_MERGE",
       leadCustomAssignment:
         mc.leadAssignmentType && mc.leadAssigneeId
@@ -198,12 +214,39 @@ export function apiRuleToBuilderState(rule: any): RouteBuilderState {
     }
   }
 
+  // Convert triggerConditions from API format to ConditionGroup[]
+  const triggerConditionGroups: import("@/components/condition-builder/types").ConditionGroup[] = []
+  if (Array.isArray(rule.triggerConditions)) {
+    const tcGroupMap = new Map<string, import("@/components/condition-builder/types").ConditionGroup>()
+    for (const tc of rule.triggerConditions) {
+      const gid = tc.groupId ?? crypto.randomUUID()
+      if (!tcGroupMap.has(gid)) {
+        tcGroupMap.set(gid, {
+          id: gid,
+          conjunction: "AND" as const,
+          conditions: [],
+        })
+      }
+      tcGroupMap.get(gid)!.conditions.push({
+        id: crypto.randomUUID(),
+        groupId: gid,
+        fieldApiName: tc.fieldName,
+        fieldType: (tc.fieldType ?? "TEXT") as import("@/components/condition-builder/types").FieldType,
+        operator: tc.operator,
+        value: tc.value ?? "",
+      })
+    }
+    triggerConditionGroups.push(...tcGroupMap.values())
+  }
+
   return {
     name: rule.name ?? "Untitled Route",
     trigger: {
+      triggerName: rule.triggerName ?? "",
       objectType: rule.objectType ?? "LEAD",
       triggerEvent: rule.triggerEvent ?? "INSERT",
       isDryRun: rule.isDryRun ?? false,
+      triggerConditions: triggerConditionGroups,
     },
     matchConfig,
     paths: paths.length > 0 ? paths : [

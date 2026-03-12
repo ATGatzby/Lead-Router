@@ -13,6 +13,8 @@ export interface CustomAssignment {
   assigneeName: string
 }
 
+export type FuzzyMatchMode = "STRICT" | "FUZZY" | "AI_SMART"
+
 export interface MatchConfig {
   checkLeads: boolean
   checkContacts: boolean
@@ -20,6 +22,8 @@ export interface MatchConfig {
   matchEmail: boolean
   matchPhone: boolean
   matchDomain: boolean
+  matchCompanyName: boolean
+  fuzzyMatchMode: FuzzyMatchMode
   onLeadMatch: LeadMatchAction
   leadCustomAssignment: CustomAssignment | null
   onContactMatch: ContactMatchAction
@@ -50,9 +54,11 @@ export interface DefaultOwner {
 export interface RouteBuilderState {
   name: string
   trigger: {
+    triggerName: string
     objectType: ObjectType
     triggerEvent: TriggerEvent
     isDryRun: boolean
+    triggerConditions: ConditionGroup[]
   }
   matchConfig: MatchConfig | null
   paths: RoutePath[]
@@ -80,12 +86,14 @@ export function defaultBuilderState(): RouteBuilderState {
   return {
     name: "Untitled Route",
     trigger: {
+      triggerName: "",
       objectType: "LEAD",
       triggerEvent: "INSERT",
       isDryRun: false,
+      triggerConditions: [],
     },
     matchConfig: null,
-    paths: [],  // Paths are added via the canvas (drag Filter + Assign from registry)
+    paths: [],
     defaultOwner: null,
   }
 }

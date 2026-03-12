@@ -35,6 +35,8 @@ export default function RouteFlowPage() {
     onSuccess: (data) => {
       // Update the cache with the fresh response (includes branches)
       queryClient.setQueryData(["rule", id], data);
+      // Sync trigger criteria to Salesforce (fire-and-forget)
+      fetch(`/api/rules/${id}/sync-criteria`, { method: "POST" }).catch(() => {});
       router.push("/routing-rules");
     },
   });

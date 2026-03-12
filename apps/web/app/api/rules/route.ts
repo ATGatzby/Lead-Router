@@ -30,6 +30,8 @@ interface MatchConfigInput {
   matchEmail: boolean;
   matchPhone: boolean;
   matchDomain: boolean;
+  matchCompanyName?: boolean;
+  fuzzyMatchMode?: "STRICT" | "FUZZY" | "AI_SMART";
   onLeadMatch: "SFDC_MERGE" | "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM";
   leadAssignmentType?: "USER" | "ROUND_ROBIN" | "QUEUE" | null;
   leadAssigneeUserId?: string | null;
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
           include: { conditions: { orderBy: { sortOrder: "asc" } } },
         },
         matchConfig: true,
+        triggerConditions: { orderBy: { sortOrder: "asc" } },
         team: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
       },
@@ -116,6 +119,8 @@ export async function GET(req: NextRequest) {
       defaultOwnerTeamId: r.defaultOwnerTeamId,
       defaultOwnerQueueId: r.defaultOwnerQueueId,
       isDryRun: r.isDryRun,
+      triggerName: r.triggerName,
+      triggerConditions: r.triggerConditions,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -144,6 +149,8 @@ export async function POST(req: NextRequest) {
       assigneeTeamId,
       assigneeQueueId,
       isDryRun = false,
+      triggerName = "",
+      triggerConditions = [],
       conditions = [],
       // New Route Builder fields
       branches = [],
@@ -190,6 +197,19 @@ export async function POST(req: NextRequest) {
         assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
         assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun,
+        triggerName: triggerName || "",
+        triggerConditions: {
+          create: triggerConditions.map(
+            (c: { groupId: string; fieldName: string; fieldType?: string; operator: string; value?: string | null; sortOrder?: number }) => ({
+              groupId: c.groupId,
+              fieldName: c.fieldName,
+              fieldType: c.fieldType ?? "TEXT",
+              operator: c.operator,
+              value: c.value ?? null,
+              sortOrder: c.sortOrder ?? 0,
+            })
+          ),
+        },
         defaultOwnerType: defaultOwnerType ?? null,
         defaultOwnerUserId: defaultOwnerType === "USER" ? defaultOwnerUserId : null,
         defaultOwnerTeamId: defaultOwnerType === "ROUND_ROBIN" ? defaultOwnerTeamId : null,
@@ -264,6 +284,8 @@ export function buildMatchConfigData(mc: MatchConfigInput) {
     matchEmail: mc.matchEmail,
     matchPhone: mc.matchPhone,
     matchDomain: mc.matchDomain,
+    matchCompanyName: mc.matchCompanyName ?? false,
+    fuzzyMatchMode: mc.fuzzyMatchMode ?? "STRICT",
     onLeadMatch: mc.onLeadMatch,
     leadAssignmentType: mc.leadAssignmentType ?? null,
     leadAssigneeUserId: mc.onLeadMatch === "ASSIGN_CUSTOM" && mc.leadAssignmentType === "USER" ? (mc.leadAssigneeUserId ?? null) : null,

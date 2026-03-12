@@ -19,11 +19,20 @@ export async function GET(
         conditions: { orderBy: { sortOrder: "asc" } },
         branches: {
           orderBy: { priority: "asc" },
-          include: { conditions: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            conditions: { orderBy: { sortOrder: "asc" } },
+            assigneeUser: { select: { id: true, name: true } },
+            assigneeTeam: { select: { id: true, name: true } },
+            assigneeQueue: { select: { id: true, name: true } },
+          },
         },
         matchConfig: true,
+        triggerConditions: { orderBy: { sortOrder: "asc" } },
         team: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
+        defaultOwnerUser: { select: { id: true, name: true } },
+        defaultOwnerTeam: { select: { id: true, name: true } },
+        defaultOwnerQueue: { select: { id: true, name: true } },
       },
     });
 
@@ -84,6 +93,8 @@ export async function PUT(
       assigneeTeamId,
       assigneeQueueId,
       isDryRun,
+      triggerName = "",
+      triggerConditions = [],
       conditions = [],
       // New Route Builder fields
       branches = [],
@@ -106,6 +117,9 @@ export async function PUT(
     // Delete existing branches (cascade deletes branch_conditions)
     await prisma.routingBranch.deleteMany({ where: { ruleId: id } });
 
+    // Delete existing trigger conditions
+    await prisma.triggerCondition.deleteMany({ where: { ruleId: id } });
+
     // Delete existing matchConfig
     await prisma.routeMatchConfig.deleteMany({ where: { ruleId: id } });
 
@@ -120,6 +134,19 @@ export async function PUT(
         assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
         assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun: isDryRun ?? false,
+        triggerName: triggerName || "",
+        triggerConditions: {
+          create: triggerConditions.map(
+            (c: any) => ({
+              groupId: c.groupId,
+              fieldName: c.fieldName,
+              fieldType: c.fieldType ?? "TEXT",
+              operator: c.operator,
+              value: c.value ?? null,
+              sortOrder: c.sortOrder ?? 0,
+            })
+          ),
+        },
         defaultOwnerType: defaultOwnerType ?? null,
         defaultOwnerUserId: defaultOwnerType === "USER" ? defaultOwnerUserId : null,
         defaultOwnerTeamId: defaultOwnerType === "ROUND_ROBIN" ? defaultOwnerTeamId : null,
@@ -168,6 +195,7 @@ export async function PUT(
           include: { conditions: { orderBy: { sortOrder: "asc" } } },
         },
         matchConfig: true,
+        triggerConditions: { orderBy: { sortOrder: "asc" } },
       },
     });
 

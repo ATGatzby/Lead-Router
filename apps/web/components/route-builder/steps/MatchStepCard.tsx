@@ -23,6 +23,10 @@ export function MatchStepCard({ matchConfig, stepNumber, onEdit, onRemove }: Pro
   if (matchConfig.matchEmail) matchOnItems.push("Email")
   if (matchConfig.matchPhone) matchOnItems.push("Phone")
   if (matchConfig.matchDomain) matchOnItems.push("Domain")
+  if (matchConfig.matchCompanyName) {
+    const modeLabel = matchConfig.fuzzyMatchMode === "AI_SMART" ? "AI" : matchConfig.fuzzyMatchMode === "FUZZY" ? "Fuzzy" : "Strict"
+    matchOnItems.push(`Company (${modeLabel})`)
+  }
 
   return (
     <div

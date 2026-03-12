@@ -57,7 +57,7 @@ export function FieldSelect({ fields, value, onChange }: Props) {
         if (field) onChange(field.fieldApiName, field.fieldType);
       }}
     >
-      <SelectTrigger className="w-[200px] text-xs h-8">
+      <SelectTrigger className="min-w-0 flex-[3] text-xs h-8">
         <SelectValue placeholder="Select field…" />
       </SelectTrigger>
       <SelectContent>

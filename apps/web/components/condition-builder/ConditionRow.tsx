@@ -52,7 +52,7 @@ export function ConditionRow({
           </span>
         </div>
       )}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5">
         <FieldSelect
           fields={fields}
           value={condition.fieldApiName}
@@ -77,7 +77,7 @@ export function ConditionRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+          className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-destructive"
           onClick={onRemove}
           aria-label="Remove condition"
         >

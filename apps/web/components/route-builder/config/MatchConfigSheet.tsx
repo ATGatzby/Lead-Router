@@ -17,6 +17,7 @@ import { AssigneeSelect } from "@/components/rule-form/AssigneeSelect"
 import { cn } from "@/lib/utils"
 import type {
   MatchConfig,
+  FuzzyMatchMode,
   LeadMatchAction,
   ContactMatchAction,
   AccountMatchAction,
@@ -38,6 +39,8 @@ function defaultMatchConfig(): MatchConfig {
     matchEmail: true,
     matchPhone: false,
     matchDomain: false,
+    matchCompanyName: false,
+    fuzzyMatchMode: "STRICT",
     onLeadMatch: "SFDC_MERGE",
     leadCustomAssignment: null,
     onContactMatch: "ASSIGN_TO_OWNER",
@@ -208,6 +211,45 @@ export function MatchConfigSheet({ open, onOpenChange, matchConfig, onSave }: Pr
                 checked={cfg.matchDomain}
                 onChange={(v) => patch({ matchDomain: v })}
               />
+              <CheckField
+                id="matchCompanyName"
+                label="Company name"
+                description="Match against Account name using the selected strategy"
+                checked={cfg.matchCompanyName}
+                onChange={(v) => patch({ matchCompanyName: v })}
+              />
+              {cfg.matchCompanyName && (
+                <div className="ml-7 space-y-2">
+                  <RadioOption
+                    id="fuzzy-strict"
+                    name="fuzzyMatchMode"
+                    value="STRICT"
+                    checked={cfg.fuzzyMatchMode === "STRICT"}
+                    onChange={() => patch({ fuzzyMatchMode: "STRICT" })}
+                    label="Strict"
+                    description="Exact company name match (normalized)"
+                    recommended
+                  />
+                  <RadioOption
+                    id="fuzzy-fuzzy"
+                    name="fuzzyMatchMode"
+                    value="FUZZY"
+                    checked={cfg.fuzzyMatchMode === "FUZZY"}
+                    onChange={() => patch({ fuzzyMatchMode: "FUZZY" })}
+                    label="Fuzzy"
+                    description="String similarity + known abbreviations (e.g. Corp vs Corporation)"
+                  />
+                  <RadioOption
+                    id="fuzzy-ai"
+                    name="fuzzyMatchMode"
+                    value="AI_SMART"
+                    checked={cfg.fuzzyMatchMode === "AI_SMART"}
+                    onChange={() => patch({ fuzzyMatchMode: "AI_SMART" })}
+                    label="AI Smart"
+                    description="Semantic matching with AI fallback for ambiguous names"
+                  />
+                </div>
+              )}
             </div>
           </section>
 

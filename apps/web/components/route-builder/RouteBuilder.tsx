@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw } from "lucide-react"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StepRegistry, type CanvasNodeType } from "./StepRegistry"
 import { TriggerConfigSheet } from "./config/TriggerConfigSheet"
@@ -17,6 +17,8 @@ import type {
 } from "./types"
 import { defaultBuilderState, triggerEventLabel } from "./types"
 import type { RuleConditions } from "@/components/condition-builder"
+import { EnglishView } from "./EnglishView"
+import { routeToEnglish } from "@/lib/route-to-english"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -152,8 +154,11 @@ function computeEdges(nodes: CanvasNode[]): CanvasEdge[] {
 
 function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
   switch (node.type) {
-    case "trigger":
-      return triggerEventLabel(state.trigger.objectType, state.trigger.triggerEvent)
+    case "trigger": {
+      const base = state.trigger.triggerName || triggerEventLabel(state.trigger.objectType, state.trigger.triggerEvent)
+      const criteriaCount = state.trigger.triggerConditions.flatMap(g => g.conditions).length
+      return criteriaCount > 0 ? `${base} · ${criteriaCount} criteria` : base
+    }
     case "match": {
       if (!state.matchConfig) return "Not configured"
       const checks: string[] = []
@@ -384,6 +389,9 @@ export function RouteBuilder({
   const isSaving = externalIsSaving ?? internalIsSaving
   const [saveError, setSaveError] = useState<string | null>(null)
   const isDirty = JSON.stringify(state) !== JSON.stringify(savedState)
+
+  // ── Canvas / English tab toggle ────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"canvas" | "english">("canvas")
 
   // ── Canvas nodes — edges are derived automatically ──────────────────────────
   const [nodes, setNodes] = useState<CanvasNode[]>(() => buildNodesFromState(initialState))
@@ -804,6 +812,22 @@ export function RouteBuilder({
     return () => window.removeEventListener("mouseup", onUp)
   }, [])
 
+  // ── English view helpers ────────────────────────────────────────────────────
+  const englishErrorCount = useMemo(() => {
+    const review = routeToEnglish(state)
+    return review.warnings.filter((w) => w.severity === "error").length
+  }, [state])
+
+  const handleFocusPath = useCallback((pathId?: string) => {
+    setActiveTab("canvas")
+    if (pathId) {
+      const filterNode = nodes.find((n) => n.type === "filter" && n.pathId === pathId)
+      if (filterNode) {
+        setActiveSheet({ type: "filter", nodeId: filterNode.id, pathId })
+      }
+    }
+  }, [nodes])
+
   // Active path ids (null when the relevant sheet is not open)
   const activeFilterPathId = activeSheet?.type === "filter" ? activeSheet.pathId : null
   const activeAssignPathId = activeSheet?.type === "assign" ? activeSheet.pathId : null
@@ -826,6 +850,39 @@ export function RouteBuilder({
           placeholder="Route name…"
           aria-label="Route name"
         />
+
+        {/* Tab toggle */}
+        <div className="flex items-center rounded-lg border bg-muted/50 p-0.5">
+          <button
+            type="button"
+            onClick={() => setActiveTab("canvas")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+              activeTab === "canvas"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Canvas
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("english")}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+              activeTab === "english"
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <FileText className="size-3" />
+            English
+            {englishErrorCount > 0 && (
+              <span className="flex items-center justify-center size-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+                {englishErrorCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         {isDirty && (
           <span className="text-xs text-muted-foreground hidden sm:inline">
             Unsaved changes
@@ -848,8 +905,11 @@ export function RouteBuilder({
         </Button>
       </div>
 
-      {/* ── Body (canvas + registry) ────────────────────────────────────────── */}
+      {/* ── Body (canvas + registry OR english view) ────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
+        {activeTab === "english" ? (
+          <EnglishView state={state} onEditInCanvas={handleFocusPath} />
+        ) : (<>
         {/* Canvas */}
         <div
           ref={canvasRef}
@@ -982,6 +1042,7 @@ export function RouteBuilder({
 
         {/* Step registry panel */}
         <StepRegistry activeTypes={activeTypes} />
+        </>)}
       </div>
 
       {/* ── Config sheets ────────────────────────────────────────────────────── */}

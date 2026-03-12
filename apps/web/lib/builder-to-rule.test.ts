@@ -17,9 +17,11 @@ function makeBuilderState(
   return {
     name: "Test Route",
     trigger: {
+      triggerName: "",
       objectType: "LEAD",
       triggerEvent: "INSERT",
       isDryRun: false,
+      triggerConditions: [],
     },
     matchConfig: null,
     paths: [],
@@ -52,6 +54,8 @@ describe("builderToApiBody", () => {
         matchEmail: true,
         matchPhone: false,
         matchDomain: true,
+        matchCompanyName: false,
+        fuzzyMatchMode: "STRICT",
         onLeadMatch: "ASSIGN_CUSTOM",
         leadCustomAssignment: {
           assignmentType: "USER",
@@ -345,7 +349,7 @@ describe("round-trip conversion", () => {
   it("builderToApiBody -> apiRuleToBuilderState preserves core data", () => {
     const original = makeBuilderState({
       name: "Round Trip Route",
-      trigger: { objectType: "CONTACT", triggerEvent: "BOTH", isDryRun: true },
+      trigger: { triggerName: "", objectType: "CONTACT", triggerEvent: "BOTH", isDryRun: true, triggerConditions: [] },
       paths: [
         {
           id: "path-rt",
@@ -423,6 +427,8 @@ describe("round-trip conversion", () => {
         matchEmail: true,
         matchPhone: true,
         matchDomain: false,
+        matchCompanyName: true,
+        fuzzyMatchMode: "FUZZY",
         onLeadMatch: "SFDC_MERGE",
         leadCustomAssignment: null,
         onContactMatch: "ASSIGN_CUSTOM",
@@ -443,6 +449,8 @@ describe("round-trip conversion", () => {
     expect(restored.matchConfig!.checkLeads).toBe(true);
     expect(restored.matchConfig!.checkContacts).toBe(true);
     expect(restored.matchConfig!.checkAccounts).toBe(false);
+    expect(restored.matchConfig!.matchCompanyName).toBe(true);
+    expect(restored.matchConfig!.fuzzyMatchMode).toBe("FUZZY");
     expect(restored.matchConfig!.onContactMatch).toBe("ASSIGN_CUSTOM");
     expect(restored.matchConfig!.contactCustomAssignment).toEqual({
       assignmentType: "ROUND_ROBIN",
