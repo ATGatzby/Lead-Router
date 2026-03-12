@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Sheet,
   SheetContent,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
@@ -20,7 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Filter } from "lucide-react"
+import { ConditionBuilder } from "@/components/condition-builder"
+import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { RouteBuilderState, ObjectType, TriggerEvent } from "../types"
+
+interface FieldsResponse {
+  fields: FieldSchema[]
+}
 
 interface Props {
   open: boolean
@@ -30,28 +40,49 @@ interface Props {
 }
 
 export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Props) {
+  const [triggerName, setTriggerName] = useState(trigger.triggerName)
   const [objectType, setObjectType] = useState<ObjectType>(trigger.objectType)
   const [triggerEvent, setTriggerEvent] = useState<TriggerEvent>(trigger.triggerEvent)
   const [isDryRun, setIsDryRun] = useState(trigger.isDryRun)
+  const [triggerConditions, setTriggerConditions] = useState<ConditionGroup[]>(
+    trigger.triggerConditions
+  )
+
+  // Fetch fields for the selected object type (for ConditionBuilder)
+  const fieldsQuery = useQuery<FieldsResponse>({
+    queryKey: ["fields", objectType],
+    queryFn: async () => {
+      const res = await fetch(`/api/fields?object=${objectType}`)
+      if (!res.ok) throw new Error("Failed to load fields")
+      return res.json()
+    },
+    enabled: open,
+  })
+
+  const fields = fieldsQuery.data?.fields ?? []
 
   // Keep local state in sync when sheet re-opens with new trigger
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
+      setTriggerName(trigger.triggerName)
       setObjectType(trigger.objectType)
       setTriggerEvent(trigger.triggerEvent)
       setIsDryRun(trigger.isDryRun)
+      setTriggerConditions(trigger.triggerConditions)
     }
     onOpenChange(isOpen)
   }
 
   const handleSave = () => {
-    onSave({ objectType, triggerEvent, isDryRun })
+    onSave({ triggerName, objectType, triggerEvent, isDryRun, triggerConditions })
     onOpenChange(false)
   }
 
+  const criteriaCount = triggerConditions.flatMap((g) => g.conditions).length
+
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md">
+      <SheetContent side="right" className="w-full sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Configure Trigger</SheetTitle>
           <SheetDescription>
@@ -60,9 +91,20 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
         </SheetHeader>
 
         <SheetBody className="space-y-5">
+          {/* Trigger name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="trigger-name">Name</Label>
+            <Input
+              id="trigger-name"
+              placeholder="e.g. Inbound Web Leads"
+              value={triggerName}
+              onChange={(e) => setTriggerName(e.target.value)}
+            />
+          </div>
+
           {/* Object type */}
           <div className="space-y-1.5">
-            <Label htmlFor="trigger-object">Salesforce object</Label>
+            <Label htmlFor="trigger-object">Object</Label>
             <Select
               value={objectType}
               onValueChange={(v) => setObjectType(v as ObjectType)}
@@ -78,41 +120,56 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
             </Select>
           </div>
 
-          {/* Trigger event */}
-          <div className="space-y-2">
-            <Label>Trigger event</Label>
-            <div className="space-y-2">
-              {(
-                [
-                  { value: "INSERT", label: "Lead Created", description: "Fires when a new record is created" },
-                  { value: "UPDATE", label: "Lead Updated", description: "Fires when an existing record is updated" },
-                  { value: "BOTH", label: "Any Lead Change", description: "Fires on both create and update" },
-                ] as { value: TriggerEvent; label: string; description: string }[]
-              ).map((opt) => (
-                <label
-                  key={opt.value}
-                  className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                    triggerEvent === opt.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="triggerEvent"
-                    value={opt.value}
-                    checked={triggerEvent === opt.value}
-                    onChange={() => setTriggerEvent(opt.value)}
-                    className="mt-0.5 accent-primary"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{opt.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
+          {/* Trigger event — dropdown */}
+          <div className="space-y-1.5">
+            <Label htmlFor="trigger-event">When to trigger</Label>
+            <Select
+              value={triggerEvent}
+              onValueChange={(v) => setTriggerEvent(v as TriggerEvent)}
+            >
+              <SelectTrigger id="trigger-event" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="INSERT">Record Created</SelectItem>
+                <SelectItem value="UPDATE">Record Updated</SelectItem>
+                <SelectItem value="BOTH">Any Change</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          <Separator />
+
+          {/* Trigger Criteria */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <Label>Trigger Criteria</Label>
+              </div>
+              {criteriaCount > 0 && (
+                <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                  {criteriaCount} condition{criteriaCount !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only records matching these conditions will be sent to the routing engine.
+              Leave empty to send all records.
+            </p>
+            <ConditionBuilder
+              fields={fields}
+              value={triggerConditions}
+              onChange={setTriggerConditions}
+            />
+            {criteriaCount === 0 && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                No criteria defined — all {objectType === "LEAD" ? "Lead" : objectType === "CONTACT" ? "Contact" : "Account"} records will be processed
+              </p>
+            )}
+          </div>
+
+          <Separator />
 
           {/* Dry run */}
           <div className="rounded-lg border border-border p-4 space-y-1">
