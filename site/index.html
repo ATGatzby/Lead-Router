@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenEdgeAI Lead Router — Self-Hosted Salesforce Lead Routing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Theme: Midnight Violet (default) ── */
+:root, [data-theme="midnight-violet"] {
+  --bg-deep: #06060b;
+  --bg-surface: #0c0c14;
+  --bg-card: rgba(14, 14, 24, 0.7);
+  --bg-glass: rgba(18, 18, 32, 0.5);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --text-primary: #e8e8f0;
+  --text-secondary: rgba(232, 232, 240, 0.55);
+  --text-tertiary: rgba(232, 232, 240, 0.35);
+  --accent-blue: #4f7df7;
+  --accent-violet: #8b5cf6;
+  --accent-cyan: #22d3ee;
+  --accent-green: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f472b6;
+  --gradient-hero: linear-gradient(135deg, #4f7df7 0%, #8b5cf6 50%, #c084fc 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(79, 125, 247, 0.15), rgba(139, 92, 246, 0.08));
+  --orb1: #4f7df7; --orb2: #8b5cf6; --orb3: #c084fc;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+}
+
+/* ── Theme: Ember Orange ── */
+[data-theme="ember-orange"] {
+  --bg-deep: #0b0806;
+  --bg-surface: #141008;
+  --bg-card: rgba(20, 16, 8, 0.7);
+  --bg-glass: rgba(28, 22, 12, 0.5);
+  --border: rgba(255, 200, 100, 0.06);
+  --border-hover: rgba(255, 200, 100, 0.12);
+  --text-primary: #f5ebe0;
+  --text-secondary: rgba(245, 235, 224, 0.55);
+  --text-tertiary: rgba(245, 235, 224, 0.35);
+  --accent-blue: #f97316;
+  --accent-violet: #ea580c;
+  --accent-cyan: #fb923c;
+  --accent-green: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f472b6;
+  --gradient-hero: linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(234, 88, 12, 0.08));
+  --orb1: #f97316; --orb2: #ea580c; --orb3: #dc2626;
+}
+
+/* ── Theme: Ocean Teal ── */
+[data-theme="ocean-teal"] {
+  --bg-deep: #04090b;
+  --bg-surface: #071214;
+  --bg-card: rgba(7, 18, 20, 0.7);
+  --bg-glass: rgba(10, 24, 28, 0.5);
+  --border: rgba(100, 220, 255, 0.06);
+  --border-hover: rgba(100, 220, 255, 0.12);
+  --text-primary: #e0f2f1;
+  --text-secondary: rgba(224, 242, 241, 0.55);
+  --text-tertiary: rgba(224, 242, 241, 0.35);
+  --accent-blue: #14b8a6;
+  --accent-violet: #0d9488;
+  --accent-cyan: #22d3ee;
+  --accent-green: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f472b6;
+  --gradient-hero: linear-gradient(135deg, #14b8a6 0%, #06b6d4 50%, #22d3ee 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(6, 182, 212, 0.08));
+  --orb1: #14b8a6; --orb2: #06b6d4; --orb3: #22d3ee;
+}
+
+/* ── Theme: Neon Mint ── */
+[data-theme="neon-mint"] {
+  --bg-deep: #050b08;
+  --bg-surface: #0a140e;
+  --bg-card: rgba(10, 20, 14, 0.7);
+  --bg-glass: rgba(14, 28, 18, 0.5);
+  --border: rgba(100, 255, 180, 0.06);
+  --border-hover: rgba(100, 255, 180, 0.12);
+  --text-primary: #e8f5e9;
+  --text-secondary: rgba(232, 245, 233, 0.55);
+  --text-tertiary: rgba(232, 245, 233, 0.35);
+  --accent-blue: #10b981;
+  --accent-violet: #059669;
+  --accent-cyan: #34d399;
+  --accent-green: #6ee7b7;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f472b6;
+  --gradient-hero: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.08));
+  --orb1: #10b981; --orb2: #059669; --orb3: #6ee7b7;
+}
+
+/* ── Theme: Rose Gold ── */
+[data-theme="rose-gold"] {
+  --bg-deep: #0b0608;
+  --bg-surface: #140c10;
+  --bg-card: rgba(20, 12, 16, 0.7);
+  --bg-glass: rgba(28, 16, 22, 0.5);
+  --border: rgba(255, 150, 180, 0.06);
+  --border-hover: rgba(255, 150, 180, 0.12);
+  --text-primary: #fce4ec;
+  --text-secondary: rgba(252, 228, 236, 0.55);
+  --text-tertiary: rgba(252, 228, 236, 0.35);
+  --accent-blue: #ec4899;
+  --accent-violet: #db2777;
+  --accent-cyan: #f472b6;
+  --accent-green: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #be185d;
+  --gradient-hero: linear-gradient(135deg, #ec4899 0%, #db2777 50%, #be185d 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(219, 39, 119, 0.08));
+  --orb1: #ec4899; --orb2: #db2777; --orb3: #f9a8d4;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Sora', sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Noise Overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Utility ── */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+/* ── Navigation ── */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 16px 24px;
+  background: rgba(6, 6, 11, 0.8);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s;
+}
+
+nav .nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--gradient-hero);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: white;
+}
+
+.logo-text {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.logo-text span { color: var(--text-secondary); font-weight: 400; }
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover { color: var(--text-primary); }
+
+.btn-nav {
+  padding: 8px 18px;
+  background: rgba(79, 125, 247, 0.12);
+  border: 1px solid rgba(79, 125, 247, 0.25);
+  border-radius: 8px;
+  color: var(--accent-blue) !important;
+  font-weight: 500 !important;
+  transition: all 0.2s;
+}
+
+.btn-nav:hover {
+  background: rgba(79, 125, 247, 0.2) !important;
+  border-color: rgba(79, 125, 247, 0.4);
+}
+
+/* ── Hero ── */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  animation: orbFloat 20s ease-in-out infinite;
+}
+
+.hero-orb-1 {
+  width: 600px;
+  height: 600px;
+  background: var(--orb1, var(--accent-blue));
+  top: -200px;
+  left: -100px;
+  animation-delay: 0s;
+}
+
+.hero-orb-2 {
+  width: 500px;
+  height: 500px;
+  background: var(--orb2, var(--accent-violet));
+  top: -100px;
+  right: -150px;
+  animation-delay: -7s;
+}
+
+.hero-orb-3 {
+  width: 400px;
+  height: 400px;
+  background: var(--orb3, #c084fc);
+  bottom: -100px;
+  left: 30%;
+  animation-delay: -14s;
+  opacity: 0.2;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(79, 125, 247, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 125, 247, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 820px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 6px 8px;
+  background: rgba(79, 125, 247, 0.08);
+  border: 1px solid rgba(79, 125, 247, 0.15);
+  border-radius: 100px;
+  font-size: 12.5px;
+  color: var(--accent-blue);
+  margin-bottom: 32px;
+  letter-spacing: 0.03em;
+  animation: fadeInUp 0.8s ease both;
+}
+
+.hero-badge-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.hero h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(48px, 7.5vw, 88px);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  margin-bottom: 24px;
+  animation: fadeInUp 0.8s ease 0.1s both;
+}
+
+.hero h1 em {
+  font-style: italic;
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-size: clamp(16px, 2vw, 19px);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 560px;
+  margin: 0 auto 40px;
+  font-weight: 300;
+  animation: fadeInUp 0.8s ease 0.2s both;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  animation: fadeInUp 0.8s ease 0.3s both;
+}
+
+.btn-primary {
+  padding: 14px 32px;
+  background: var(--gradient-hero);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-family: 'Sora', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(79, 125, 247, 0.3); }
+.btn-primary:hover::before { opacity: 1; }
+
+.btn-secondary {
+  padding: 14px 32px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-hover);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-family: 'Sora', sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-decoration: none;
+  backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(18, 18, 32, 0.8);
+  transform: translateY(-2px);
+}
+
+.hero-cli {
+  margin-top: 56px;
+  animation: fadeInUp 0.8s ease 0.4s both;
+}
+
+.cli-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  background: rgba(12, 12, 20, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.cli-prompt { color: var(--accent-green); }
+.cli-cmd { color: var(--text-secondary); }
+.cli-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 18px;
+  background: var(--accent-blue);
+  border-radius: 1px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Section Shared ── */
+section { padding: 120px 0; position: relative; }
+
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
+.section-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 16px;
+}
+
+.section-title em {
+  font-style: italic;
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.section-desc {
+  font-size: 17px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 560px;
+  font-weight: 300;
+}
+
+.section-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-hover), transparent);
+}
+
+/* ── Product Details — GIF Showcase ── */
+.product-details { background: var(--bg-deep); }
+
+.feature-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 80px;
+  margin-top: 64px;
+}
+
+.feature-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(40px);
+  transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.feature-row.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.feature-row:nth-child(even) { direction: rtl; }
+.feature-row:nth-child(even) > * { direction: ltr; }
+
+.feature-info { padding: 8px 0; }
+
+.feature-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-violet);
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+
+.feature-info h3 {
+  font-family: 'Instrument Serif', serif;
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin-bottom: 16px;
+}
+
+.feature-info p {
+  font-size: 15.5px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  font-weight: 300;
+  margin-bottom: 20px;
+}
+
+.feature-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feature-tag {
+  padding: 5px 12px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  border-radius: 6px;
+  font-size: 12px;
+  color: rgba(232, 232, 240, 0.6);
+  font-weight: 400;
+}
+
+/* ── GIF Placeholder ── */
+.gif-placeholder {
+  position: relative;
+  aspect-ratio: 16/10;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gif-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(79, 125, 247, 0.04), rgba(139, 92, 246, 0.06));
+  transition: opacity 0.4s;
+}
+
+.gif-placeholder:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+}
+
+.gif-placeholder:hover::before { opacity: 1.5; }
+
+.gif-placeholder .play-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(79, 125, 247, 0.15);
+  border: 1px solid rgba(79, 125, 247, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s;
+}
+
+.gif-placeholder:hover .play-btn {
+  background: rgba(79, 125, 247, 0.25);
+  transform: scale(1.08);
+}
+
+.play-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: var(--accent-blue);
+  margin-left: 2px;
+}
+
+.gif-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
+}
+
+.gif-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.008) 2px,
+    rgba(255, 255, 255, 0.008) 4px
+  );
+  pointer-events: none;
+}
+
+/* Accent colors per feature */
+.feature-row:nth-child(1) .gif-placeholder { border-color: rgba(79, 125, 247, 0.12); }
+.feature-row:nth-child(2) .gif-placeholder { border-color: rgba(34, 211, 238, 0.12); }
+.feature-row:nth-child(3) .gif-placeholder { border-color: rgba(139, 92, 246, 0.12); }
+.feature-row:nth-child(4) .gif-placeholder { border-color: rgba(52, 211, 153, 0.12); }
+
+.feature-row:nth-child(1) .play-btn { background: rgba(79, 125, 247, 0.15); border-color: rgba(79, 125, 247, 0.25); }
+.feature-row:nth-child(2) .play-btn { background: rgba(34, 211, 238, 0.12); border-color: rgba(34, 211, 238, 0.2); }
+.feature-row:nth-child(3) .play-btn { background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.2); }
+.feature-row:nth-child(4) .play-btn { background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.2); }
+
+.feature-row:nth-child(2) .play-btn svg { fill: var(--accent-cyan); }
+.feature-row:nth-child(3) .play-btn svg { fill: var(--accent-violet); }
+.feature-row:nth-child(4) .play-btn svg { fill: var(--accent-green); }
+
+/* ── Animated Demo Panels ── */
+.demo-panel {
+  position: relative;
+  aspect-ratio: 16/10;
+  background: #0a0a14;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-family: 'Sora', sans-serif;
+}
+
+.demo-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.demo-dot { width: 8px; height: 8px; border-radius: 50%; }
+.demo-dot-r { background: #ff5f57; }
+.demo-dot-y { background: #febc2e; }
+.demo-dot-g { background: #28c840; }
+
+.demo-titlebar-text {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.demo-body { padding: 12px; height: calc(100% - 34px); position: relative; overflow: hidden; }
+
+/* ── Demo 1: License Users ── */
+.license-demo .demo-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.demo-search {
+  flex: 1;
+  height: 26px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  gap: 6px;
+}
+
+.demo-btn-sm {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 500;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.demo-btn-blue {
+  background: rgba(79, 125, 247, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(79, 125, 247, 0.2);
+}
+
+.license-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.license-table th {
+  text-align: left;
+  font-size: 8.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.license-table td {
+  padding: 7px 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+
+.license-table tr {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.license-table tr.anim-in {
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 0.35s ease;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.toggle-track {
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.08);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.toggle-track.on { background: rgba(52, 211, 153, 0.4); }
+
+.toggle-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s;
+}
+
+.toggle-track.on .toggle-thumb {
+  left: 16px;
+  background: var(--accent-green);
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+/* ── Demo 2: Create Teams ── */
+.teams-demo .team-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-card-demo {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 10px;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.4s ease;
+}
+
+.team-card-demo.anim-in {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.team-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.team-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.team-badge {
+  font-size: 8px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.team-members {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.team-member-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 4px;
+  font-size: 8.5px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+}
+
+.team-member-chip.anim-in { opacity: 1; transform: scale(1); }
+
+.member-status {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.member-active { background: var(--accent-green); }
+.member-paused { background: var(--accent-amber); }
+
+.rr-pointer {
+  margin-top: 6px;
+  height: 3px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.rr-pointer-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* ── Demo 3: Route Builder Canvas ── */
+.canvas-demo .demo-body {
+  position: relative;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.canvas-node {
+  position: absolute;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 2;
+}
+
+.canvas-node.anim-in { opacity: 1; transform: scale(1); }
+
+.canvas-node-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+}
+
+.cn-trigger {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #c4b5fd;
+}
+.cn-trigger .canvas-node-icon { background: rgba(139, 92, 246, 0.2); }
+
+.cn-match {
+  background: rgba(79, 125, 247, 0.1);
+  border: 1px solid rgba(79, 125, 247, 0.25);
+  color: #93bbfd;
+}
+.cn-match .canvas-node-icon { background: rgba(79, 125, 247, 0.2); }
+
+.cn-filter {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+}
+.cn-filter .canvas-node-icon { background: rgba(99, 102, 241, 0.2); }
+
+.cn-assign {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  color: #6ee7b7;
+}
+.cn-assign .canvas-node-icon { background: rgba(52, 211, 153, 0.2); }
+
+.cn-default {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: #fde68a;
+}
+.cn-default .canvas-node-icon { background: rgba(251, 191, 36, 0.2); }
+
+.canvas-edge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.canvas-edge path {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  transition: stroke-dashoffset 1s ease;
+}
+
+.canvas-edge path.anim-in {
+  stroke-dashoffset: 0;
+}
+
+/* ── Demo 4: Activity Feed ── */
+.activity-demo .demo-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.filter-chip {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--text-tertiary);
+}
+
+.filter-chip.active-filter {
+  background: rgba(79, 125, 247, 0.1);
+  border-color: rgba(79, 125, 247, 0.2);
+  color: var(--accent-blue);
+}
+
+.activity-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: 60px 42px 1fr 60px 70px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  font-size: 9px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: all 0.35s ease;
+}
+
+.activity-row.anim-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.activity-row:hover { background: rgba(255,255,255,0.01); }
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 7.5px;
+  font-weight: 500;
+}
+
+.status-success { background: rgba(52, 211, 153, 0.12); color: var(--accent-green); }
+.status-failed { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+.status-unmatched { background: rgba(251, 191, 36, 0.12); color: var(--accent-amber); }
+.status-merged { background: rgba(139, 92, 246, 0.12); color: var(--accent-violet); }
+
+.activity-header {
+  display: grid;
+  grid-template-columns: 60px 42px 1fr 60px 70px;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.activity-header span {
+  font-size: 7.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: pulse 2s infinite;
+}
+
+/* ── Key Features Grid ── */
+.features-section { overflow: hidden; }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: 64px;
+  background: var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.feature-cell {
+  padding: 40px 32px;
+  background: var(--bg-surface);
+  transition: all 0.4s;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-cell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-subtle);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.feature-cell:hover::before { opacity: 1; }
+.feature-cell:hover { background: rgba(14, 14, 24, 0.95); }
+
+.feature-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  font-size: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.fi-blue { background: rgba(79, 125, 247, 0.12); border: 1px solid rgba(79, 125, 247, 0.15); color: var(--accent-blue); }
+.fi-violet { background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.15); color: var(--accent-violet); }
+.fi-cyan { background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+.fi-green { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+.fi-amber { background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.15); color: var(--accent-amber); }
+.fi-rose { background: rgba(244, 114, 182, 0.12); border: 1px solid rgba(244, 114, 182, 0.15); color: var(--accent-rose); }
+
+.feature-cell h4 {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+  position: relative;
+  z-index: 1;
+}
+
+.feature-cell p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-weight: 300;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Implementation Guide ── */
+.impl-section {
+  background: var(--bg-deep);
+  position: relative;
+}
+
+.impl-content {
+  margin-top: 64px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: start;
+}
+
+.impl-steps { display: flex; flex-direction: column; gap: 0; }
+
+.impl-step {
+  display: flex;
+  gap: 20px;
+  padding: 24px 0;
+  position: relative;
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.impl-step.visible { opacity: 1; transform: translateX(0); }
+
+.step-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.step-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(79, 125, 247, 0.1);
+  border: 1.5px solid rgba(79, 125, 247, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.impl-step.visible .step-dot {
+  background: rgba(79, 125, 247, 0.15);
+  box-shadow: 0 0 16px rgba(79, 125, 247, 0.2);
+}
+
+.step-connector {
+  width: 1.5px;
+  flex: 1;
+  background: linear-gradient(to bottom, rgba(79, 125, 247, 0.2), rgba(79, 125, 247, 0.05));
+  min-height: 24px;
+}
+
+.step-content h4 {
+  font-size: 15.5px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.step-content p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  font-weight: 300;
+}
+
+/* Terminal */
+.terminal {
+  background: #0a0a12;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: sticky;
+  top: 100px;
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.td-red { background: #ff5f57; }
+.td-yellow { background: #febc2e; }
+.td-green { background: #28c840; }
+
+.terminal-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.terminal-body {
+  padding: 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  min-height: 380px;
+}
+
+.t-comment { color: rgba(232, 232, 240, 0.25); }
+.t-prompt { color: var(--accent-green); }
+.t-cmd { color: var(--text-secondary); }
+.t-flag { color: var(--accent-blue); }
+.t-success { color: var(--accent-green); }
+.t-info { color: var(--accent-cyan); }
+.t-warn { color: var(--accent-amber); }
+.t-dim { color: var(--text-tertiary); }
+
+.terminal-line {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: all 0.4s ease;
+}
+
+.terminal-line.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Architecture ── */
+.arch-section { overflow: hidden; }
+
+.arch-diagram {
+  margin-top: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: wrap;
+  padding: 48px 32px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+
+.arch-diagram::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(79, 125, 247, 0.06), transparent 60%),
+    radial-gradient(ellipse at 80% 50%, rgba(139, 92, 246, 0.06), transparent 60%);
+}
+
+.arch-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  min-width: 130px;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arch-node.visible { opacity: 1; transform: translateY(0); }
+
+.arch-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: transform 0.3s;
+}
+
+.arch-node:hover .arch-icon { transform: scale(1.1); }
+
+.ai-sf { background: rgba(79, 125, 247, 0.12); border: 1px solid rgba(79, 125, 247, 0.2); }
+.ai-apex { background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.2); }
+.ai-engine { background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.2); }
+.ai-db { background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.2); }
+.ai-redis { background: rgba(244, 114, 182, 0.12); border: 1px solid rgba(244, 114, 182, 0.2); }
+.ai-web { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.2); }
+
+.arch-label {
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.arch-sublabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.arch-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  font-size: 20px;
+  padding: 0 8px;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.5s 0.3s;
+}
+
+.arch-arrow.visible { opacity: 1; }
+
+.arch-arrow svg {
+  width: 32px;
+  height: 16px;
+  stroke: rgba(232, 232, 240, 0.2);
+  fill: none;
+  stroke-width: 1.5;
+}
+
+/* ── Pricing ── */
+.pricing-section { background: var(--bg-deep); }
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-top: 64px;
+  max-width: 800px;
+}
+
+.price-card {
+  padding: 40px 36px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s;
+}
+
+.price-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-4px);
+}
+
+.price-card.featured {
+  border-color: rgba(79, 125, 247, 0.25);
+  background: linear-gradient(135deg, rgba(79, 125, 247, 0.06), rgba(139, 92, 246, 0.04));
+}
+
+.price-card.featured::before {
+  content: 'Most Popular';
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 4px 12px;
+  background: var(--gradient-hero);
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  letter-spacing: 0.02em;
+}
+
+.price-tier {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-blue);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.price-amount {
+  font-family: 'Instrument Serif', serif;
+  font-size: 48px;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.price-amount span {
+  font-size: 18px;
+  color: var(--text-secondary);
+  font-family: 'Sora', sans-serif;
+  font-weight: 300;
+}
+
+.price-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+  font-weight: 300;
+}
+
+.price-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+
+.price-features li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 300;
+}
+
+.check-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(52, 211, 153, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.check-icon svg {
+  width: 10px;
+  height: 10px;
+  stroke: var(--accent-green);
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.price-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  border-radius: 10px;
+  font-family: 'Sora', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.25s;
+  cursor: pointer;
+}
+
+.price-btn-outline {
+  background: transparent;
+  border: 1px solid var(--border-hover);
+  color: var(--text-primary);
+}
+
+.price-btn-outline:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.03); }
+
+.price-btn-fill {
+  background: var(--gradient-hero);
+  border: none;
+  color: white;
+}
+
+.price-btn-fill:hover { box-shadow: 0 8px 24px rgba(79, 125, 247, 0.3); transform: translateY(-1px); }
+
+.self-hosted-banner {
+  margin-top: 32px;
+  padding: 20px 28px;
+  background: rgba(52, 211, 153, 0.04);
+  border: 1px solid rgba(52, 211, 153, 0.12);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 800px;
+}
+
+.self-hosted-banner svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--accent-green);
+  fill: none;
+  flex-shrink: 0;
+}
+
+.self-hosted-banner p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 300;
+  line-height: 1.5;
+}
+
+.self-hosted-banner strong {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+/* ── Footer ── */
+footer {
+  padding: 48px 0;
+  border-top: 1px solid var(--border);
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer-copy {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-weight: 300;
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+}
+
+.footer-links a {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover { color: var(--text-primary); }
+
+/* ── Scroll animations ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .feature-row { grid-template-columns: 1fr; gap: 32px; }
+  .feature-row:nth-child(even) { direction: ltr; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+  .impl-content { grid-template-columns: 1fr; }
+  .terminal { position: static; }
+  .pricing-grid { grid-template-columns: 1fr; }
+  .arch-diagram { flex-direction: column; gap: 12px; }
+  .arch-arrow { transform: rotate(90deg); }
+  .nav-links { gap: 16px; }
+}
+
+@media (max-width: 600px) {
+  .features-grid { grid-template-columns: 1fr; }
+  .hero-actions { flex-direction: column; }
+  .nav-links .nav-hide { display: none; }
+  .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+}
+
+/* ── Theme Switcher ── */
+.theme-switcher {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.theme-toggle-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-hover);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(16px);
+  transition: all 0.3s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+.theme-toggle-btn:hover {
+  transform: scale(1.1);
+  border-color: var(--accent-blue);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 16px rgba(79, 125, 247, 0.2);
+}
+
+.theme-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--text-secondary);
+  fill: none;
+  stroke-width: 2;
+}
+
+.theme-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-hover);
+  border-radius: 14px;
+  padding: 16px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  animation: panelIn 0.25s ease;
+}
+
+.theme-panel.open { display: flex; }
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.theme-panel-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: 'Sora', sans-serif;
+  transition: background 0.2s;
+}
+
+.theme-option:hover { background: rgba(255, 255, 255, 0.04); }
+.theme-option.active { background: rgba(255, 255, 255, 0.06); }
+
+.theme-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-option.active .theme-swatch { border-color: var(--text-primary); }
+
+.theme-swatch::before, .theme-swatch::after {
+  content: '';
+  position: absolute;
+  width: 50%;
+  height: 100%;
+  top: 0;
+}
+.theme-swatch::before { left: 0; }
+.theme-swatch::after { right: 0; }
+
+.swatch-violet::before { background: #4f7df7; }
+.swatch-violet::after { background: #8b5cf6; }
+
+.swatch-ember::before { background: #f97316; }
+.swatch-ember::after { background: #ea580c; }
+
+.swatch-ocean::before { background: #14b8a6; }
+.swatch-ocean::after { background: #06b6d4; }
+
+.swatch-mint::before { background: #10b981; }
+.swatch-mint::after { background: #059669; }
+
+.swatch-rose::before { background: #ec4899; }
+.swatch-rose::after { background: #db2777; }
+
+.theme-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.theme-option.active .theme-name { color: var(--text-primary); font-weight: 500; }
+
+/* Smooth transition for theme changes */
+html {
+  transition: background-color 0.4s ease;
+}
+
+html * {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.15s ease, box-shadow 0.4s ease;
+}
+
+/* Exclude animations from theme transition */
+html .hero-orb, html .cli-cursor, html .hero-badge-dot {
+  transition: background-color 0.4s ease;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ Theme Switcher ════════════════ -->
+<div class="theme-switcher">
+  <div class="theme-panel" id="theme-panel">
+    <div class="theme-panel-title">Color Theme</div>
+    <button class="theme-option active" data-theme="midnight-violet">
+      <div class="theme-swatch swatch-violet"></div>
+      <span class="theme-name">Midnight Violet</span>
+    </button>
+    <button class="theme-option" data-theme="ember-orange">
+      <div class="theme-swatch swatch-ember"></div>
+      <span class="theme-name">Ember Orange</span>
+    </button>
+    <button class="theme-option" data-theme="ocean-teal">
+      <div class="theme-swatch swatch-ocean"></div>
+      <span class="theme-name">Ocean Teal</span>
+    </button>
+    <button class="theme-option" data-theme="neon-mint">
+      <div class="theme-swatch swatch-mint"></div>
+      <span class="theme-name">Neon Mint</span>
+    </button>
+    <button class="theme-option" data-theme="rose-gold">
+      <div class="theme-swatch swatch-rose"></div>
+      <span class="theme-name">Rose Gold</span>
+    </button>
+  </div>
+  <button class="theme-toggle-btn" id="theme-toggle" title="Switch color theme">
+    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+    </svg>
+  </button>
+</div>
+
+<!-- ════════════════ Navigation ════════════════ -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">O</div>
+      <div class="logo-text">OpenEdgeAI <span>Lead Router</span></div>
+    </a>
+    <ul class="nav-links">
+      <li class="nav-hide"><a href="#product">Product</a></li>
+      <li class="nav-hide"><a href="#features">Features</a></li>
+      <li class="nav-hide"><a href="#implementation">Setup</a></li>
+      <li class="nav-hide"><a href="#pricing">Pricing</a></li>
+      <li><a href="#get-started" class="btn-nav">Get Started</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ════════════════ Hero ════════════════ -->
+<section class="hero" id="hero">
+  <div class="hero-bg">
+    <div class="hero-orb hero-orb-1"></div>
+    <div class="hero-orb hero-orb-2"></div>
+    <div class="hero-orb hero-orb-3"></div>
+    <div class="hero-grid"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      Now available — v1.0 stable release
+    </div>
+    <h1>Route every lead<br>to the <em>right rep,</em><br>instantly.</h1>
+    <p class="hero-sub">Self-hosted Salesforce lead routing with a visual canvas builder, round-robin teams, and real-time assignment. Your data never leaves your server.</p>
+    <div class="hero-actions">
+      <a href="#get-started" class="btn-primary">Get Started Free</a>
+      <a href="#product" class="btn-secondary">See It In Action</a>
+    </div>
+    <div class="hero-cli">
+      <div class="cli-window">
+        <span class="cli-prompt">$</span>
+        <span class="cli-cmd" id="cli-type"></span>
+        <span class="cli-cursor"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ════════════════ Product Details — GIF Showcase ════════════════ -->
+<section class="product-details" id="product">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Product</div>
+      <h2 class="section-title">Everything you need to<br><em>automate</em> lead assignment</h2>
+      <p class="section-desc">From syncing users to building visual routes — every step designed for speed and clarity.</p>
+    </div>
+
+    <div class="feature-showcase">
+
+      <!-- 1 · License Users -->
+      <div class="feature-row" data-delay="0">
+        <div class="feature-info">
+          <div class="feature-number">01</div>
+          <h3>License your<br>Salesforce users</h3>
+          <p>Sync users from Salesforce by role, profile, or individually. License them with a single click. Bulk operations make managing hundreds of reps effortless.</p>
+          <div class="feature-tags">
+            <span class="feature-tag">Bulk sync</span>
+            <span class="feature-tag">Role-based import</span>
+            <span class="feature-tag">License management</span>
+          </div>
+        </div>
+        <div class="demo-panel license-demo" data-demo="license">
+          <div class="demo-titlebar">
+            <span class="demo-dot demo-dot-r"></span>
+            <span class="demo-dot demo-dot-y"></span>
+            <span class="demo-dot demo-dot-g"></span>
+            <span class="demo-titlebar-text">License Users</span>
+          </div>
+          <div class="demo-body">
+            <div class="license-demo demo-toolbar">
+              <div class="demo-search">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                Search users...
+              </div>
+              <div class="demo-btn-sm demo-btn-blue">↻ Sync by Role</div>
+            </div>
+            <table class="license-table">
+              <thead><tr class="anim-in"><th>User</th><th>Role</th><th>Profile</th><th>Licensed</th></tr></thead>
+              <tbody id="license-tbody">
+                <tr><td><div class="user-cell"><div class="user-avatar" style="background:rgba(79,125,247,0.3)">SR</div>Sarah R.</div></td><td><span class="role-badge" style="background:rgba(139,92,246,0.12);color:#c4b5fd">Sales Rep</span></td><td style="font-size:9px;color:var(--text-tertiary)">Standard</td><td><div class="toggle-track on"><div class="toggle-thumb"></div></div></td></tr>
+                <tr><td><div class="user-cell"><div class="user-avatar" style="background:rgba(52,211,153,0.3)">MK</div>Mike K.</div></td><td><span class="role-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7">AE</span></td><td style="font-size:9px;color:var(--text-tertiary)">Standard</td><td><div class="toggle-track on"><div class="toggle-thumb"></div></div></td></tr>
+                <tr><td><div class="user-cell"><div class="user-avatar" style="background:rgba(251,191,36,0.3)">JL</div>Jess L.</div></td><td><span class="role-badge" style="background:rgba(251,191,36,0.12);color:#fde68a">SDR</span></td><td style="font-size:9px;color:var(--text-tertiary)">Standard</td><td><div class="toggle-track"><div class="toggle-thumb"></div></div></td></tr>
+                <tr><td><div class="user-cell"><div class="user-avatar" style="background:rgba(244,114,182,0.3)">AP</div>Anita P.</div></td><td><span class="role-badge" style="background:rgba(244,114,182,0.12);color:#f9a8d4">Manager</span></td><td style="font-size:9px;color:var(--text-tertiary)">Admin</td><td><div class="toggle-track on"><div class="toggle-thumb"></div></div></td></tr>
+                <tr><td><div class="user-cell"><div class="user-avatar" style="background:rgba(34,211,238,0.3)">DW</div>Dan W.</div></td><td><span class="role-badge" style="background:rgba(34,211,238,0.12);color:#67e8f9">Sales Rep</span></td><td style="font-size:9px;color:var(--text-tertiary)">Standard</td><td><div class="toggle-track"><div class="toggle-thumb"></div></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 · Create Teams -->
+      <div class="feature-row" data-delay="100">
+        <div class="feature-info">
+          <div class="feature-number">02</div>
+          <h3>Build round-robin<br>teams</h3>
+          <p>Create teams and add members for fair lead distribution. Pause or resume individual reps without disrupting the rotation. Atomic Redis pointers ensure no rep gets skipped.</p>
+          <div class="feature-tags">
+            <span class="feature-tag">Round-robin</span>
+            <span class="feature-tag">Pause / Resume</span>
+            <span class="feature-tag">Atomic assignment</span>
+          </div>
+        </div>
+        <div class="demo-panel teams-demo" data-demo="teams">
+          <div class="demo-titlebar">
+            <span class="demo-dot demo-dot-r"></span>
+            <span class="demo-dot demo-dot-y"></span>
+            <span class="demo-dot demo-dot-g"></span>
+            <span class="demo-titlebar-text">Teams</span>
+          </div>
+          <div class="demo-body">
+            <div class="team-cards" id="team-cards">
+              <div class="team-card-demo">
+                <div class="team-header">
+                  <span class="team-name">🟢 Enterprise AEs</span>
+                  <span class="team-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7">4 active</span>
+                </div>
+                <div class="team-members" data-team="1">
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Sarah R.</div>
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Mike K.</div>
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Anita P.</div>
+                  <div class="team-member-chip"><span class="member-status member-paused"></span><s style="text-decoration-color:rgba(255,255,255,0.15)">Dan W.</s></div>
+                </div>
+                <div class="rr-pointer"><div class="rr-pointer-fill" style="width:0%;background:var(--accent-cyan)"></div></div>
+              </div>
+              <div class="team-card-demo">
+                <div class="team-header">
+                  <span class="team-name">🔵 SMB SDRs</span>
+                  <span class="team-badge" style="background:rgba(79,125,247,0.12);color:#93bbfd">3 active</span>
+                </div>
+                <div class="team-members" data-team="2">
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Jess L.</div>
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Tom B.</div>
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Priya M.</div>
+                </div>
+                <div class="rr-pointer"><div class="rr-pointer-fill" style="width:0%;background:var(--accent-blue)"></div></div>
+              </div>
+              <div class="team-card-demo">
+                <div class="team-header">
+                  <span class="team-name">🟡 APAC Reps</span>
+                  <span class="team-badge" style="background:rgba(251,191,36,0.12);color:#fde68a">2 active</span>
+                </div>
+                <div class="team-members" data-team="3">
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Raj S.</div>
+                  <div class="team-member-chip"><span class="member-status member-active"></span>Yuki T.</div>
+                </div>
+                <div class="rr-pointer"><div class="rr-pointer-fill" style="width:0%;background:var(--accent-amber)"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 · Route Builder Canvas -->
+      <div class="feature-row" data-delay="200">
+        <div class="feature-info">
+          <div class="feature-number">03</div>
+          <h3>Visual route<br>builder canvas</h3>
+          <p>Drag-and-drop pipeline: Trigger → Match → Filter → Assign → Default. Build complex routing logic with AND/OR conditions, 17+ operators, and branching paths — no code required.</p>
+          <div class="feature-tags">
+            <span class="feature-tag">Drag & drop</span>
+            <span class="feature-tag">17+ operators</span>
+            <span class="feature-tag">AND/OR logic</span>
+            <span class="feature-tag">Multi-branch</span>
+          </div>
+        </div>
+        <div class="demo-panel canvas-demo" data-demo="canvas">
+          <div class="demo-titlebar">
+            <span class="demo-dot demo-dot-r"></span>
+            <span class="demo-dot demo-dot-y"></span>
+            <span class="demo-dot demo-dot-g"></span>
+            <span class="demo-titlebar-text">Route Builder — Enterprise Inbound</span>
+          </div>
+          <div class="demo-body">
+            <svg class="canvas-edge" id="canvas-edges">
+              <path d="" stroke="rgba(139,92,246,0.3)" stroke-width="1.5" fill="none" id="edge-trigger-match"/>
+              <path d="" stroke="rgba(79,125,247,0.3)" stroke-width="1.5" fill="none" id="edge-match-f1"/>
+              <path d="" stroke="rgba(79,125,247,0.3)" stroke-width="1.5" fill="none" id="edge-match-f2"/>
+              <path d="" stroke="rgba(52,211,153,0.3)" stroke-width="1.5" fill="none" id="edge-f1-a1"/>
+              <path d="" stroke="rgba(52,211,153,0.3)" stroke-width="1.5" fill="none" id="edge-f2-a2"/>
+              <path d="" stroke="rgba(251,191,36,0.3)" stroke-width="1.5" fill="none" id="edge-default"/>
+            </svg>
+            <div class="canvas-node cn-trigger" id="cn-trigger" style="left:38%;top:4%">
+              <div class="canvas-node-icon">⚡</div>
+              <span>Trigger<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Lead · Insert</span></span>
+            </div>
+            <div class="canvas-node cn-match" id="cn-match" style="left:35%;top:22%">
+              <div class="canvas-node-icon">🔍</div>
+              <span>Match<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Email + Domain</span></span>
+            </div>
+            <div class="canvas-node cn-filter" id="cn-filter1" style="left:12%;top:42%">
+              <div class="canvas-node-icon">◇</div>
+              <span>Enterprise<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Revenue ≥ $1M</span></span>
+            </div>
+            <div class="canvas-node cn-filter" id="cn-filter2" style="left:58%;top:42%">
+              <div class="canvas-node-icon">◇</div>
+              <span>SMB<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Revenue < $1M</span></span>
+            </div>
+            <div class="canvas-node cn-assign" id="cn-assign1" style="left:10%;top:62%">
+              <div class="canvas-node-icon">👥</div>
+              <span>Enterprise AEs<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Round Robin</span></span>
+            </div>
+            <div class="canvas-node cn-assign" id="cn-assign2" style="left:58%;top:62%">
+              <div class="canvas-node-icon">👤</div>
+              <span>SMB SDRs<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Round Robin</span></span>
+            </div>
+            <div class="canvas-node cn-default" id="cn-default" style="left:34%;top:82%">
+              <div class="canvas-node-icon">⬇</div>
+              <span>Default Owner<span style="opacity:0.5;font-size:7.5px;margin-left:4px">Queue: Unassigned</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 · Activity Feed -->
+      <div class="feature-row" data-delay="300">
+        <div class="feature-info">
+          <div class="feature-number">04</div>
+          <h3>Real-time<br>activity feed</h3>
+          <p>Track every lead assignment as it happens. Filter by status, rule, team, or assignee. Inspect record snapshots, retry failures, and export to CSV. Full audit trail included.</p>
+          <div class="feature-tags">
+            <span class="feature-tag">Live feed</span>
+            <span class="feature-tag">Record snapshots</span>
+            <span class="feature-tag">CSV export</span>
+            <span class="feature-tag">Audit log</span>
+          </div>
+        </div>
+        <div class="demo-panel activity-demo" data-demo="activity">
+          <div class="demo-titlebar">
+            <span class="demo-dot demo-dot-r"></span>
+            <span class="demo-dot demo-dot-y"></span>
+            <span class="demo-dot demo-dot-g"></span>
+            <span class="demo-titlebar-text"><span class="pulse-dot"></span> Activity — Live</span>
+          </div>
+          <div class="demo-body">
+            <div class="demo-toolbar">
+              <div class="filter-chip active-filter">All</div>
+              <div class="filter-chip">Success</div>
+              <div class="filter-chip">Failed</div>
+              <div class="filter-chip">Unmatched</div>
+            </div>
+            <div class="activity-header">
+              <span>Time</span>
+              <span>Status</span>
+              <span>Record</span>
+              <span>Rule</span>
+              <span>Assigned To</span>
+            </div>
+            <div class="activity-rows" id="activity-rows">
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:04:02</span><span class="status-dot status-success">✓ OK</span><span>Lead — john@acme.co</span><span style="font-size:8px">Enterprise</span><span style="font-size:8px">Sarah R.</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:04:01</span><span class="status-dot status-success">✓ OK</span><span>Lead — lisa@corp.io</span><span style="font-size:8px">SMB Inbound</span><span style="font-size:8px">Jess L.</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:58</span><span class="status-dot status-merged">↗ Merged</span><span>Lead — raj@bigco.com</span><span style="font-size:8px">Match First</span><span style="font-size:8px">Existing</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:55</span><span class="status-dot status-success">✓ OK</span><span>Contact — amy@startup.io</span><span style="font-size:8px">APAC Route</span><span style="font-size:8px">Yuki T.</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:51</span><span class="status-dot status-unmatched">? None</span><span>Lead — test@test.com</span><span style="font-size:8px">—</span><span style="font-size:8px">Default Queue</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:48</span><span class="status-dot status-success">✓ OK</span><span>Lead — pk@enterprise.co</span><span style="font-size:8px">Enterprise</span><span style="font-size:8px">Mike K.</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:44</span><span class="status-dot status-failed">✗ Fail</span><span>Lead — bad@invalid</span><span style="font-size:8px">SMB Inbound</span><span style="font-size:8px">Retry #2</span></div>
+              <div class="activity-row"><span style="font-size:8px;color:var(--text-tertiary)">12:03:40</span><span class="status-dot status-success">✓ OK</span><span>Account — globalcorp.com</span><span style="font-size:8px">Territory</span><span style="font-size:8px">Anita P.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ════════════════ Key Features Grid ════════════════ -->
+<section class="features-section" id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Capabilities</div>
+      <h2 class="section-title">Built for <em>serious</em><br>revenue operations</h2>
+      <p class="section-desc">Enterprise-grade routing without the enterprise price tag.</p>
+    </div>
+
+    <div class="features-grid reveal">
+      <div class="feature-cell">
+        <div class="feature-icon fi-violet">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+        </div>
+        <h4>Visual Route Builder</h4>
+        <p>Zapier-style canvas with drag-and-drop nodes. Build Trigger → Match → Filter → Assign pipelines visually.</p>
+      </div>
+      <div class="feature-cell">
+        <div class="feature-icon fi-blue">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h4>Round-Robin Teams</h4>
+        <p>Fair distribution with atomic Redis pointers. Pause/resume individual members without breaking rotation.</p>
+      </div>
+      <div class="feature-cell">
+        <div class="feature-icon fi-cyan">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg>
+        </div>
+        <h4>Duplicate Matching</h4>
+        <p>Detect existing leads, contacts, and accounts by email, phone, or domain. Auto-merge, skip, or assign to existing owner.</p>
+      </div>
+      <div class="feature-cell">
+        <div class="feature-icon fi-green">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h4>Millisecond Latency</h4>
+        <p>Real-time evaluation via Fastify engine with BullMQ workers. Leads get assigned before your reps finish reading the notification.</p>
+      </div>
+      <div class="feature-cell">
+        <div class="feature-icon fi-amber">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h4>Full Audit Trail</h4>
+        <p>Every routing decision logged with record snapshots, timestamps, and assignment details. Compliance-ready from day one.</p>
+      </div>
+      <div class="feature-cell">
+        <div class="feature-icon fi-rose">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <h4>Analytics & Conversions</h4>
+        <p>Track routing volume, success rates, speed-to-lead, and lead-to-opportunity conversion. Know which routes drive revenue.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ════════════════ Architecture ════════════════ -->
+<section class="arch-section" id="architecture">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Architecture</div>
+      <h2 class="section-title">How the <em>stack</em> connects</h2>
+      <p class="section-desc">Six services, one Docker Compose. Everything runs on your VPS with automatic HTTPS.</p>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-node" data-delay="0">
+        <div class="arch-icon ai-sf">☁️</div>
+        <span class="arch-label">Salesforce</span>
+        <span class="arch-sublabel">Apex Trigger</span>
+      </div>
+      <div class="arch-arrow"><svg viewBox="0 0 32 16"><path d="M4 8h20M20 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="arch-node" data-delay="100">
+        <div class="arch-icon ai-engine">⚡</div>
+        <span class="arch-label">Engine</span>
+        <span class="arch-sublabel">Fastify + BullMQ</span>
+      </div>
+      <div class="arch-arrow"><svg viewBox="0 0 32 16"><path d="M4 8h20M20 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="arch-node" data-delay="200">
+        <div class="arch-icon ai-db">🗄️</div>
+        <span class="arch-label">PostgreSQL</span>
+        <span class="arch-sublabel">+ Prisma ORM</span>
+      </div>
+      <div class="arch-arrow"><svg viewBox="0 0 32 16"><path d="M4 8h20M20 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="arch-node" data-delay="300">
+        <div class="arch-icon ai-redis">🔴</div>
+        <span class="arch-label">Redis</span>
+        <span class="arch-sublabel">Cache + Queues</span>
+      </div>
+      <div class="arch-arrow"><svg viewBox="0 0 32 16"><path d="M4 8h20M20 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="arch-node" data-delay="400">
+        <div class="arch-icon ai-web">🖥️</div>
+        <span class="arch-label">Web Dashboard</span>
+        <span class="arch-sublabel">Next.js 16</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ════════════════ Implementation Guide ════════════════ -->
+<section class="impl-section" id="implementation">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Implementation Guide</div>
+      <h2 class="section-title">Deploy in <em>ten minutes,</em><br>not ten sprints</h2>
+      <p class="section-desc">One CLI command. No DevOps team required. No Salesforce package installs.</p>
+    </div>
+
+    <div class="impl-content">
+      <div class="impl-steps">
+        <div class="impl-step" data-delay="0">
+          <div class="step-line">
+            <div class="step-dot">1</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Prerequisites</h4>
+            <p>A Linux VPS with Docker installed, two domain names (app + engine), and a Salesforce Connected App with OAuth credentials.</p>
+          </div>
+        </div>
+        <div class="impl-step" data-delay="100">
+          <div class="step-line">
+            <div class="step-dot">2</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Run the CLI</h4>
+            <p>Execute <code style="font-family: 'JetBrains Mono'; font-size: 12.5px; padding: 2px 8px; background: rgba(79,125,247,0.1); border-radius: 4px; color: var(--accent-blue);">npx @lead-routing/cli@latest init</code> from your local machine. No global installs needed.</p>
+          </div>
+        </div>
+        <div class="impl-step" data-delay="200">
+          <div class="step-line">
+            <div class="step-dot">3</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Configure via wizard</h4>
+            <p>The interactive wizard collects SSH credentials, app URLs, Salesforce OAuth details, and admin password. Everything validated in real-time.</p>
+          </div>
+        </div>
+        <div class="impl-step" data-delay="300">
+          <div class="step-line">
+            <div class="step-dot">4</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Auto-deploy Docker stack</h4>
+            <p>CLI SSHes into your VPS and deploys five services: Web (Next.js), Engine (Fastify), PostgreSQL, Redis, and Caddy for automatic HTTPS.</p>
+          </div>
+        </div>
+        <div class="impl-step" data-delay="400">
+          <div class="step-line">
+            <div class="step-dot">5</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Salesforce package deployed</h4>
+            <p>Apex triggers, custom settings, permission sets, and remote site settings are automatically deployed to your Salesforce org via the REST API.</p>
+          </div>
+        </div>
+        <div class="impl-step" data-delay="500">
+          <div class="step-line">
+            <div class="step-dot">6</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content">
+            <h4>Login and start routing</h4>
+            <p>Open your dashboard URL, connect Salesforce via OAuth, sync your users, create your first route, and watch leads get assigned in real-time.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal Animation -->
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="terminal-dot td-red"></span>
+          <span class="terminal-dot td-yellow"></span>
+          <span class="terminal-dot td-green"></span>
+          <span class="terminal-title">lead-routing init</span>
+        </div>
+        <div class="terminal-body" id="terminal-body">
+          <div class="terminal-line"><span class="t-comment"># Install and run with a single command</span></div>
+          <div class="terminal-line"><span class="t-prompt">$</span> <span class="t-cmd">npx @lead-routing/cli@latest init</span></div>
+          <div class="terminal-line">&nbsp;</div>
+          <div class="terminal-line"><span class="t-info">◆</span>  <span class="t-cmd">Welcome to Lead Routing Setup</span></div>
+          <div class="terminal-line">&nbsp;</div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">SSH connection established</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Docker verified on remote host</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Configuration files uploaded</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Docker images pulled (web, engine)</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Services started (5/5 healthy)</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Database migrated & seeded</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">SFDC package deployed</span></div>
+          <div class="terminal-line"><span class="t-success">✔</span>  <span class="t-dim">Health checks passed</span></div>
+          <div class="terminal-line">&nbsp;</div>
+          <div class="terminal-line"><span class="t-success">■</span>  <span class="t-cmd">Lead Routing is live!</span></div>
+          <div class="terminal-line"><span class="t-dim">   Dashboard: </span><span class="t-info">https://app.yourcompany.com</span></div>
+          <div class="terminal-line"><span class="t-dim">   Engine:    </span><span class="t-info">https://engine.yourcompany.com</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ════════════════ Pricing ════════════════ -->
+<section class="pricing-section" id="pricing">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Pricing</div>
+      <h2 class="section-title">Simple, <em>transparent</em><br>pricing</h2>
+      <p class="section-desc">No per-API-call fees. No hidden costs. Self-hosted means you own the infrastructure.</p>
+    </div>
+
+    <div class="pricing-grid reveal">
+      <div class="price-card">
+        <div class="price-tier">Free</div>
+        <div class="price-amount">$0 <span>/ month</span></div>
+        <p class="price-desc">Get started with the essentials.</p>
+        <ul class="price-features">
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Up to 5 licensed users</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> 100,000 routes / month</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Visual Route Builder</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Round-robin teams</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Activity & audit logs</li>
+        </ul>
+        <a href="#get-started" class="price-btn price-btn-outline">Start Free</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="price-tier">Pro</div>
+        <div class="price-amount">$49 <span>/ month</span></div>
+        <p class="price-desc">For growing sales teams.</p>
+        <ul class="price-features">
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Up to 20 licensed users</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> 100,000 routes / month</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Everything in Free</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Analytics & conversions</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Duplicate matching</li>
+          <li><span class="check-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span> Priority support</li>
+        </ul>
+        <a href="#get-started" class="price-btn price-btn-fill">Get Started</a>
+      </div>
+    </div>
+
+    <div class="self-hosted-banner reveal">
+      <svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <p><strong>100% self-hosted.</strong> Your data stays on your server. No telemetry. No vendor lock-in. Deploy on any VPS — Hetzner, DigitalOcean, Vultr, AWS, or bare metal.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ CTA ════════════════ -->
+<section id="get-started" style="padding: 100px 0; text-align: center; position: relative;">
+  <div class="container">
+    <div class="reveal">
+      <h2 class="section-title" style="margin-bottom: 20px;">Ready to <em>automate?</em></h2>
+      <p class="section-desc" style="margin: 0 auto 40px; text-align: center;">Deploy Lead Router to your server in ten minutes. No credit card required for free tier.</p>
+      <div class="hero-actions" style="justify-content: center;">
+        <a href="#" class="btn-primary">Deploy Now — Free</a>
+        <a href="#" class="btn-secondary">Read the Docs</a>
+      </div>
+      <div class="hero-cli" style="margin-top: 40px;">
+        <div class="cli-window">
+          <span class="cli-prompt">$</span>
+          <span class="cli-cmd">npx @lead-routing/cli@latest init</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ Footer ════════════════ -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <span class="footer-copy">&copy; 2026 OpenEdgeAI. All rights reserved.</span>
+      <ul class="footer-links">
+        <li><a href="#">Documentation</a></li>
+        <li><a href="#">GitHub</a></li>
+        <li><a href="#">Support</a></li>
+        <li><a href="#">Privacy</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Typed CLI command in hero ──
+(function() {
+  const text = 'npx @lead-routing/cli@latest init';
+  const el = document.getElementById('cli-type');
+  let i = 0;
+  function type() {
+    if (i <= text.length) {
+      el.textContent = text.slice(0, i);
+      i++;
+      setTimeout(type, 50 + Math.random() * 40);
+    }
+  }
+  setTimeout(type, 1200);
+})();
+
+// ── Scroll reveal ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const delay = parseInt(entry.target.dataset.delay || '0');
+      setTimeout(() => entry.target.classList.add('visible'), delay);
+    }
+  });
+}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal, .feature-row, .impl-step, .arch-node, .arch-arrow').forEach(el => {
+  observer.observe(el);
+});
+
+// ── Terminal line animation ──
+const termObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const lines = entry.target.querySelectorAll('.terminal-line');
+      lines.forEach((line, i) => {
+        setTimeout(() => line.classList.add('visible'), i * 150);
+      });
+      termObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+termObserver.observe(document.getElementById('terminal-body'));
+
+// ── Smooth scroll for anchor links ──
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) {
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// ── Demo Animations ──
+(function() {
+  // License Users: rows appear one by one, then toggle flips
+  const licenseObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const rows = entry.target.querySelectorAll('tbody tr');
+        rows.forEach((row, i) => {
+          setTimeout(() => row.classList.add('anim-in'), 200 + i * 180);
+        });
+        // Animate toggles on
+        setTimeout(() => {
+          const offToggles = entry.target.querySelectorAll('.toggle-track:not(.on)');
+          offToggles.forEach((t, i) => {
+            setTimeout(() => t.classList.add('on'), i * 600);
+          });
+        }, 1400);
+        licenseObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.3 });
+  const licensePanel = document.querySelector('.license-demo');
+  if (licensePanel) licenseObs.observe(licensePanel);
+
+  // Teams: cards slide in, members pop in, round-robin pointer animates
+  const teamsObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const cards = entry.target.querySelectorAll('.team-card-demo');
+        cards.forEach((card, ci) => {
+          setTimeout(() => {
+            card.classList.add('anim-in');
+            const chips = card.querySelectorAll('.team-member-chip');
+            chips.forEach((chip, mi) => {
+              setTimeout(() => chip.classList.add('anim-in'), 150 + mi * 120);
+            });
+          }, ci * 300);
+        });
+        // Animate round-robin pointers
+        setTimeout(() => {
+          const fills = entry.target.querySelectorAll('.rr-pointer-fill');
+          const percents = [75, 33, 50];
+          fills.forEach((f, i) => { f.style.width = percents[i] + '%'; });
+          // Keep cycling
+          let tick = 0;
+          setInterval(() => {
+            tick++;
+            fills.forEach((f, i) => {
+              const base = percents[i];
+              const memberCount = [4, 3, 2][i];
+              f.style.width = (((tick + i) % memberCount + 1) / memberCount * 100) + '%';
+            });
+          }, 2000);
+        }, 1500);
+        teamsObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.3 });
+  const teamsPanel = document.querySelector('.teams-demo');
+  if (teamsPanel) teamsObs.observe(teamsPanel);
+
+  // Canvas: nodes appear with spring animation, then edges draw
+  const canvasObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const nodes = entry.target.querySelectorAll('.canvas-node');
+        const delays = [0, 300, 600, 600, 1000, 1000, 1300];
+        nodes.forEach((node, i) => {
+          setTimeout(() => node.classList.add('anim-in'), delays[i]);
+        });
+
+        // Draw edges after nodes appear
+        setTimeout(() => {
+          drawCanvasEdges(entry.target);
+          const paths = entry.target.querySelectorAll('.canvas-edge path');
+          paths.forEach((p, i) => {
+            setTimeout(() => p.classList.add('anim-in'), i * 200);
+          });
+        }, 500);
+
+        canvasObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.3 });
+  const canvasPanel = document.querySelector('.canvas-demo');
+  if (canvasPanel) canvasObs.observe(canvasPanel);
+
+  function drawCanvasEdges(container) {
+    const body = container.querySelector('.demo-body');
+    if (!body) return;
+    const rect = body.getBoundingClientRect();
+    function center(id) {
+      const el = document.getElementById(id);
+      if (!el) return { x: 0, y: 0 };
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width/2 - rect.left, y: r.top + r.height/2 - rect.top };
+    }
+    function bottom(id) {
+      const el = document.getElementById(id);
+      if (!el) return { x: 0, y: 0 };
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width/2 - rect.left, y: r.top + r.height - rect.top };
+    }
+    function top_(id) {
+      const el = document.getElementById(id);
+      if (!el) return { x: 0, y: 0 };
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width/2 - rect.left, y: r.top - rect.top };
+    }
+    function edge(from, to) {
+      const my = (from.y + to.y) / 2;
+      return `M${from.x},${from.y} C${from.x},${my} ${to.x},${my} ${to.x},${to.y}`;
+    }
+    const pairs = [
+      ['edge-trigger-match', bottom('cn-trigger'), top_('cn-match')],
+      ['edge-match-f1', bottom('cn-match'), top_('cn-filter1')],
+      ['edge-match-f2', bottom('cn-match'), top_('cn-filter2')],
+      ['edge-f1-a1', bottom('cn-filter1'), top_('cn-assign1')],
+      ['edge-f2-a2', bottom('cn-filter2'), top_('cn-assign2')],
+      ['edge-default', bottom('cn-assign1'), top_('cn-default')],
+    ];
+    pairs.forEach(([id, from, to]) => {
+      const path = document.getElementById(id);
+      if (path) {
+        const d = edge(from, to);
+        path.setAttribute('d', d);
+        const len = path.getTotalLength ? path.getTotalLength() : 200;
+        path.style.strokeDasharray = len;
+        path.style.strokeDashoffset = len;
+      }
+    });
+  }
+
+  // Activity: rows appear one by one in a loop
+  const activityObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const rows = entry.target.querySelectorAll('.activity-row');
+        rows.forEach((row, i) => {
+          setTimeout(() => row.classList.add('anim-in'), 150 + i * 180);
+        });
+        // Simulate new rows appearing at top periodically
+        let rowIdx = 0;
+        const newRecords = [
+          { time: '12:04:08', status: 'status-success', statusText: '✓ OK', record: 'Lead — kate@stripe.com', rule: 'Enterprise', assignee: 'Sarah R.' },
+          { time: '12:04:12', status: 'status-success', statusText: '✓ OK', record: 'Contact — dev@notion.so', rule: 'SMB Inbound', assignee: 'Tom B.' },
+          { time: '12:04:15', status: 'status-merged', statusText: '↗ Merged', record: 'Lead — dup@acme.co', rule: 'Match First', assignee: 'Existing' },
+        ];
+        const container = entry.target.querySelector('.activity-rows');
+        setInterval(() => {
+          if (rowIdx >= newRecords.length) rowIdx = 0;
+          const r = newRecords[rowIdx++];
+          const div = document.createElement('div');
+          div.className = 'activity-row';
+          div.innerHTML = `<span style="font-size:8px;color:var(--text-tertiary)">${r.time}</span><span class="status-dot ${r.status}">${r.statusText}</span><span>${r.record}</span><span style="font-size:8px">${r.rule}</span><span style="font-size:8px">${r.assignee}</span>`;
+          container.insertBefore(div, container.firstChild);
+          // Remove last if too many
+          if (container.children.length > 9) container.removeChild(container.lastChild);
+          requestAnimationFrame(() => div.classList.add('anim-in'));
+        }, 3000);
+        activityObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.3 });
+  const activityPanel = document.querySelector('.activity-demo');
+  if (activityPanel) activityObs.observe(activityPanel);
+})();
+
+// ── Theme Switcher ──
+(function() {
+  const toggle = document.getElementById('theme-toggle');
+  const panel = document.getElementById('theme-panel');
+  const options = panel.querySelectorAll('.theme-option');
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target !== toggle) {
+      panel.classList.remove('open');
+    }
+  });
+
+  options.forEach(opt => {
+    opt.addEventListener('click', () => {
+      const theme = opt.dataset.theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      options.forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

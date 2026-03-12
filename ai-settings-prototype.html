@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Assistant Settings — Lead Router</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sidebar-bg: #0B0F1A;
+    --sidebar-hover: rgba(124, 58, 237, 0.08);
+    --sidebar-active: rgba(124, 58, 237, 0.14);
+    --content-bg: #F8F9FC;
+    --card-bg: #FFFFFF;
+    --card-border: #E5E7EB;
+    --card-hover-border: #C4B5FD;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --purple-50: #F5F3FF;
+    --purple-100: #EDE9FE;
+    --purple-200: #DDD6FE;
+    --purple-400: #A78BFA;
+    --purple-500: #8B5CF6;
+    --purple-600: #7C3AED;
+    --purple-700: #6D28D9;
+    --green-50: #ECFDF5;
+    --green-100: #D1FAE5;
+    --green-500: #10B981;
+    --green-600: #059669;
+    --green-700: #047857;
+    --red-50: #FEF2F2;
+    --red-500: #EF4444;
+    --red-600: #DC2626;
+    --amber-50: #FFFBEB;
+    --amber-500: #F59E0B;
+    --amber-600: #D97706;
+    --blue-50: #EFF6FF;
+    --blue-500: #3B82F6;
+    --blue-600: #2563EB;
+    --overlay: rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.1);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--content-bg);
+    color: var(--text-primary);
+    display: flex;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Sidebar ──────────────────────────────────────────── */
+  .sidebar {
+    width: 240px;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+  }
+
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .sidebar-logo svg { width: 28px; height: 28px; flex-shrink: 0; }
+  .sidebar-logo span {
+    color: #F9FAFB;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.2px;
+  }
+
+  .nav-section { padding: 16px 12px 6px; }
+  .nav-section-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.28);
+    padding: 0 8px;
+    margin-bottom: 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    color: rgba(255,255,255,0.55);
+    font-size: 13.5px;
+    font-weight: 450;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    margin-bottom: 1px;
+  }
+  .nav-item:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.8); }
+  .nav-item.active {
+    background: var(--sidebar-active);
+    color: var(--purple-400);
+  }
+  .nav-item svg { width: 18px; height: 18px; opacity: 0.7; flex-shrink: 0; }
+  .nav-item.active svg { opacity: 1; color: var(--purple-400); }
+
+  .nav-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(139, 92, 246, 0.2);
+    color: var(--purple-400);
+    letter-spacing: 0.3px;
+  }
+
+  /* ─── Main Content ─────────────────────────────────────── */
+  .main {
+    margin-left: 240px;
+    flex: 1;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    height: 56px;
+    border-bottom: 1px solid var(--card-border);
+    background: var(--card-bg);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--text-primary); }
+  .breadcrumb svg { width: 14px; height: 14px; }
+  .breadcrumb .current { color: var(--text-primary); font-weight: 500; }
+
+  .content {
+    padding: 28px;
+    max-width: 960px;
+  }
+
+  .page-header {
+    margin-bottom: 28px;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  /* ─── Active Model Selector ────────────────────────────── */
+  .active-model-section {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .active-model-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .active-model-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--purple-600), var(--purple-500));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+  }
+  .active-model-icon svg { width: 20px; height: 20px; color: white; }
+
+  .active-model-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+  .active-model-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .model-dropdown {
+    position: relative;
+  }
+
+  .model-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: all 0.15s;
+    min-width: 260px;
+    font-family: inherit;
+  }
+  .model-dropdown-trigger:hover { border-color: var(--purple-400); }
+  .model-dropdown-trigger.open { border-color: var(--purple-500); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+
+  .model-dropdown-trigger .provider-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .model-dropdown-trigger .chevron {
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+  }
+  .model-dropdown-trigger.open .chevron { transform: rotate(180deg); }
+
+  .model-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 300px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    display: none;
+    overflow: hidden;
+  }
+  .model-dropdown-menu.show { display: block; animation: dropIn 0.15s ease; }
+
+  @keyframes dropIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .dropdown-group-label {
+    padding: 10px 14px 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: background 0.1s;
+  }
+  .dropdown-item:hover { background: var(--purple-50); }
+  .dropdown-item.selected { background: var(--purple-50); }
+  .dropdown-item.selected::after {
+    content: '';
+    margin-left: auto;
+    width: 16px;
+    height: 16px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237C3AED' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  }
+  .dropdown-item .provider-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dropdown-item .model-name { font-weight: 500; }
+
+  .dropdown-empty {
+    padding: 20px 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .no-model-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--amber-50);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--amber-600);
+    font-weight: 500;
+  }
+  .no-model-notice svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ─── Provider Cards ───────────────────────────────────── */
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    letter-spacing: -0.1px;
+  }
+
+  .provider-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .provider-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    box-shadow: var(--shadow-card);
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .provider-card:hover { border-color: var(--card-hover-border); box-shadow: var(--shadow-md); }
+
+  .provider-card.connected {
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+  .provider-card.connected:hover {
+    border-color: rgba(16, 185, 129, 0.5);
+  }
+
+  .provider-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .provider-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .provider-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .provider-icon.claude { background: #FFF0E6; color: #D97706; }
+  .provider-icon.openai { background: #F0FDF4; color: #15803D; }
+  .provider-icon.gemini { background: #EFF6FF; color: #2563EB; }
+  .provider-icon.custom { background: #F5F3FF; color: #7C3AED; }
+
+  .provider-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+  .provider-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    flex-shrink: 0;
+  }
+  .status-badge.connected {
+    background: var(--green-50);
+    color: var(--green-700);
+  }
+  .status-badge.connected .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green-500);
+    animation: pulse-dot 2s infinite;
+  }
+  .status-badge.disconnected {
+    background: #F3F4F6;
+    color: var(--text-muted);
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Connected card details */
+  .provider-details {
+    margin-bottom: 16px;
+  }
+
+  .detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    font-size: 13px;
+  }
+  .detail-row:not(:last-child) { border-bottom: 1px solid #F3F4F6; }
+  .detail-label { color: var(--text-muted); font-weight: 450; }
+  .detail-value {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .provider-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 550;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn svg { width: 15px; height: 15px; }
+
+  .btn-primary {
+    background: var(--purple-600);
+    color: white;
+    box-shadow: 0 1px 3px rgba(124,58,237,0.3);
+  }
+  .btn-primary:hover { background: var(--purple-700); box-shadow: 0 2px 6px rgba(124,58,237,0.35); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--card-border);
+  }
+  .btn-outline:hover { border-color: #D1D5DB; background: #F9FAFB; color: var(--text-primary); }
+
+  .btn-success {
+    background: var(--green-50);
+    color: var(--green-700);
+    border: 1px solid var(--green-100);
+  }
+  .btn-success:hover { background: var(--green-100); }
+
+  .btn-danger {
+    background: var(--red-50);
+    color: var(--red-600);
+    border: 1px solid rgba(239,68,68,0.15);
+  }
+  .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 8px 10px;
+  }
+  .btn-ghost:hover { background: #F3F4F6; color: var(--text-primary); }
+
+  .btn-connect {
+    width: 100%;
+    background: var(--purple-50);
+    color: var(--purple-600);
+    border: 1px dashed var(--purple-200);
+    padding: 10px;
+  }
+  .btn-connect:hover { background: var(--purple-100); border-color: var(--purple-400); }
+
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+  /* ─── Usage Stats ──────────────────────────────────────── */
+  .usage-section {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .usage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .usage-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .usage-period {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .usage-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .usage-stat {
+    padding: 14px 16px;
+    background: var(--content-bg);
+    border-radius: 8px;
+  }
+  .usage-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+    margin-bottom: 2px;
+  }
+  .usage-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 450;
+  }
+
+  /* ─── Modal/Sheet ──────────────────────────────────────── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.show {
+    display: flex;
+    animation: fadeIn 0.15s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .modal {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    width: 480px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    animation: slideUp 0.2s ease;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .modal-header {
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+  .modal-close:hover { background: #F3F4F6; color: var(--text-primary); }
+
+  .modal-body { padding: 22px 24px; }
+  .modal-footer {
+    padding: 16px 24px 22px;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .form-group { margin-bottom: 18px; }
+  .form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .form-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: 7px;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    background: var(--card-bg);
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: var(--purple-500);
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+  }
+  .form-input.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+  }
+
+  .form-select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: 7px;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    background: var(--card-bg);
+    font-family: inherit;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+  }
+  .form-select:focus {
+    outline: none;
+    border-color: var(--purple-500);
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+  }
+
+  .test-result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: 12px;
+  }
+  .test-result.success { background: var(--green-50); color: var(--green-700); }
+  .test-result.error { background: var(--red-50); color: var(--red-600); }
+  .test-result svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ─── Toast ────────────────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    padding: 12px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-lg);
+    animation: toastIn 0.3s ease;
+    min-width: 240px;
+  }
+  .toast.success { background: #065F46; color: white; }
+  .toast.info { background: var(--text-primary); color: white; }
+  .toast.error { background: #991B1B; color: white; }
+  .toast svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* ─── Active indicator ribbon ──────────────────────────── */
+  .active-ribbon {
+    position: absolute;
+    top: 12px;
+    right: -28px;
+    background: var(--purple-600);
+    color: white;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 3px 32px;
+    transform: rotate(45deg);
+    box-shadow: 0 2px 4px rgba(124,58,237,0.3);
+  }
+
+  /* ─── Demo Controls ────────────────────────────────────── */
+  .demo-controls {
+    position: fixed;
+    bottom: 20px;
+    left: 260px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+    flex-wrap: wrap;
+    max-width: 480px;
+  }
+
+  .demo-btn {
+    padding: 7px 12px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+  }
+  .demo-btn:hover { background: var(--purple-50); color: var(--purple-600); border-color: var(--purple-200); }
+  .demo-btn.active { background: var(--purple-600); color: white; border-color: var(--purple-600); }
+</style>
+</head>
+<body>
+
+<!-- ─── Sidebar ──────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #A78BFA">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    <span>Lead Router</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Main</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Routing Rules
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Round Robins
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Intelligence</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a8 8 0 0 0-8 8c0 3.36 2.07 6.24 5 7.42V19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1.58c2.93-1.18 5-4.06 5-7.42a8 8 0 0 0-8-8z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+      AI Assistant
+      <span class="nav-badge">Pro</span>
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Setup</div>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      Integrations
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+      License Users
+    </a>
+    <a class="nav-item active" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+  </div>
+</nav>
+
+<!-- ─── Main Content ─────────────────────────────────────── -->
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb">
+      <a href="#">Settings</a>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      <span class="current">AI Assistant</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="page-header">
+      <h1 class="page-title">AI Assistant Settings</h1>
+      <p class="page-subtitle">Connect LLM providers, manage API keys, and choose your active model for the AI routing assistant.</p>
+    </div>
+
+    <!-- Active Model Selector -->
+    <div class="active-model-section" id="activeModelSection">
+      <div class="active-model-left">
+        <div class="active-model-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 3.36 2.07 6.24 5 7.42V19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1.58c2.93-1.18 5-4.06 5-7.42a8 8 0 0 0-8-8z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+        </div>
+        <div>
+          <div class="active-model-label">Active Model</div>
+          <div class="active-model-value" id="activeModelDisplay">No model selected</div>
+        </div>
+      </div>
+      <div class="model-dropdown" id="modelDropdown">
+        <button class="model-dropdown-trigger" id="dropdownTrigger" onclick="toggleDropdown()">
+          <span class="provider-dot" id="triggerDot" style="display:none"></span>
+          <span id="triggerLabel">Select a model...</span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="model-dropdown-menu" id="dropdownMenu">
+          <div id="dropdownContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider Cards -->
+    <div class="section-label">Connected Providers</div>
+    <div class="provider-grid" id="providerGrid">
+      <!-- Cards injected by JS -->
+    </div>
+
+    <!-- Usage Stats -->
+    <div class="usage-section">
+      <div class="usage-header">
+        <div class="usage-title">Usage Statistics</div>
+        <div class="usage-period">This billing period</div>
+      </div>
+      <div class="usage-grid">
+        <div class="usage-stat">
+          <div class="usage-stat-value">1,247</div>
+          <div class="usage-stat-label">Total conversations</div>
+        </div>
+        <div class="usage-stat">
+          <div class="usage-stat-value">3</div>
+          <div class="usage-stat-label">Providers connected</div>
+        </div>
+        <div class="usage-stat">
+          <div class="usage-stat-value">142ms</div>
+          <div class="usage-stat-label">Avg response time</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Edit Provider Modal ──────────────────────────────── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Configure Provider</div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- Injected by JS -->
+    </div>
+    <div class="modal-footer" id="modalFooter">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-outline" id="testBtn" onclick="testConnection()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Test Connection
+      </button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveProvider()">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Demo Controls -->
+<div class="demo-controls">
+  <button class="demo-btn active" onclick="setDemoState('partial')" id="demo-partial">2 Connected</button>
+  <button class="demo-btn" onclick="setDemoState('all')" id="demo-all">All Connected</button>
+  <button class="demo-btn" onclick="setDemoState('none')" id="demo-none">None Connected</button>
+  <button class="demo-btn" onclick="setDemoState('one')" id="demo-one">1 Connected</button>
+</div>
+
+<script>
+  // ─── Provider State ────────────────────────────────────
+  const PROVIDERS = {
+    claude: {
+      id: 'claude',
+      name: 'Anthropic Claude',
+      desc: 'Advanced reasoning & analysis',
+      color: '#D97706',
+      iconClass: 'claude',
+      icon: '🟠',
+      models: ['claude-sonnet-4-5-20250514', 'claude-opus-4-20250514', 'claude-haiku-4-5-20251001'],
+      defaultModel: 'claude-sonnet-4-5-20250514',
+      keyPrefix: 'sk-ant-',
+      keyPlaceholder: 'sk-ant-api03-...',
+    },
+    openai: {
+      id: 'openai',
+      name: 'OpenAI',
+      desc: 'GPT models & function calling',
+      color: '#15803D',
+      iconClass: 'openai',
+      icon: '🟢',
+      models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini'],
+      defaultModel: 'gpt-4o',
+      keyPrefix: 'sk-',
+      keyPlaceholder: 'sk-proj-...',
+    },
+    gemini: {
+      id: 'gemini',
+      name: 'Google Gemini',
+      desc: 'Multimodal AI by Google',
+      color: '#2563EB',
+      iconClass: 'gemini',
+      icon: '🔵',
+      models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+      defaultModel: 'gemini-2.5-flash',
+      keyPrefix: 'AIza',
+      keyPlaceholder: 'AIzaSy...',
+    },
+    custom: {
+      id: 'custom',
+      name: 'Custom / Self-Hosted',
+      desc: 'OpenAI-compatible endpoint',
+      color: '#7C3AED',
+      iconClass: 'custom',
+      icon: '🟣',
+      models: [],
+      defaultModel: '',
+      keyPrefix: '',
+      keyPlaceholder: 'your-api-key',
+      hasBaseUrl: true,
+    },
+  };
+
+  let state = {
+    connected: {},     // { claude: { model, maskedKey }, openai: { ... } }
+    activeModel: null, // { provider: 'claude', model: 'claude-sonnet-4-5-20250514' }
+    editingProvider: null,
+  };
+
+  // ─── Demo States ───────────────────────────────────────
+  const DEMO_STATES = {
+    partial: {
+      connected: {
+        claude: { model: 'claude-sonnet-4-5-20250514', maskedKey: 'sk-ant-...8f3k' },
+        openai: { model: 'gpt-4o', maskedKey: 'sk-proj-...7x4f' },
+      },
+      activeModel: { provider: 'claude', model: 'claude-sonnet-4-5-20250514' },
+    },
+    all: {
+      connected: {
+        claude: { model: 'claude-sonnet-4-5-20250514', maskedKey: 'sk-ant-...8f3k' },
+        openai: { model: 'gpt-4o', maskedKey: 'sk-proj-...7x4f' },
+        gemini: { model: 'gemini-2.5-flash', maskedKey: 'AIza...9mPq' },
+        custom: { model: 'llama-3.1-70b', maskedKey: 'key-...ab2c', baseUrl: 'https://api.together.xyz/v1' },
+      },
+      activeModel: { provider: 'claude', model: 'claude-sonnet-4-5-20250514' },
+    },
+    none: { connected: {}, activeModel: null },
+    one: {
+      connected: {
+        openai: { model: 'gpt-4o', maskedKey: 'sk-proj-...7x4f' },
+      },
+      activeModel: { provider: 'openai', model: 'gpt-4o' },
+    },
+  };
+
+  function setDemoState(name) {
+    document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`demo-${name}`).classList.add('active');
+    state = JSON.parse(JSON.stringify(DEMO_STATES[name]));
+    render();
+  }
+
+  // ─── Render ────────────────────────────────────────────
+  function render() {
+    renderProviderCards();
+    renderActiveModel();
+    renderDropdown();
+  }
+
+  function renderProviderCards() {
+    const grid = document.getElementById('providerGrid');
+    grid.innerHTML = '';
+
+    for (const [id, prov] of Object.entries(PROVIDERS)) {
+      const isConnected = !!state.connected[id];
+      const info = state.connected[id];
+      const isActive = state.activeModel?.provider === id;
+
+      const card = document.createElement('div');
+      card.className = `provider-card ${isConnected ? 'connected' : ''}`;
+      card.innerHTML = `
+        ${isActive ? '<div class="active-ribbon">ACTIVE</div>' : ''}
+        <div class="provider-card-header">
+          <div class="provider-identity">
+            <div class="provider-icon ${prov.iconClass}">${prov.icon}</div>
+            <div>
+              <div class="provider-name">${prov.name}</div>
+              <div class="provider-desc">${prov.desc}</div>
+            </div>
+          </div>
+          <span class="status-badge ${isConnected ? 'connected' : 'disconnected'}">
+            ${isConnected ? '<span class="dot"></span> Connected' : 'Not connected'}
+          </span>
+        </div>
+        ${isConnected ? `
+          <div class="provider-details">
+            <div class="detail-row">
+              <span class="detail-label">Model</span>
+              <span class="detail-value">${info.model}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">API Key</span>
+              <span class="detail-value">${info.maskedKey}</span>
+            </div>
+            ${info.baseUrl ? `
+            <div class="detail-row">
+              <span class="detail-label">Endpoint</span>
+              <span class="detail-value" style="font-size:11px">${info.baseUrl}</span>
+            </div>` : ''}
+          </div>
+          <div class="provider-actions">
+            ${!isActive ? `<button class="btn btn-sm btn-primary" onclick="setActive('${id}')">Set Active</button>` : `<button class="btn btn-sm btn-success" disabled>Active</button>`}
+            <button class="btn btn-sm btn-outline" onclick="openEditModal('${id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+            <button class="btn btn-sm btn-outline" onclick="testProviderConnection('${id}')">Test</button>
+            <button class="btn btn-sm btn-danger" onclick="disconnectProvider('${id}')">Disconnect</button>
+          </div>
+        ` : `
+          <div style="margin-top: 4px">
+            <button class="btn btn-connect" onclick="openEditModal('${id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Connect ${prov.name}
+            </button>
+          </div>
+        `}
+      `;
+      grid.appendChild(card);
+    }
+  }
+
+  function renderActiveModel() {
+    const display = document.getElementById('activeModelDisplay');
+    const section = document.getElementById('activeModelSection');
+
+    if (!state.activeModel) {
+      display.textContent = 'No model selected';
+      display.style.color = 'var(--text-muted)';
+    } else {
+      const prov = PROVIDERS[state.activeModel.provider];
+      display.textContent = `${state.activeModel.model}`;
+      display.style.color = 'var(--text-primary)';
+    }
+  }
+
+  function renderDropdown() {
+    const content = document.getElementById('dropdownContent');
+    const trigger = document.getElementById('triggerLabel');
+    const dot = document.getElementById('triggerDot');
+    const connectedProviders = Object.entries(state.connected);
+
+    if (connectedProviders.length === 0) {
+      content.innerHTML = '<div class="dropdown-empty">No providers connected.<br>Connect a provider below to get started.</div>';
+      trigger.textContent = 'No models available';
+      dot.style.display = 'none';
+      return;
+    }
+
+    if (state.activeModel) {
+      const prov = PROVIDERS[state.activeModel.provider];
+      trigger.textContent = state.activeModel.model;
+      dot.style.display = 'block';
+      dot.style.background = prov.color;
+    } else {
+      trigger.textContent = 'Select a model...';
+      dot.style.display = 'none';
+    }
+
+    let html = '';
+    for (const [id, info] of connectedProviders) {
+      const prov = PROVIDERS[id];
+      html += `<div class="dropdown-group-label">${prov.name}</div>`;
+
+      // Show the connected model
+      const isSelected = state.activeModel?.provider === id && state.activeModel?.model === info.model;
+      html += `
+        <div class="dropdown-item ${isSelected ? 'selected' : ''}" onclick="selectModel('${id}', '${info.model}')">
+          <span class="provider-dot" style="background:${prov.color}"></span>
+          <span class="model-name">${info.model}</span>
+        </div>
+      `;
+
+      // Show other available models for this provider
+      if (prov.models.length > 0) {
+        for (const m of prov.models) {
+          if (m === info.model) continue;
+          const isSel = state.activeModel?.provider === id && state.activeModel?.model === m;
+          html += `
+            <div class="dropdown-item ${isSel ? 'selected' : ''}" onclick="selectModel('${id}', '${m}')" style="opacity: 0.65">
+              <span class="provider-dot" style="background:${prov.color}"></span>
+              <span class="model-name">${m}</span>
+            </div>
+          `;
+        }
+      }
+    }
+    content.innerHTML = html;
+  }
+
+  // ─── Actions ───────────────────────────────────────────
+  function toggleDropdown() {
+    const menu = document.getElementById('dropdownMenu');
+    const trigger = document.getElementById('dropdownTrigger');
+    const isOpen = menu.classList.contains('show');
+    menu.classList.toggle('show');
+    trigger.classList.toggle('open');
+
+    if (!isOpen) {
+      document.addEventListener('click', closeDropdownOutside);
+    }
+  }
+
+  function closeDropdownOutside(e) {
+    const dropdown = document.getElementById('modelDropdown');
+    if (!dropdown.contains(e.target)) {
+      document.getElementById('dropdownMenu').classList.remove('show');
+      document.getElementById('dropdownTrigger').classList.remove('open');
+      document.removeEventListener('click', closeDropdownOutside);
+    }
+  }
+
+  function selectModel(providerId, model) {
+    state.activeModel = { provider: providerId, model };
+    // Update the connected model for this provider
+    if (state.connected[providerId]) {
+      state.connected[providerId].model = model;
+    }
+    document.getElementById('dropdownMenu').classList.remove('show');
+    document.getElementById('dropdownTrigger').classList.remove('open');
+    showToast('success', `Active model set to ${model}`);
+    render();
+  }
+
+  function setActive(providerId) {
+    const info = state.connected[providerId];
+    state.activeModel = { provider: providerId, model: info.model };
+    showToast('success', `${PROVIDERS[providerId].name} is now the active provider`);
+    render();
+  }
+
+  function disconnectProvider(providerId) {
+    const provName = PROVIDERS[providerId].name;
+    delete state.connected[providerId];
+    if (state.activeModel?.provider === providerId) {
+      const remaining = Object.keys(state.connected);
+      if (remaining.length > 0) {
+        const first = remaining[0];
+        state.activeModel = { provider: first, model: state.connected[first].model };
+      } else {
+        state.activeModel = null;
+      }
+    }
+    showToast('info', `${provName} disconnected`);
+    render();
+  }
+
+  function testProviderConnection(providerId) {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Testing...';
+    btn.disabled = true;
+
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.disabled = false;
+      showToast('success', `${PROVIDERS[providerId].name} connection OK — 89ms`);
+    }, 1200);
+  }
+
+  // ─── Modal ─────────────────────────────────────────────
+  function openEditModal(providerId) {
+    state.editingProvider = providerId;
+    const prov = PROVIDERS[providerId];
+    const isConnected = !!state.connected[providerId];
+    const info = state.connected[providerId] || {};
+
+    document.getElementById('modalTitle').textContent = isConnected ? `Edit ${prov.name}` : `Connect ${prov.name}`;
+    document.getElementById('saveBtn').textContent = isConnected ? 'Save Changes' : 'Save & Connect';
+
+    let html = '';
+
+    // API Key
+    html += `
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input class="form-input mono" id="modalApiKey" type="password" placeholder="${prov.keyPlaceholder}" value="${isConnected ? 'sk-existing-key-here-masked' : ''}">
+        <div class="form-hint">Your key is encrypted with AES-256-GCM and stored securely on your server.</div>
+      </div>
+    `;
+
+    // Model selection
+    if (prov.models.length > 0) {
+      html += `
+        <div class="form-group">
+          <label class="form-label">Model</label>
+          <select class="form-select" id="modalModel">
+            ${prov.models.map(m => `<option value="${m}" ${m === (info.model || prov.defaultModel) ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="form-group">
+          <label class="form-label">Model Name</label>
+          <input class="form-input" id="modalModel" placeholder="e.g., llama-3.1-70b" value="${info.model || ''}">
+        </div>
+      `;
+    }
+
+    // Base URL (custom only)
+    if (prov.hasBaseUrl) {
+      html += `
+        <div class="form-group">
+          <label class="form-label">Base URL</label>
+          <input class="form-input mono" id="modalBaseUrl" placeholder="https://api.example.com/v1" value="${info.baseUrl || ''}">
+          <div class="form-hint">OpenAI-compatible API endpoint</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Custom Headers <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+          <input class="form-input mono" id="modalHeaders" placeholder='{"Authorization": "Bearer ..."}' value="">
+          <div class="form-hint">JSON object of additional headers</div>
+        </div>
+      `;
+    }
+
+    // Test result container
+    html += '<div id="testResult"></div>';
+
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('editModal').classList.add('show');
+  }
+
+  function closeModal() {
+    document.getElementById('editModal').classList.remove('show');
+    state.editingProvider = null;
+  }
+
+  function testConnection() {
+    const btn = document.getElementById('testBtn');
+    btn.innerHTML = `
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      Testing...
+    `;
+
+    setTimeout(() => {
+      const resultDiv = document.getElementById('testResult');
+      resultDiv.innerHTML = `
+        <div class="test-result success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Connection successful — Response time: 127ms
+        </div>
+      `;
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Test Connection
+      `;
+    }, 1500);
+  }
+
+  function saveProvider() {
+    const providerId = state.editingProvider;
+    const prov = PROVIDERS[providerId];
+    const modelEl = document.getElementById('modalModel');
+    const model = modelEl.tagName === 'SELECT' ? modelEl.value : modelEl.value || 'custom-model';
+    const maskedKey = prov.keyPrefix ? `${prov.keyPrefix}...${Math.random().toString(36).slice(-4)}` : `key-...${Math.random().toString(36).slice(-4)}`;
+
+    const info = { model, maskedKey };
+
+    if (prov.hasBaseUrl) {
+      const baseUrl = document.getElementById('modalBaseUrl')?.value;
+      if (baseUrl) info.baseUrl = baseUrl;
+    }
+
+    const wasConnected = !!state.connected[providerId];
+    state.connected[providerId] = info;
+
+    // Auto-set as active if it's the first or only provider
+    if (!state.activeModel || Object.keys(state.connected).length === 1) {
+      state.activeModel = { provider: providerId, model };
+    }
+
+    closeModal();
+    showToast('success', wasConnected ? `${prov.name} settings updated` : `${prov.name} connected successfully`);
+    render();
+  }
+
+  // ─── Toast ─────────────────────────────────────────────
+  function showToast(type, message) {
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+      info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+      error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `${icons[type]} ${message}`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.transition = 'all 0.3s';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(8px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  // ─── Init ──────────────────────────────────────────────
+  setDemoState('partial');
+
+  // Close modal on overlay click
+  document.getElementById('editModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('editModal')) closeModal();
+  });
+
+  // Spin animation for test
+  const style = document.createElement('style');
+  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+</script>
+</body>
+</html>
