@@ -78,6 +78,12 @@ model Organization {
   oauthAccessToken  String?            // null until CRM is connected
   oauthRefreshToken String?            // null until CRM is connected
   webhookSecret     String   // HMAC secret for verifying Apex trigger payloads
+  // Integration / package deploy tracking
+  packageDeployedAt DateTime?
+  packageDeployId   String?
+  packageVersion    String?
+  objectConfig      Json?              // e.g. { "Lead": { enabled: true }, "Contact": { enabled: true } }
+  fieldsSyncedAt    DateTime?
   plan             Plan     @default(FREE)
   isActive         Boolean  @default(true)
   seatsPurchased    Int      @default(5)
@@ -86,6 +92,13 @@ model Organization {
   quotaResetAt     DateTime @default(now())
   onboardingDone           Boolean  @default(false)
   notificationWebhookUrl   String?
+  // AI Assistant (Pro feature)
+  aiProvider       String?   // "claude" | "openai" | "gemini" | "custom"
+  aiApiKey         String?   // AES-256-GCM encrypted
+  aiModelName      String?   // e.g. "claude-sonnet-4-5-20250514", "gpt-4o"
+  aiBaseUrl        String?   // custom endpoint URL (null = default)
+  aiCustomHeaders  Json?     // custom headers for self-hosted proxies
+  aiChatCount      Int       @default(0)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -101,6 +114,7 @@ model Organization {
   billingInfo             BillingInfo?
   routingDailyAggregates  RoutingDailyAggregate[]
   conversionTracking      ConversionTracking[]
+  companyAliases          CompanyAlias[]
 
   @@map("organizations")
 }
@@ -152,8 +166,10 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  teamMemberships TeamMember[]
+  org              Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teamMemberships  TeamMember[]
+  branchAssignments RoutingBranch[] @relation("BranchAssigneeUser")
+  defaultOwnerRules RoutingRule[]   @relation("DefaultOwnerUser")
 
   @@unique([orgId, sfdcUserId])
   @@map("users")
@@ -168,9 +184,11 @@ model RoundRobinTeam {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  members      TeamMember[]
-  routingRules RoutingRule[] @relation("TeamRules")
+  org               Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members           TeamMember[]
+  routingRules      RoutingRule[]   @relation("TeamRules")
+  branchAssignments RoutingBranch[] @relation("BranchAssigneeTeam")
+  defaultOwnerRules RoutingRule[]   @relation("DefaultOwnerTeam")
 
   @@map("round_robin_teams")
 }
@@ -206,6 +224,8 @@ model RoutingRule {
   assigneeTeamId   String?         // references RoundRobinTeam.id
   assigneeQueueId  String?         // references SfdcQueue.id
   isDryRun         Boolean         @default(false)
+  triggerName      String          @default("")
+  criteriaSyncedAt DateTime?
   // Default owner: absolute catch-all for new Route Builder routes
   defaultOwnerType     AssignmentType?
   defaultOwnerUserId   String?
@@ -214,12 +234,16 @@ model RoutingRule {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
-  org        Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  team       RoundRobinTeam?  @relation("TeamRules", fields: [assigneeTeamId], references: [id])
-  queue      SfdcQueue?       @relation(fields: [assigneeQueueId], references: [id])
+  org              Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team             RoundRobinTeam?  @relation("TeamRules", fields: [assigneeTeamId], references: [id])
+  queue            SfdcQueue?       @relation(fields: [assigneeQueueId], references: [id])
+  defaultOwnerUser  User?           @relation("DefaultOwnerUser", fields: [defaultOwnerUserId], references: [id])
+  defaultOwnerTeam  RoundRobinTeam? @relation("DefaultOwnerTeam", fields: [defaultOwnerTeamId], references: [id])
+  defaultOwnerQueue SfdcQueue?      @relation("DefaultOwnerQueue", fields: [defaultOwnerQueueId], references: [id])
   conditions RuleCondition[]  // legacy conditions (old-style rules)
   branches   RoutingBranch[]  // new Route Builder paths
   matchConfig RouteMatchConfig?
+  triggerConditions TriggerCondition[]
 
   @@map("routing_rules")
 }
@@ -232,8 +256,11 @@ model RoutingBranch {
   priority        Int            @default(0)
   assignmentType  AssignmentType?
   assigneeUserId  String?
+  assigneeUser    User?            @relation("BranchAssigneeUser", fields: [assigneeUserId], references: [id])
   assigneeTeamId  String?
+  assigneeTeam    RoundRobinTeam?  @relation("BranchAssigneeTeam", fields: [assigneeTeamId], references: [id])
   assigneeQueueId String?
+  assigneeQueue   SfdcQueue?       @relation("BranchAssigneeQueue", fields: [assigneeQueueId], references: [id])
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -257,6 +284,20 @@ model BranchCondition {
   @@map("branch_conditions")
 }
 
+model TriggerCondition {
+  id        String      @id @default(cuid())
+  ruleId    String
+  rule      RoutingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  groupId   String
+  fieldName String
+  fieldType String      @default("TEXT")
+  operator  String
+  value     String?
+  sortOrder Int         @default(0)
+
+  @@map("trigger_conditions")
+}
+
 model RouteMatchConfig {
   id              String      @id @default(cuid())
   ruleId          String      @unique
@@ -271,6 +312,8 @@ model RouteMatchConfig {
   matchEmail      Boolean     @default(true)
   matchPhone      Boolean     @default(false)
   matchDomain     Boolean     @default(false)
+  matchCompanyName  Boolean @default(false)
+  fuzzyMatchMode    String  @default("STRICT")  // "STRICT" | "FUZZY" | "AI_SMART"
 
   // Lead match outcome
   onLeadMatch           LeadMatchAction    @default(SFDC_MERGE)
@@ -373,8 +416,10 @@ model SfdcQueue {
   name        String
   syncedAt    DateTime @default(now())
 
-  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  routingRules RoutingRule[]
+  org               Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  routingRules      RoutingRule[]
+  branchAssignments RoutingBranch[] @relation("BranchAssigneeQueue")
+  defaultOwnerRules RoutingRule[]   @relation("DefaultOwnerQueue")
 
   @@unique([orgId, sfdcQueueId])
   @@map("sfdc_queues")
@@ -483,4 +528,24 @@ model ConversionTracking {
   @@index([orgId, isConverted])
   @@index([orgId, sfdcLeadId])
   @@map("conversion_tracking")
+}
+
+model CompanyAlias {
+  id          String   @id @default(cuid())
+  orgId       String
+  nameA       String   // normalized company name A (alphabetically first)
+  nameB       String   // normalized company name B
+  isSimilar   Boolean  // LLM determination
+  confidence  Float?   // LLM confidence score (0-1)
+  source      String   @default("AI") // "AI" | "MANUAL" | "DICTIONARY"
+  hitCount    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, nameA, nameB])
+  @@index([orgId, nameA])
+  @@index([orgId, nameB])
+  @@map("company_aliases")
 }
