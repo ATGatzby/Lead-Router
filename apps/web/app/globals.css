@@ -139,3 +139,80 @@
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* AI chat markdown styles — replaces @tailwindcss/typography */
+.ai-markdown {
+  line-height: 1.6;
+}
+.ai-markdown p {
+  margin: 0.25em 0;
+}
+.ai-markdown h1, .ai-markdown h2, .ai-markdown h3 {
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+}
+.ai-markdown h1 { font-size: 1.25em; }
+.ai-markdown h2 { font-size: 1.125em; }
+.ai-markdown h3 { font-size: 1em; }
+.ai-markdown ul, .ai-markdown ol {
+  margin: 0.25em 0;
+  padding-left: 1.5em;
+}
+.ai-markdown ul { list-style-type: disc; }
+.ai-markdown ol { list-style-type: decimal; }
+.ai-markdown li { margin: 0.15em 0; }
+.ai-markdown strong { font-weight: 600; }
+.ai-markdown code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+  background: oklch(0.95 0.005 250);
+  padding: 0.15em 0.35em;
+  border-radius: 0.25em;
+}
+.ai-markdown pre {
+  margin: 0.5em 0;
+  padding: 0.75em 1em;
+  background: oklch(0.95 0.005 250);
+  border-radius: 0.375em;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+.ai-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.ai-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+}
+.ai-markdown th {
+  text-align: left;
+  font-weight: 600;
+  color: oklch(0.55 0.04 257);
+  padding: 0.4em 0.75em;
+  border-bottom: 2px solid oklch(0.92 0.01 255);
+}
+.ai-markdown td {
+  padding: 0.35em 0.75em;
+  border-bottom: 1px solid oklch(0.94 0.01 255);
+}
+.ai-markdown tr:last-child td {
+  border-bottom: none;
+}
+.ai-markdown blockquote {
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 3px solid oklch(0.85 0.02 257);
+  color: oklch(0.5 0.03 257);
+}
+.ai-markdown hr {
+  margin: 0.75em 0;
+  border: none;
+  border-top: 1px solid oklch(0.92 0.01 255);
+}
+.ai-markdown a {
+  color: oklch(0.55 0.2 265);
+  text-decoration: underline;
+}
