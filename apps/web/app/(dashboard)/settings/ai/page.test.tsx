@@ -61,10 +61,10 @@ describe("AiSettingsPage", () => {
 
     render(<AiSettingsPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText("Claude")).toBeDefined();
-    expect(screen.getByText("OpenAI")).toBeDefined();
-    expect(screen.getByText("Gemini")).toBeDefined();
-    expect(screen.getByText("Custom")).toBeDefined();
+    expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Gemini").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Custom").length).toBeGreaterThan(0);
   });
 
   it("shows Connect buttons for unconnected providers", async () => {
@@ -79,10 +79,10 @@ describe("AiSettingsPage", () => {
 
     render(<AiSettingsPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText("Connect Claude")).toBeDefined();
-    expect(screen.getByText("Connect OpenAI")).toBeDefined();
-    expect(screen.getByText("Connect Gemini")).toBeDefined();
-    expect(screen.getByText("Connect Custom")).toBeDefined();
+    expect(screen.getAllByText("Connect Claude").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect Gemini").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect Custom").length).toBeGreaterThan(0);
   });
 
   it("shows Connected status and Edit/Disconnect for the active provider", async () => {
@@ -105,9 +105,9 @@ describe("AiSettingsPage", () => {
     expect(screen.getByText("Disconnect")).toBeDefined();
 
     // Other providers should still show Connect
-    expect(screen.getByText("Connect OpenAI")).toBeDefined();
-    expect(screen.getByText("Connect Gemini")).toBeDefined();
-    expect(screen.getByText("Connect Custom")).toBeDefined();
+    expect(screen.getAllByText("Connect OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect Gemini").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect Custom").length).toBeGreaterThan(0);
   });
 
   it("shows the active provider banner when connected", async () => {

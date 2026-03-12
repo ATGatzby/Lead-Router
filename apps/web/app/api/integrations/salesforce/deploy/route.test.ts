@@ -45,6 +45,13 @@ const mockCpSync = vi.hoisted(() => vi.fn());
 const mockRmSync = vi.hoisted(() => vi.fn());
 
 vi.mock("node:fs", () => ({
+  default: {
+    existsSync: mockExistsSync,
+    readFileSync: mockReadFileSync,
+    writeFileSync: mockWriteFileSync,
+    cpSync: mockCpSync,
+    rmSync: mockRmSync,
+  },
   existsSync: mockExistsSync,
   readFileSync: mockReadFileSync,
   writeFileSync: mockWriteFileSync,
@@ -53,6 +60,7 @@ vi.mock("node:fs", () => ({
 }));
 
 vi.mock("node:os", () => ({
+  default: { tmpdir: () => "/tmp" },
   tmpdir: () => "/tmp",
 }));
 
