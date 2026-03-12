@@ -10,8 +10,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/genai": "^1.44.0",
     "@lead-routing/db": "workspace:*",
     "@lead-routing/sfdc": "workspace:*",
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.70.0",
     "@tanstack/react-query-devtools": "^5.70.0",
     "bullmq": "^5.0.0",
@@ -22,10 +25,13 @@
     "lucide-react": "^0.475.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
+    "openai": "^6.27.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
+    "remark-gfm": "^4.0.1",
     "resend": "^6.9.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.2"

@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
       }).catch((err) => console.error("[sfdc-callback] pushSettings failed:", err));
     }
 
-    const successRedirect = NextResponse.redirect(new URL("/dashboard?crm_connected=1", appUrl));
+    const successRedirect = NextResponse.redirect(new URL("/integrations/salesforce?connected=1", appUrl));
     successRedirect.cookies.delete("sfdc_pkce_verifier");
     successRedirect.cookies.delete("sfdc_oauth_state");
     return successRedirect;

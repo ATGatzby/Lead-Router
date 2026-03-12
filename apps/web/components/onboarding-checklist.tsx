@@ -4,11 +4,23 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, X, PartyPopper } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+
+// Map checklist item IDs to their target pages
+const itemHrefs: Record<string, string> = {
+  connect: "/integrations",
+  deploy: "/integrations/salesforce",
+  sync: "/integrations/salesforce",
+  license: "/license-users",
+  team: "/teams",
+  rule: "/routing-rules",
+};
 
 interface ChecklistItem {
   id: string;
   label: string;
   done: boolean;
+  href?: string;
 }
 
 interface OnboardingStatus {
@@ -119,23 +131,41 @@ export function OnboardingChecklist() {
 
       {expanded && (
         <ul className="px-3 py-2 space-y-1.5">
-          {data.items.map((item) => (
-            <li key={item.id} className="flex items-start gap-2">
-              {item.done ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
-              ) : (
-                <Circle className="h-3.5 w-3.5 text-sidebar-muted-foreground shrink-0 mt-0.5" />
-              )}
-              <span
-                className={cn(
-                  "text-[11px] leading-normal",
-                  item.done ? "text-sidebar-muted-foreground line-through" : "text-sidebar-foreground"
+          {data.items.map((item) => {
+            const href = item.href ?? itemHrefs[item.id];
+            const content = (
+              <>
+                {item.done ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                ) : (
+                  <Circle className="h-3.5 w-3.5 text-sidebar-muted-foreground shrink-0 mt-0.5" />
                 )}
-              >
-                {item.label}
-              </span>
-            </li>
-          ))}
+                <span
+                  className={cn(
+                    "text-[11px] leading-normal",
+                    item.done ? "text-sidebar-muted-foreground line-through" : "text-sidebar-foreground"
+                  )}
+                >
+                  {item.label}
+                </span>
+              </>
+            );
+
+            return (
+              <li key={item.id}>
+                {href ? (
+                  <Link
+                    href={href}
+                    className="flex items-start gap-2 rounded px-1 -mx-1 py-0.5 hover:bg-sidebar-accent/80 transition-colors"
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <div className="flex items-start gap-2">{content}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

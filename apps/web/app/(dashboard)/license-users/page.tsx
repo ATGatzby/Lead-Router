@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw, Search, Users, Check, Trash2, Shield, UserCog } from "lucide-react";
+import { RefreshCw, Search, Users, Check, Trash2, Shield, UserCog, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,13 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
+import Link from "next/link";
+
+// ─── Org / CRM connection check ──────────────────────────────────────────────
+
+interface MeResponse {
+  org: { sfdcOrgId: string | null } | null;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,6 +90,19 @@ function formatLastRouted(date: string | null) {
 
 export default function LicenseUsersPage() {
   const qc = useQueryClient();
+
+  // ─── CRM connection check ──────────────────────────────────────────────────
+  const meQuery = useQuery<MeResponse>({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/me");
+      if (!res.ok) throw new Error("Failed to load org");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const crmConnected = !!meQuery.data?.org?.sfdcOrgId;
 
   // Filter state
   const [search, setSearch] = useState("");
@@ -378,6 +398,29 @@ export default function LicenseUsersPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
+  // CRM not connected — show empty state gate
+  if (meQuery.isSuccess && !crmConnected) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center text-center max-w-md rounded-xl border-2 border-dashed border-muted-foreground/25 p-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+            <Plug className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h2 className="text-lg font-semibold">Connect a CRM to manage license users</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            License users are synced from your connected CRM. Connect an integration to get started.
+          </p>
+          <Button className="mt-6" asChild>
+            <Link href="/integrations">
+              Go to Integrations
+              <span className="ml-1">&rarr;</span>
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -390,47 +433,55 @@ export default function LicenseUsersPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Source indicator */}
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none">
+              <path
+                d="M10.01 4.18c.9-.96 2.15-1.56 3.54-1.56 1.72 0 3.23.9 4.09 2.25a5.46 5.46 0 0 1 2.16-.45C22.16 4.42 24 6.29 24 8.6c0 .34-.04.68-.12 1a3.75 3.75 0 0 1 .12.94c0 2.28-1.85 4.13-4.13 4.13-.37 0-.72-.05-1.06-.14a4.52 4.52 0 0 1-3.96 2.35c-.6 0-1.17-.12-1.69-.33a4.84 4.84 0 0 1-4.34 2.7 4.84 4.84 0 0 1-4.56-3.23A4.16 4.16 0 0 1 0 12.04c0-1.56.86-2.92 2.14-3.63a4.24 4.24 0 0 1-.18-1.23c0-2.33 1.89-4.22 4.22-4.22 1.33 0 2.52.62 3.29 1.58l.54-.36z"
+                fill="#00A1E0"
+              />
+            </svg>
+            <span>Salesforce</span>
+          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={openSyncDialog}
           >
             <RefreshCw />
-            License Users
+            Sync Users
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border bg-card p-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, email, role..."
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          <Select
-            value={licensed}
-            onValueChange={(v) => {
-              setLicensed(v as typeof licensed);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All users</SelectItem>
-              <SelectItem value="licensed">Licensed</SelectItem>
-              <SelectItem value="unlicensed">Unlicensed</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, role..."
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9"
+          />
         </div>
+
+        <Select
+          value={licensed}
+          onValueChange={(v) => {
+            setLicensed(v as typeof licensed);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All users</SelectItem>
+            <SelectItem value="licensed">Licensed</SelectItem>
+            <SelectItem value="unlicensed">Unlicensed</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}

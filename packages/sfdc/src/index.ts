@@ -6,3 +6,5 @@ export * from "./queues";
 export * from "./update-owner";
 export * from "./settings";
 export * from "./merge-lead";
+export * from "./sfdc-api";
+export * from "./zip-source";

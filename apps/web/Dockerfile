@@ -54,6 +54,9 @@ COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
 COPY --from=builder /app/apps/web/.next/static  ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public        ./apps/web/public
 
+# Bundled SFDC package — used by /api/integrations/salesforce/deploy
+COPY apps/cli/sfdc-package ./sfdc-package
+
 # Prisma schema + migrations — needed for `prisma migrate deploy`
 COPY --from=builder /app/packages/db/prisma          ./packages/db/prisma
 

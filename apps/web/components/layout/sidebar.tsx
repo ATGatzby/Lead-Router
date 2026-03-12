@@ -10,15 +10,30 @@ import {
   Settings,
   Zap,
   BarChart3,
+  Plug,
+  BrainCircuit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
-const NAV_SECTIONS = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
+}
+
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
     label: "Setup",
     items: [
+      { href: "/integrations", label: "Integrations", icon: Plug },
       { href: "/license-users", label: "License Users", icon: Users },
       { href: "/round-robins", label: "Teams", icon: GitFork },
     ],
@@ -42,6 +57,12 @@ const NAV_SECTIONS = [
         label: "Analytics",
         icon: BarChart3,
       },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/ai-assistant", label: "AI Assistant", icon: BrainCircuit, badge: "Pro" },
     ],
   },
   {
@@ -95,12 +116,19 @@ export function Sidebar() {
                       className={cn(
                         "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
                         active
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          ? item.badge
+                            ? "bg-violet-500/10 text-violet-300 font-medium"
+                            : "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                           : "text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {item.label}
+                      {item.badge && (
+                        <span className="ml-auto text-[9px] font-semibold uppercase tracking-wide rounded bg-gradient-to-r from-violet-600 to-purple-500 px-1.5 py-0.5 text-white">
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );

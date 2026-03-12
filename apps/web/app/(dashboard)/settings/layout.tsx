@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/settings", label: "General" },
   { href: "/settings/notifications", label: "Webhooks" },
+  { href: "/settings/ai", label: "AI Assistant" },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
