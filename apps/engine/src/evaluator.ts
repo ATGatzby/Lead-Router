@@ -1,3 +1,7 @@
+import { similarity, soundex, doubleMetaphone, fuzzyCompanyMatch } from './lib/fuzzy.js'
+import { resolveCompanySimilarity } from './lib/ai-client.js'
+import { checkAliasCache, cacheAliasResult } from './lib/alias-cache.js'
+
 export interface EvalCondition {
   groupId: string;
   fieldName: string;
@@ -9,7 +13,7 @@ function isBlank(v: unknown): boolean {
   return v === null || v === undefined || v === "";
 }
 
-function evalCondition(record: Record<string, unknown>, c: EvalCondition): boolean {
+async function evalCondition(record: Record<string, unknown>, c: EvalCondition, orgId: string): Promise<boolean> {
   // SFDC sends field names in lowercase; conditions store them in Pascal case.
   // Build a lowercase key map once per lookup.
   const lowerKey = c.fieldName.toLowerCase();
@@ -47,6 +51,46 @@ function evalCondition(record: Record<string, unknown>, c: EvalCondition): boole
       const checkVals = String(value ?? "").split(";").map((s) => s.trim()).filter(Boolean);
       return !checkVals.some((v) => rawVals.includes(v));
     }
+
+    // ─── Fuzzy operators (Phase 3) ────────────────────────────────────────
+    case "fuzzy_equals": {
+      const fieldValue = String(raw ?? "").toLowerCase().trim();
+      const condValue = String(value ?? "").toLowerCase().trim();
+      return similarity(fieldValue, condValue) >= 0.8;
+    }
+    case "sounds_like": {
+      const fieldValue = String(raw ?? "");
+      const condValue = String(value ?? "");
+      const sxA = soundex(fieldValue);
+      const sxB = soundex(condValue);
+      if (sxA !== "0000" && sxA === sxB) return true;
+      const [primaryA] = doubleMetaphone(fieldValue);
+      const [primaryB] = doubleMetaphone(condValue);
+      return primaryA !== "" && primaryA === primaryB;
+    }
+    case "similar_to": {
+      const fieldValue = String(raw ?? "");
+      const condValue = String(value ?? "");
+
+      // Tier 1: Fuzzy company match (exact, abbreviation, soundex, levenshtein)
+      const result = fuzzyCompanyMatch(fieldValue, condValue);
+      if (result.match) return true;
+
+      // Tier 2: Check alias cache
+      const cached = await checkAliasCache(orgId, fieldValue, condValue);
+      if (cached !== null) return cached;
+
+      // Tier 3: Try AI (returns null if not configured)
+      const aiResult = await resolveCompanySimilarity(orgId, fieldValue, condValue);
+      if (aiResult) {
+        await cacheAliasResult(orgId, fieldValue, condValue, aiResult.isSimilar, aiResult.confidence);
+        return aiResult.isSimilar;
+      }
+
+      // Fallback: lower threshold
+      return similarity(fieldValue.toLowerCase(), condValue.toLowerCase()) >= 0.7;
+    }
+
     default:
       return false;
   }
@@ -58,10 +102,11 @@ function evalCondition(record: Record<string, unknown>, c: EvalCondition): boole
  * - Within a group: AND (all must pass)
  * - Between groups: OR (any group passing = match)
  */
-export function evaluateRule(
+export async function evaluateRule(
   record: Record<string, unknown>,
-  conditions: EvalCondition[]
-): boolean {
+  conditions: EvalCondition[],
+  orgId: string = ""
+): Promise<boolean> {
   if (conditions.length === 0) return true;
 
   const groupMap = new Map<string, EvalCondition[]>();
@@ -71,7 +116,8 @@ export function evaluateRule(
   }
 
   for (const groupConds of groupMap.values()) {
-    if (groupConds.every((c) => evalCondition(record, c))) return true;
+    const results = await Promise.all(groupConds.map((c) => evalCondition(record, c, orgId)));
+    if (results.every(Boolean)) return true;
   }
   return false;
 }

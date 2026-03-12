@@ -13,6 +13,9 @@ const OPERATORS: Record<string, Operator[]> = {
     { value: "starts_with",  label: "starts with" },
     { value: "is_blank",     label: "is blank" },
     { value: "is_not_blank", label: "is not blank" },
+    { value: "fuzzy_equals", label: "fuzzy equals" },
+    { value: "sounds_like",  label: "sounds like" },
+    { value: "similar_to",   label: "is similar to (AI)" },
   ],
   NUMBER: [
     { value: "equals",     label: "=" },

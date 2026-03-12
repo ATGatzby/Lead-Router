@@ -8,6 +8,9 @@ import { enqueueRetry } from "./queue.js";
 import { fireWebhook } from "./webhook.js";
 import { updateAggregates, createConversionTracking } from "./aggregate.js";
 import { stripPii } from "./lib/strip-pii.js";
+import { normalizeCompanyName, fuzzyCompanyMatch } from "./lib/fuzzy.js";
+import { checkAliasCache, cacheAliasResult } from "./lib/alias-cache.js";
+import { resolveCompanySimilarity } from "./lib/ai-client.js";
 
 // ─── Payload type ─────────────────────────────────────────────────────────
 
@@ -160,7 +163,8 @@ async function runMatcher(
   fields: Record<string, unknown>,
   matchConfig: CachedMatchConfig,
   conn: any,
-  currentRecordId: string
+  currentRecordId: string,
+  orgId: string
 ): Promise<MatchResult | null> {
   const email = String(fields["Email"] ?? fields["email"] ?? "").toLowerCase().trim();
   const phone = String(fields["Phone"] ?? fields["phone"] ?? fields["MobilePhone"] ?? "").trim();
@@ -217,6 +221,57 @@ async function runMatcher(
     }
   }
 
+  // 4. Company name matching (if configured)
+  if (matchConfig.matchCompanyName && company) {
+    const searchPrefix = company.substring(0, 5).replace(/'/g, "\\'");
+    let candidates: Array<{ Id: string; OwnerId: string; Name: string }> = [];
+    try {
+      const result = await conn.query(
+        `SELECT Id, OwnerId, Name FROM Account WHERE Name LIKE '%${searchPrefix}%' LIMIT 20`
+      );
+      candidates = (result.records ?? []) as Array<{ Id: string; OwnerId: string; Name: string }>;
+    } catch (err) {
+      console.error("[matcher] Company name SOQL query error:", err);
+    }
+
+    for (const candidate of candidates) {
+      let isMatch = false;
+
+      if (matchConfig.fuzzyMatchMode === "STRICT") {
+        // Exact normalized match
+        isMatch = normalizeCompanyName(company) === normalizeCompanyName(candidate.Name);
+      } else if (matchConfig.fuzzyMatchMode === "FUZZY") {
+        // Fuzzy match: similarity >= 0.8 OR known abbreviation
+        const result = fuzzyCompanyMatch(company, candidate.Name);
+        isMatch = result.match;
+      } else if (matchConfig.fuzzyMatchMode === "AI_SMART") {
+        // AI-powered: alias cache → AI call → fallback to fuzzy
+        const cached = await checkAliasCache(orgId, company, candidate.Name);
+        if (cached !== null) {
+          isMatch = cached;
+        } else {
+          const aiResult = await resolveCompanySimilarity(orgId, company, candidate.Name);
+          if (aiResult) {
+            await cacheAliasResult(orgId, company, candidate.Name, aiResult.isSimilar, aiResult.confidence);
+            isMatch = aiResult.isSimilar;
+          } else {
+            // AI not configured or errored, fallback to fuzzy
+            const result = fuzzyCompanyMatch(company, candidate.Name);
+            isMatch = result.match;
+          }
+        }
+      }
+
+      if (isMatch) {
+        return {
+          type: "ACCOUNT" as const,
+          recordId: candidate.Id,
+          ownerId: candidate.OwnerId,
+        };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -241,7 +296,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
       // null = this rule produced no outcome, try next rule (shouldn't happen for new-style but safety)
     } else {
       // Legacy routing: evaluate conditions + single assignee
-      if (evaluateRule(fields, rule.conditions)) {
+      if (await evaluateRule(fields, rule.conditions, orgId)) {
         const result = await routeLegacy(rule, payload, startMs);
         if (result !== null) return result;
       }
@@ -287,7 +342,7 @@ async function routeNewStyle(
     }
 
     if (conn) {
-      const matchResult = await runMatcher(fields, rule.matchConfig, conn, recordId);
+      const matchResult = await runMatcher(fields, rule.matchConfig, conn, recordId, orgId);
 
       if (matchResult) {
         const mc = rule.matchConfig;
@@ -536,7 +591,7 @@ async function routeNewStyle(
 
   // Step 2: Branch (path) evaluation
   for (const branch of rule.branches) {
-    if (evaluateRule(fields, branch.conditions)) {
+    if (await evaluateRule(fields, branch.conditions, orgId)) {
       const assignee = await resolveBranchAssignee(branch, orgId);
       if (!assignee) continue; // branch has no eligible assignee, try next
 

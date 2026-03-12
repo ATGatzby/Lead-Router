@@ -35,6 +35,11 @@ const mockUpdateOwner = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockMergeLead = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockUpdateAggregates = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCreateConversionTracking = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockNormalizeCompanyName = vi.hoisted(() => vi.fn((name: string) => name.toLowerCase().trim()));
+const mockFuzzyCompanyMatch = vi.hoisted(() => vi.fn().mockReturnValue({ match: false, score: 0, method: "none" }));
+const mockCheckAliasCache = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockCacheAliasResult = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockResolveCompanySimilarity = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -60,6 +65,17 @@ vi.mock("@lead-routing/sfdc", () => ({
 vi.mock("./aggregate.js", () => ({
   updateAggregates: mockUpdateAggregates,
   createConversionTracking: mockCreateConversionTracking,
+}));
+vi.mock("./lib/fuzzy.js", () => ({
+  normalizeCompanyName: mockNormalizeCompanyName,
+  fuzzyCompanyMatch: mockFuzzyCompanyMatch,
+}));
+vi.mock("./lib/alias-cache.js", () => ({
+  checkAliasCache: mockCheckAliasCache,
+  cacheAliasResult: mockCacheAliasResult,
+}));
+vi.mock("./lib/ai-client.js", () => ({
+  resolveCompanySimilarity: mockResolveCompanySimilarity,
 }));
 
 // ─── Import under test (after mocks) ────────────────────────────────────────
@@ -131,6 +147,8 @@ function makeMatchConfig(overrides: Partial<CachedMatchConfig> = {}): CachedMatc
     matchEmail: true,
     matchPhone: false,
     matchDomain: false,
+    matchCompanyName: false,
+    fuzzyMatchMode: "STRICT",
     onLeadMatch: "ASSIGN_TO_OWNER",
     leadAssignmentType: null,
     leadAssigneeUserId: null,
@@ -1461,5 +1479,264 @@ describe("routeRecord — match step dry-run for custom assignment", () => {
 
     expect(result).toBe("routed");
     expect(mockUpdateOwner).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Company Name Matching ─────────────────────────────────────────────────
+
+describe("Company name matching", () => {
+  /** Helper: creates a jsforce-like conn with query() returning Account records */
+  function makeConnWithQuery(accounts: Array<{ Id: string; OwnerId: string; Name: string }>) {
+    return {
+      sobject: vi.fn(() => ({ findOne: vi.fn().mockResolvedValue(null) })),
+      query: vi.fn().mockResolvedValue({ records: accounts }),
+    };
+  }
+
+  const companyPayload = makePayload({
+    fields: { Email: "test@example.com", Company: "Acme Corp" },
+  });
+
+  it("STRICT mode: matches when normalized names are equal", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT1", OwnerId: "005ACCT_OWNER", Name: "acme corp" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockNormalizeCompanyName.mockImplementation((n: string) => n.toLowerCase().replace(/\s+/g, " ").trim());
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "STRICT",
+      checkAccounts: true,
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("routed");
+    expect(conn.query).toHaveBeenCalledWith(
+      expect.stringContaining("Account WHERE Name LIKE")
+    );
+    expect(mockUpdateOwner).toHaveBeenCalledWith(
+      conn, "Lead", "00Q000000000001", "005ACCT_OWNER"
+    );
+  });
+
+  it("STRICT mode: no match when names differ", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT1", OwnerId: "005ACCT_OWNER", Name: "Zebra Inc" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockNormalizeCompanyName.mockImplementation((n: string) => n.toLowerCase().trim());
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "STRICT",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("unmatched");
+    expect(mockUpdateOwner).not.toHaveBeenCalled();
+  });
+
+  it("FUZZY mode: matches when fuzzyCompanyMatch returns true", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT1", OwnerId: "005FUZZY_OWNER", Name: "Acme Corporation" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockFuzzyCompanyMatch.mockReturnValue({ match: true, score: 0.85, method: "levenshtein" });
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "FUZZY",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("routed");
+    expect(mockFuzzyCompanyMatch).toHaveBeenCalledWith("Acme Corp", "Acme Corporation");
+    expect(mockUpdateOwner).toHaveBeenCalledWith(
+      conn, "Lead", "00Q000000000001", "005FUZZY_OWNER"
+    );
+  });
+
+  it("FUZZY mode: no match when fuzzyCompanyMatch returns false", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT1", OwnerId: "005X", Name: "Totally Different" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockFuzzyCompanyMatch.mockReturnValue({ match: false, score: 0.2, method: "none" });
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "FUZZY",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("unmatched");
+  });
+
+  it("AI_SMART mode: uses alias cache hit without calling AI", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT_AI", OwnerId: "005AI_OWNER", Name: "ACME" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockCheckAliasCache.mockResolvedValue(true);
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "AI_SMART",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("routed");
+    expect(mockCheckAliasCache).toHaveBeenCalledWith("org-1", "Acme Corp", "ACME");
+    expect(mockResolveCompanySimilarity).not.toHaveBeenCalled();
+    expect(mockUpdateOwner).toHaveBeenCalledWith(
+      conn, "Lead", "00Q000000000001", "005AI_OWNER"
+    );
+  });
+
+  it("AI_SMART mode: calls AI on cache miss and caches result", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT_AI2", OwnerId: "005AI_OWNER2", Name: "Acme Industries" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockCheckAliasCache.mockResolvedValue(null);
+    mockResolveCompanySimilarity.mockResolvedValue({ isSimilar: true, confidence: 0.92 });
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "AI_SMART",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("routed");
+    expect(mockResolveCompanySimilarity).toHaveBeenCalledWith("org-1", "Acme Corp", "Acme Industries");
+    expect(mockCacheAliasResult).toHaveBeenCalledWith("org-1", "Acme Corp", "Acme Industries", true, 0.92);
+  });
+
+  it("AI_SMART mode: falls back to fuzzy when AI returns null", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001ACCT_FB", OwnerId: "005FB_OWNER", Name: "Acme Co" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockCheckAliasCache.mockResolvedValue(null);
+    mockResolveCompanySimilarity.mockResolvedValue(null); // AI not configured
+    mockFuzzyCompanyMatch.mockReturnValue({ match: true, score: 0.88, method: "levenshtein" });
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "AI_SMART",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("routed");
+    expect(mockFuzzyCompanyMatch).toHaveBeenCalledWith("Acme Corp", "Acme Co");
+    expect(mockCacheAliasResult).not.toHaveBeenCalled();
+  });
+
+  it("skips company matching when matchCompanyName is false", async () => {
+    const conn = makeConnWithQuery([]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+
+    const mc = makeMatchConfig({
+      matchCompanyName: false,
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("unmatched");
+    expect(conn.query).not.toHaveBeenCalled();
+  });
+
+  it("skips company matching when Company field is empty", async () => {
+    const conn = makeConnWithQuery([]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "FUZZY",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(makePayload({
+      fields: { Email: "test@example.com", Company: "" },
+    }));
+
+    expect(result).toBe("unmatched");
+    expect(conn.query).not.toHaveBeenCalled();
+  });
+
+  it("escapes single quotes in SOQL search prefix", async () => {
+    const conn = makeConnWithQuery([]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "STRICT",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    await routeRecord(makePayload({
+      fields: { Email: "test@example.com", Company: "O'Reilly Media" },
+    }));
+
+    expect(conn.query).toHaveBeenCalledWith(
+      expect.stringContaining("O\\'Rei")
+    );
+  });
+
+  it("AI_SMART mode: alias cache returns false — no match", async () => {
+    const conn = makeConnWithQuery([
+      { Id: "001X", OwnerId: "005X", Name: "Different Co" },
+    ]);
+    mockGetOrgConnection.mockResolvedValue(conn);
+    mockCheckAliasCache.mockResolvedValue(false);
+
+    const mc = makeMatchConfig({
+      matchCompanyName: true,
+      fuzzyMatchMode: "AI_SMART",
+      onAccountMatch: "ASSIGN_TO_OWNER",
+    });
+    const rule = makeNewStyleRule({ matchConfig: mc, branches: [] });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    const result = await routeRecord(companyPayload);
+
+    expect(result).toBe("unmatched");
+    expect(mockResolveCompanySimilarity).not.toHaveBeenCalled();
   });
 });

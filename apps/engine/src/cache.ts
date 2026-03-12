@@ -28,6 +28,8 @@ export interface CachedMatchConfig {
   matchEmail: boolean;
   matchPhone: boolean;
   matchDomain: boolean;
+  matchCompanyName: boolean;
+  fuzzyMatchMode: string; // "STRICT" | "FUZZY" | "AI_SMART"
   onLeadMatch: "SFDC_MERGE" | "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM";
   leadAssignmentType: string | null;
   leadAssigneeUserId: string | null;
@@ -144,6 +146,8 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
           matchEmail: r.matchConfig.matchEmail,
           matchPhone: r.matchConfig.matchPhone,
           matchDomain: r.matchConfig.matchDomain,
+          matchCompanyName: r.matchConfig.matchCompanyName,
+          fuzzyMatchMode: r.matchConfig.fuzzyMatchMode,
           onLeadMatch: r.matchConfig.onLeadMatch,
           leadAssignmentType: r.matchConfig.leadAssignmentType,
           leadAssigneeUserId: r.matchConfig.leadAssigneeUserId,

@@ -51,3 +51,40 @@ export function verifyHmacSignature(
   if (expectedBuffer.length !== sigBuffer.length) return false;
   return crypto.timingSafeEqual(expectedBuffer, sigBuffer);
 }
+
+// ─── Field-level encryption (AES-256-GCM) ────────────────────────────────────
+
+/**
+ * Encrypt a plaintext string using AES-256-GCM.
+ * Returns "iv:authTag:ciphertext" (all hex-encoded).
+ */
+export function encryptField(plaintext: string, secret: string): string {
+  const key = crypto.scryptSync(secret, "lead-routing-field-enc", 32);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  let encrypted = cipher.update(plaintext, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  const authTag = cipher.getAuthTag().toString("hex");
+  return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+}
+
+/**
+ * Decrypt a string produced by encryptField().
+ * Expects "iv:authTag:ciphertext" format (all hex-encoded).
+ */
+export function decryptField(ciphertext: string, secret: string): string {
+  const [ivHex, authTagHex, encrypted] = ciphertext.split(":");
+  if (!ivHex || !authTagHex || !encrypted) {
+    throw new Error("Invalid encrypted field format");
+  }
+  const key = crypto.scryptSync(secret, "lead-routing-field-enc", 32);
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(ivHex, "hex")
+  );
+  decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+  return decrypted;
+}
