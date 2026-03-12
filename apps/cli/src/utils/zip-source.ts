@@ -4,6 +4,10 @@ import archiver from 'archiver'
 
 /**
  * Source-format directory name → Metadata API type name
+ *
+ * NOTE: This file is duplicated in packages/sfdc/src/zip-source.ts for use by the web app.
+ * The CLI keeps its own copy because tsup bundles everything inline and cannot resolve
+ * workspace package imports at build time.
  */
 const META_TYPE_MAP: Record<string, string> = {
   applications: 'CustomApplication',

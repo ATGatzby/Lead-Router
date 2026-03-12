@@ -11,8 +11,6 @@ import { checkRemotePrerequisites } from '../steps/check-remote-prerequisites.js
 import { uploadFiles } from '../steps/upload-files.js'
 import { startServices } from '../steps/start-services.js'
 import { verifyHealth } from '../steps/verify-health.js'
-import { sfdcDeployInline } from '../steps/sfdc-deploy-inline.js'
-import { guideAppLauncherSetup } from '../steps/app-launcher-guide.js'
 import { SshConnection } from '../utils/ssh.js'
 import { findInstallDir, readConfig } from '../utils/config.js'
 
@@ -43,7 +41,7 @@ async function checkDnsResolvable(appUrl: string, engineUrl: string): Promise<vo
     } catch {
       log.warn(
         `${chalk.yellow(host)} does not resolve in DNS yet.\n` +
-          '  Check for typos — a bad domain will cause a 2-minute timeout at step 8.'
+          '  Check for typos — a bad domain will cause a 2-minute timeout at step 7.'
       )
       const go = await confirm({ message: 'Continue anyway?', initialValue: true })
       if (isCancel(go) || !go) {
@@ -67,7 +65,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   const ssh = new SshConnection()
 
-  // ── Resume branch: skip steps 1-7, reconnect, run steps 8-9 ────────────────
+  // ── Resume branch: skip steps 1-6, reconnect, run health check ──────────────
   if (resume) {
     try {
       const dir = findInstallDir()
@@ -99,21 +97,13 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       log.success(`Connected to ${saved.ssh.host}`)
       const remoteDir = await ssh.resolveHome(saved.remoteDir)
 
-      log.step('Step 7/8  Verifying health')
+      log.step('Step 7/7  Verifying health')
       await verifyHealth(saved.appUrl, saved.engineUrl, ssh, remoteDir)
 
-      log.step('Step 8/8  Deploying Salesforce package')
-      await sfdcDeployInline({
-        appUrl: saved.appUrl,
-        engineUrl: saved.engineUrl,
-        orgAlias: 'lead-routing',
-        sfdcClientId: saved.sfdcClientId ?? '',
-        sfdcLoginUrl: saved.sfdcLoginUrl ?? 'https://login.salesforce.com',
-        installDir: dir,
-        webhookSecret: saved.engineWebhookSecret,
-      })
-
-      await guideAppLauncherSetup(saved.appUrl)
+      note(
+        `Open ${saved.appUrl} → Integrations → Salesforce to connect your CRM and deploy the package.`,
+        'Next: Connect Salesforce'
+      )
 
       outro(
         chalk.green("✔  You're live!") +
@@ -122,7 +112,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
           `  Routing engine: ${chalk.cyan(saved.engineUrl)}\n\n` +
           chalk.bold('  Next steps:\n') +
           `  ${chalk.cyan('1.')} Open ${chalk.cyan(saved.appUrl)} and log in\n` +
-          `  ${chalk.cyan('2.')} Create your first routing rule to start routing leads\n\n` +
+          `  ${chalk.cyan('2.')} Go to Integrations → Salesforce to connect your org\n` +
+          `  ${chalk.cyan('3.')} Deploy the package and configure routing objects\n` +
+          `  ${chalk.cyan('4.')} Create your first routing rule\n\n` +
           `  Run ${chalk.cyan('lead-routing doctor')} to check service health at any time.\n` +
           `  Run ${chalk.cyan('lead-routing deploy')} to update to a new version.`
       )
@@ -139,13 +131,13 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   // ── Full init flow ───────────────────────────────────────────────────────────
   try {
     // Step 1 — Local prerequisites (Node.js + sf CLI)
-    log.step('Step 1/8  Checking local prerequisites')
+    log.step('Step 1/7  Checking local prerequisites')
     await checkPrerequisites()
 
     // Step 2 — SSH connection details + immediate connection test
     // Connect before collecting app config so SSH errors surface early
     // (not after the user has spent 5 minutes filling in URLs and credentials).
-    log.step('Step 2/8  SSH connection')
+    log.step('Step 2/7  SSH connection')
     const sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
@@ -165,7 +157,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     }
 
     // Step 3 — App configuration (only reached after SSH is confirmed working)
-    log.step('Step 3/8  Configuration')
+    log.step('Step 3/7  Configuration')
     const cfg = await collectConfig({
       sandbox: options.sandbox,
       externalDb: options.externalDb,
@@ -176,7 +168,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
     // Step 4 — Generate config files locally
-    log.step('Step 4/8  Generating config files')
+    log.step('Step 4/7  Generating config files')
     const { dir, adminSecret } = generateFiles(cfg, sshCfg)
 
     note(
@@ -196,19 +188,19 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     }
 
     // Step 5 — Remote setup (already connected from step 2)
-    log.step('Step 5/8  Remote setup')
+    log.step('Step 5/7  Remote setup')
     const remoteDir = await ssh.resolveHome(sshCfg.remoteDir)
     await checkRemotePrerequisites(ssh)
     await uploadFiles(ssh, dir, remoteDir)
 
     // Step 6 — Start services on remote server
     // (migrations + seed now run inside the web container on startup)
-    log.step('Step 6/8  Starting services')
+    log.step('Step 6/7  Starting services')
     await startServices(ssh, remoteDir)
 
     // Step 7 — Health check on public HTTPS URLs
     // (Caddy TLS cert provisioning takes ~30s — maxAttempts bumped to 24)
-    log.step('Step 7/8  Verifying health')
+    log.step('Step 7/7  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
     // Remove ADMIN_PASSWORD from .env.web now that the seed has run
@@ -225,20 +217,10 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       // Non-fatal — password stays in .env.web but won't cause issues
     }
 
-    // Step 8 — Deploy Salesforce package (sf runs locally — no VPS requirement)
-    log.step('Step 8/8  Deploying Salesforce package')
-    await sfdcDeployInline({
-      appUrl: cfg.appUrl,
-      engineUrl: cfg.engineUrl,
-      orgAlias: 'lead-routing',
-      sfdcClientId: cfg.sfdcClientId,
-      sfdcLoginUrl: cfg.sfdcLoginUrl,
-      installDir: dir,
-      webhookSecret: cfg.engineWebhookSecret,
-    })
-
-    // Guided App Launcher wizard
-    await guideAppLauncherSetup(cfg.appUrl)
+    note(
+      `Open ${cfg.appUrl} → Integrations → Salesforce to connect your CRM and deploy the package.`,
+      'Next: Connect Salesforce'
+    )
 
     // Done
     outro(
@@ -251,7 +233,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         `                  ${chalk.dim('run `lead-routing config show` to retrieve later')}\n\n` +
         chalk.bold('  Next steps:\n') +
         `  ${chalk.cyan('1.')} Open ${chalk.cyan(cfg.appUrl)} and log in\n` +
-        `  ${chalk.cyan('2.')} Create your first routing rule to start routing leads\n\n` +
+        `  ${chalk.cyan('2.')} Go to Integrations → Salesforce to connect your org\n` +
+        `  ${chalk.cyan('3.')} Deploy the package and configure routing objects\n` +
+        `  ${chalk.cyan('4.')} Create your first routing rule\n\n` +
         `  Run ${chalk.cyan('lead-routing doctor')} to check service health at any time.\n` +
         `  Run ${chalk.cyan('lead-routing deploy')} to update to a new version.`
     )

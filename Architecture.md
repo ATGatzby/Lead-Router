@@ -21,6 +21,8 @@
 13. [Inter-Service Communication](#13-inter-service-communication)
 14. [Analytics System](#14-analytics-system)
 15. [Known Gotchas](#15-known-gotchas)
+16. [AI Routing Assistant](#16-ai-routing-assistant)
+17. [Fuzzy & AI-Powered Matching Engine](#17-fuzzy--ai-powered-matching-engine)
 
 ---
 
@@ -105,8 +107,13 @@ lead-routing/
    IDs chunked into batches of 100
         │
         ▼
+2b. Pre-callout filtering (Trigger Criteria):
+    CriteriaEvaluator queries Route_Criteria__c, filters records
+    in Apex BEFORE making HTTP callout. No criteria = send all.
+        │
+        ▼
 3. @future callout → POST /route/batch on Engine
-   (HMAC-signed, all record fields, up to 100 records per call)
+   (HMAC-signed, all record fields, up to 100 matching records per call)
         │
         ▼
 4. Engine validates, deduplicates (bulk Redis pipeline), pre-reserves quota
@@ -135,7 +142,7 @@ lead-routing/
 
 **Stack:** Next.js 16.1.6 (App Router), React 19, Tailwind v4, shadcn/ui, TanStack Query v5, iron-session
 
-### 4.1 API Routes (55 endpoints)
+### 4.1 API Routes (62 endpoints)
 
 #### Authentication (8 routes)
 | Method | Path | Auth | Purpose |
@@ -149,7 +156,7 @@ lead-routing/
 | POST | `/api/cli-auth/request` | Public | Create CLI auth session |
 | GET | `/api/cli-auth/poll/[sessionId]` | Public | Poll CLI auth status |
 
-#### Routing Rules (8 routes)
+#### Routing Rules (9 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/rules?object=LEAD` | Session | List rules (all rules if no object param, or filtered by object type) |
@@ -160,6 +167,7 @@ lead-routing/
 | PATCH | `/api/rules/[id]/status` | Session | Toggle ACTIVE/INACTIVE |
 | POST | `/api/rules/[id]/clone` | Session | Duplicate rule |
 | POST | `/api/rules/[id]/test` | Session | Dry-run evaluation against sample record |
+| POST | `/api/rules/[id]/sync-criteria` | Session | Sync trigger conditions to SFDC Route_Criteria__c |
 | POST | `/api/rules/reorder` | Session | Bulk priority reorder |
 
 #### Routing Logs (6 routes)
@@ -211,7 +219,7 @@ lead-routing/
 |--------|------|------|---------|
 | GET | `/api/setup/status` | X-Sfdc-Org-Id | Check org connection (Apex polling) |
 | POST | `/api/setup/onboarding-done` | X-Sfdc-Org-Id | Mark onboarding complete |
-| GET | `/api/onboarding/status` | Session | Sidebar checklist progress |
+| GET | `/api/onboarding/status` | Session | Sidebar checklist progress (5 items with clickable links: Connect CRM → /integrations/salesforce, Deploy Package → /integrations/salesforce, Sync Fields → /integrations/salesforce, License Users → /license-users, Create Routing Rule → /routing-rules/new) |
 
 #### Admin Portal (10 routes)
 | Method | Path | Auth | Purpose |
@@ -226,6 +234,17 @@ lead-routing/
 | POST | `/api/admin/orgs/[id]/plan` | Admin token | Change plan |
 | POST | `/api/admin/orgs/[id]/seats` | Admin token | Update seat count |
 | POST | `/api/admin/orgs/[id]/reset` | Admin token | Full org data reset |
+
+#### Salesforce Integration Management (6 routes)
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/integrations/salesforce` | Session | Org integration data for detail page (connection, package, objects, fields) |
+| POST | `/api/integrations/salesforce/deploy` | Session | Deploy SFDC package from web app (metadata ZIP, permset, custom settings) |
+| GET | `/api/integrations/salesforce/deploy/status` | Session | Poll package deploy status (asyncId-based) |
+| GET | `/api/integrations/salesforce/objects` | Session | Get object configuration (Lead/Contact/Account toggles) |
+| POST | `/api/integrations/salesforce/objects` | Session | Update object configuration (enable/disable object routing) |
+| GET | `/api/integrations/salesforce/status` | Session | Full integration status (connection, package, objects, fields) |
+| POST | `/api/integrations/salesforce/disconnect` | Session | Disconnect Salesforce — clears OAuth tokens, package info, objectConfig, resets onboarding |
 
 #### Health
 | Method | Path | Auth | Purpose |
@@ -247,9 +266,11 @@ lead-routing/
 | `/activity/audit` | Audit log |
 | `/activity/failed` | Failed routing logs |
 | `/analytics` | Routing analytics dashboard |
-| `/license-users` | License Users — sync by All, Individual, Role, or Profile; Team column |
+| `/license-users` | License Users — CRM gate (empty state when no CRM connected), Salesforce badge + Sync Users button in header, search + filter bar below title, sync by All/Individual/Role/Profile; Team column |
 | `/teams` | Teams management (renamed from Round Robins) |
 | `/teams/[id]` | Team detail + members (add by individual, Role, or Profile) |
+| `/integrations` | Integrations landing page — card grid (Salesforce active, HubSpot/Zoho coming soon) |
+| `/integrations/salesforce` | Salesforce detail page — 4 sections: Connection, Package Deploy, Object Config, Field Sync |
 | `/settings` | Org settings |
 | `/admin` | Admin portal |
 | `/admin/orgs` | Org management |
@@ -261,7 +282,7 @@ lead-routing/
 RouteBuilder.tsx (main canvas)
 ├── StepRegistry.tsx          — Draggable step sidebar
 ├── Config Sheets (side panels):
-│   ├── TriggerConfigSheet    — Object type + event + dry-run
+│   ├── TriggerConfigSheet    — Object type + event + trigger criteria (ConditionBuilder) + dry-run
 │   ├── MatchConfigSheet      — Deduplication settings
 │   ├── FilterConfigSheet     — Condition groups (AND/OR logic)
 │   ├── ActionConfigSheet     — User / Round-Robin / Queue assignment
@@ -409,8 +430,12 @@ POST /route/batch
 | `idempotency.ts` | Single + bulk Redis idempotency (`claimIdempotencyKey` + `claimIdempotencyKeys` pipeline) |
 | `round-robin.ts` | Atomic Redis Lua script for pointer increment |
 | `middleware/validate-signature.ts` | HMAC-SHA256 verification |
+| `lib/crypto.ts` | AES-256-GCM decryption (`decryptField`) — reads `APP_SECRET` env var |
+| `lib/ai-client.ts` | Multi-provider AI similarity client for fuzzy company name matching |
+| `lib/fuzzy.ts` | Levenshtein, Soundex, Double Metaphone, company name normalization, abbreviation dictionary (~85 entries), `fuzzyCompanyMatch()` cascading matcher |
+| `lib/alias-cache.ts` | Three-layer alias cache: L1 in-memory LRU (1000/org, 1hr TTL) → L2 Redis hash (24hr) → L3 Postgres `company_aliases` table (permanent) |
 
-### 5.4 Condition Operators (20)
+### 5.4 Condition Operators (23)
 
 | Operator | Description |
 |----------|-------------|
@@ -422,6 +447,9 @@ POST /route/batch
 | `gt` / `lt` / `gte` / `lte` | Numeric comparison |
 | `before` / `after` / `within_last` | Date/time (within_last = days) |
 | `includes` / `excludes` | Semicolon-delimited picklist values |
+| `fuzzy_equals` | Levenshtein similarity >= 0.8 (fuzzy string match) |
+| `sounds_like` | Soundex + Double Metaphone phonetic match |
+| `similar_to` | Tiered: fuzzy → alias cache → AI → fallback (similarity >= 0.7) |
 
 ### 5.5 Assignment Resolution
 
@@ -473,7 +501,7 @@ POST /route/batch → bulk idempotency → enqueue N jobs
 
 | Command | Purpose |
 |---------|---------|
-| `lead-routing init` | Interactive 9-step deployment wizard |
+| `lead-routing init` | Interactive 7-step deployment wizard |
 | `lead-routing deploy` | Update live installation (pull + restart + migrate) |
 | `lead-routing doctor` | Health check (Docker, containers, HTTP endpoints) |
 | `lead-routing logs [service]` | Stream container logs |
@@ -513,23 +541,18 @@ Step 5: Check Remote Prerequisites ──────────────▶
                                                    Free ports 80/443
                                                    Stop conflicting services
 
-Step 6: Upload Files ────────────────────────────▶ SFTP 5 files to remoteDir
+Step 6: Upload Files + Start Services ───────────▶ SFTP 5 files to remoteDir
+                                                   docker compose pull + up
+                                                   (migrations + seed run inside
+                                                    web container on startup)
 
-Step 7: Start Services ──────────────────────────▶ docker compose pull + up
-
-Step 8: Run Migrations
-  ├─ SSH tunnel to Postgres ◀────────────────────  Tunnel port 5432
-  ├─ prisma migrate deploy (via tunnel)
-  └─ Seed admin user (raw SQL INSERT)
-
-Step 9: Verify Health
+Step 7: Verify Health
   ├─ Poll GET {appUrl}/api/health (24 × 5s)
   └─ Poll GET {engineUrl}/health
 
-Step 10: SFDC Deploy
-  ├─ Patch Remote Site Settings XML with URLs
-  ├─ sf project deploy start (runs locally)
-  └─ Update Routing_Settings__c custom settings
+  ▸ Note: "Next: Connect Salesforce" — directs user
+    to Integrations → Salesforce in the web UI
+    (SFDC deploy moved out of CLI init)
 ```
 
 ### 6.3 Generated Files
@@ -550,8 +573,10 @@ Step 10: SFDC Deploy
 
 | Class | Purpose |
 |-------|---------|
-| `RoutingEngineCallout` | `@future(callout=true)` — builds batch payload, signs with HMAC, POSTs to `/route/batch` (single call per chunk of up to 100 records) |
+| `RoutingEngineCallout` | `@future(callout=true)` — queries Route_Criteria__c, filters records via CriteriaEvaluator, builds batch payload, signs with HMAC, POSTs to `/route/batch`. No criteria = send all (backward compatible). |
 | `RoutingPayloadBuilder` | `build()` — single-record payload (legacy); `buildBatch()` — batch payload with `records[]` array |
+| `CriteriaEvaluator` | Evaluates Route_Criteria__c against SObject records. 18+ operators (equals, contains, gt, lt, before, after, within_last, includes, etc.). AND within group, OR between groups. |
+| `CriteriaEvaluatorTest` | Full test coverage: all operators, AND/OR groups, null handling, empty criteria pass-through |
 | `OnboardingController` | `@AuraEnabled` methods for LWC wizard (9 methods: check connection, save settings, sync fields, send test event) |
 | `RoutingEngineMock` | `HttpCalloutMock` for unit tests |
 
@@ -587,6 +612,24 @@ Step 10: SFDC Deploy
 | `Response_Body__c` | LongText | Response body |
 | `Created_At__c` | DateTime | Timestamp |
 
+**`Route_Criteria__c`** (Custom Object — Pre-Callout Filtering):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `Rule_Id__c` | Text(30) | Maps to RoutingRule.id |
+| `Object_Type__c` | Text(10) | LEAD/CONTACT/ACCOUNT |
+| `Event_Type__c` | Text(10) | INSERT/UPDATE/BOTH |
+| `Group_Id__c` | Text(40) | AND/OR grouping |
+| `Field_Name__c` | Text(255) | SFDC field API name |
+| `Operator__c` | Text(30) | equals, gt, contains, etc. |
+| `Value__c` | LongText(32768) | Comparison value |
+| `Sort_Order__c` | Number | Display order |
+| `Is_Active__c` | Checkbox | Mirrors rule ACTIVE status |
+
+**`CriteriaEvaluator.cls`** — evaluates Route_Criteria__c against SObject records inside `@future` context. AND within group, OR between groups. 18 operators: equals, not_equals, contains, not_contains, starts_with, gt, lt, gte, lte, before, after, within_last, includes, excludes, is_blank, is_not_blank, is_true, is_false. Uses `record.get(fieldName)` for dynamic field access.
+
+**`RoutingEngineCallout.sendAsync()`** — updated to query active Route_Criteria__c, filter records through CriteriaEvaluator before HTTP callout. No criteria = all records sent (backward compatible). +1 SOQL query.
+
 ### 7.4 LWC Onboarding Wizard
 
 4-step wizard deployed as a Lightning App Page:
@@ -616,7 +659,7 @@ Step 4: Done
 | Named Credential | `RoutingEngine` | Legacy (not used for routing) |
 | Custom App | `Lead_Router_Setup` | Lightning app for onboarding tab |
 | Custom Tab | `Lead_Router_Setup` | Hosts onboardingWizard LWC |
-| Permission Set | `LeadRouterAdmin` | Access to setup app + tab |
+| Permission Set | `LeadRouterAdmin` | Access to setup app + tab + CRUD/FLS on Route_Criteria__c |
 
 ---
 
@@ -653,6 +696,8 @@ jsforce v2 wrapper for Salesforce API operations.
 | `update-owner.ts` | `updateOwner()` — jsforce .update({ OwnerId }) |
 | `merge-lead.ts` | Lead merge via SOAP API |
 | `operators.ts` | Operator definitions |
+| `sfdc-api.ts` | `SalesforceApi` class — REST API for metadata deploy, permset assignment, custom settings (shared with CLI) |
+| `zip-source.ts` | `zipSourcePackage()` — creates SFDC metadata ZIP from source package directory |
 
 ---
 
@@ -672,6 +717,7 @@ Organization (1)
   ├──▶ FieldSchema (*)
   ├──▶ RoutingRule (*)
   │      ├──▶ RuleCondition (*)     — Legacy conditions
+  │      ├──▶ TriggerCondition (*)  — Pre-callout filter criteria (synced to SFDC Route_Criteria__c)
   │      ├──▶ RoutingBranch (*)     — Route Builder paths
   │      │      └──▶ BranchCondition (*)
   │      └──▶ RouteMatchConfig (0..1) — Dedup settings
@@ -701,10 +747,12 @@ Organization (1)
 - SFDC OAuth tokens (accessToken, refreshToken, instanceUrl)
 - webhookSecret (HMAC for engine auth)
 - plan, isActive, seatsPurchased, seatsUsed, routingQuotaUsed, quotaResetAt
+- Integration tracking: `packageDeployedAt`, `packageDeployId`, `packageVersion`, `objectConfig` (JSON), `fieldsSyncedAt`
 
 **RoutingRule** — Routing logic definition
 - Legacy: single assignmentType + conditions
 - Route Builder: branches[] + matchConfig? + defaultOwner*
+- Trigger criteria: triggerConditions[] (pre-callout filtering, synced to SFDC Route_Criteria__c)
 
 **RoutingBranch** — Path in Route Builder
 - priority-ordered, each with conditions[] + assignment
@@ -765,6 +813,31 @@ Next.js 16 uses `proxy.ts` (NOT `middleware.ts`). On every request:
 
 ## 11. Routing Pipeline
 
+### 11.0 Pre-Callout Filtering (Trigger Criteria)
+
+Before any record reaches the routing engine, the Apex `@future` method evaluates trigger criteria:
+
+```
+Records enter @future(callout=true)
+    │
+    ▼
+Query Route_Criteria__c for all ACTIVE rules
+matching this objectType + eventType
+    │
+    ├─ No criteria exist → send ALL records (backward compatible)
+    │
+    ├─ Criteria exist → CriteriaEvaluator filters:
+    │   - AND within same groupId
+    │   - OR between different groupIds
+    │   - OR between different ruleIds
+    │   - 18+ operators (equals, contains, gt, lt, before, after, within_last, etc.)
+    │
+    ├─ Records match ≥1 rule's criteria → POST /route/batch
+    └─ No records match → skip callout entirely (save HTTP call)
+```
+
+Criteria are defined per-route in the Route Builder UI and synced to Salesforce via `POST /api/rules/:id/sync-criteria`.
+
 ### 11.1 New-Style Routing (Route Builder)
 
 ```
@@ -776,7 +849,8 @@ Rule has branches[] OR matchConfig OR defaultOwnerType
 │   If matchConfig exists:│
 │   ├─ SOQL: find Lead    │──▶ onLeadMatch:  SFDC_MERGE / ASSIGN_TO_OWNER / ASSIGN_CUSTOM
 │   ├─ SOQL: find Contact │──▶ onContactMatch: ASSIGN_TO_OWNER / ASSIGN_CUSTOM / SKIP
-│   └─ SOQL: find Account │──▶ onAccountMatch: ASSIGN_TO_OWNER / ASSIGN_CUSTOM / SKIP
+│   ├─ SOQL: find Account │──▶ onAccountMatch: ASSIGN_TO_OWNER / ASSIGN_CUSTOM / SKIP
+│   └─ Company Name Match │──▶ STRICT / FUZZY / AI_SMART (see §17)
 └─────────┬───────────────┘
           │ no match or SKIP
           ▼
@@ -889,7 +963,8 @@ Web App ◀─── jsforce ──────────▶ Salesforce    (OA
 Engine  ◀─── HTTP POST /route/batch ── Salesforce (Apex trigger batch webhooks)
 Engine  ──── jsforce ──────────▶ Salesforce    (updateOwner, merge, SOQL)
 CLI     ──── SSH + SFTP ───────▶ VPS           (deploy files, run commands)
-CLI     ──── sf CLI ───────────▶ Salesforce    (deploy metadata)
+CLI     ──── SSH + SFTP ───────▶ VPS           (sfdc deploy command)
+Web App ──── REST API ────────▶ Salesforce    (deploy metadata via /api/integrations/salesforce/deploy)
 ```
 
 ---
@@ -989,3 +1064,284 @@ Tab layout at `/analytics` with shared filter bar (date range, object type, rule
 16. **`onPointerDown` not compiled by Next.js 16 Turbopack** — use `onMouseDown` instead. The pointer event handler silently disappears from the compiled JS chunks.
 
 17. **PostgreSQL raw SQL with shared positional parameters across different types** — `$14` used for `double precision`, `integer`, and `integer` columns simultaneously causes `42P08 inconsistent types`. Fix: explicit casts `$14::double precision`, `$14::integer`.
+
+18. **`useSearchParams()` requires a Suspense boundary in Next.js 16** — any client component calling `useSearchParams()` must be wrapped in `<Suspense>`. Without it, the page errors during static generation. The Integrations Salesforce detail page uses an inner component wrapped in Suspense to read the `?connected=1` query param.
+
+19. **OAuth callback redirect target** — SFDC OAuth callback (`/api/auth/sfdc/callback`) redirects to `/integrations/salesforce?connected=1` (not `/dashboard`). The Integrations page reads this param to show a success toast.
+
+20. **SFDC package deploy moved from CLI to web app** — `lead-routing init` no longer deploys the Salesforce package (reduced from 8 to 7 steps). Users deploy via the Integrations → Salesforce page in the web UI. The `SalesforceApi` class and `zipSourcePackage()` are shared from `packages/sfdc` for use by both CLI (`lead-routing sfdc deploy`) and web app (`/api/integrations/salesforce/deploy`).
+
+21. **Sidebar "Integrations" nav item** — Added in the SETUP section with a Plug icon, linking to `/integrations`.
+
+22. **Salesforce custom objects require `enableSharing`, `enableBulkApi`, and `enableStreamingApi` to all be enabled or disabled together** — setting only one causes a cryptic deploy validation error.
+
+23. **`zipSourcePackage` must include `-meta.xml`-only types in `package.xml`** — PermissionSet, NamedCredential, RemoteSiteSetting, CustomTab, CustomApplication files that only have a `-meta.xml` (no companion class file) were being skipped in package.xml manifest generation. Salesforce silently omits them from the deploy, resulting in fewer components than expected (e.g. 41 vs 47). Fixed by using `entry.name.split('.')[0]` for member name extraction.
+
+24. **Route_Criteria__c fields not queryable without PermissionSet FLS access** — even if the custom object and fields are deployed successfully, SOQL queries return empty results unless the running user has field-level security granted via the `LeadRouterAdmin` permission set. The permission set must be both deployed AND assigned to the integration user.
+
+---
+
+## 16. AI Routing Assistant
+
+### 16.1 Architecture Overview
+
+The AI Routing Assistant follows a **BYOK (Bring Your Own Key)** model. Customers provide their own LLM API key via the web app settings page. The web app acts as an intermediary between the user and the LLM using a tool-use pattern — the LLM receives a set of org-scoped query tools it can invoke to answer questions about routing performance, rule configuration, and team workload. The LLM never gets direct database access; all data retrieval is mediated through server-side tool functions that enforce org isolation and return sanitized results.
+
+```
+User ──── Chat UI ────▶ Web App API ────▶ LLM Provider
+                            │                   │
+                            │              tool_use calls
+                            │                   │
+                            ▼                   ▼
+                      Tool Dispatcher ◀──── tool invocations
+                            │
+                            ▼
+                     Prisma Queries (org-scoped)
+                            │
+                            ▼
+                       PostgreSQL
+```
+
+### 16.2 Multi-Provider Support
+
+Four LLM providers are supported, each using its native SDK:
+
+| Provider | SDK | Models |
+|----------|-----|--------|
+| **Claude** | `@anthropic-ai/sdk` | claude-sonnet-4-20250514, etc. |
+| **OpenAI** | `openai` | gpt-4o, gpt-4o-mini, etc. |
+| **Gemini** | `@google/genai` | gemini-2.0-flash, etc. |
+| **Custom** | `openai` (compatible) | Any OpenAI-compatible endpoint |
+
+The Custom provider reuses the OpenAI SDK with a user-supplied `baseURL` and optional custom headers, supporting providers like Ollama, Together, Groq, and Azure OpenAI.
+
+Provider selection and API key configuration are managed in the AI settings page. The chat endpoint (`/api/ai/chat`) reads the org's configured provider and dispatches to the appropriate SDK handler, normalizing the tool-use protocol across providers.
+
+### 16.3 Security
+
+**API Key Encryption:** Customer API keys are encrypted at rest using AES-256-GCM with a key derived from the instance's `APP_SECRET` via scrypt. The `encryptField()` and `decryptField()` functions in `apps/web/lib/crypto.ts` handle encryption and decryption. Encrypted keys are stored in the `Organization.aiApiKey` database field.
+
+**Org Isolation:** Every tool query is scoped to the authenticated user's `orgId`. There is no mechanism for a tool call to access data from another organization.
+
+**No Direct DB Access:** The LLM only sees tool definitions (name, description, parameters) and tool results. It cannot execute arbitrary queries. All data access goes through predefined Prisma query functions that return structured, bounded result sets.
+
+### 16.4 Tool-Use Architecture
+
+The assistant exposes 9 org-scoped query tools. Tool definitions (JSON Schema parameters + descriptions) are sent to the LLM as part of the system prompt. When the LLM returns a `tool_use` response, the server-side dispatcher invokes the corresponding Prisma query function, passes the result back to the LLM, and the LLM produces a natural-language answer.
+
+| Tool | Purpose |
+|------|---------|
+| `query_routing_logs` | Filter routing logs by status, rule, assignee, and/or date range |
+| `get_rule_performance` | Success/fail/unmatched aggregation per rule |
+| `get_team_workload` | Assignment counts per team member (grouped by team) |
+| `get_conversion_metrics` | Conversion rate and pipeline value by rule |
+| `get_trend_data` | Daily aggregate time series for charting |
+| `list_rules` | List all routing rules with status, priority, object type, branch/condition counts |
+| `get_assignee_stats` | Assignment counts per individual assignee (user or queue) across all rules |
+| `explain_rule` | Full rule configuration with branches, conditions, and teams |
+| `get_routing_timeline` | Ordered event history for a specific Salesforce record ID |
+
+Each tool function lives in `apps/web/lib/ai/queries.ts` and accepts `orgId` as a mandatory first parameter. The dispatcher in `apps/web/lib/ai/tools.ts` maps tool names to query functions and validates input parameters before execution.
+
+### 16.5 Plan Gating & Navigation Flow
+
+Access to the AI assistant is gated by plan and configuration state:
+
+| State | Behavior |
+|-------|----------|
+| **FREE plan** | `PaywallOverlay` displayed — upgrade required |
+| **PAID plan, no API key configured** | `ConnectProvider` panel shown — user must add their LLM API key |
+| **PAID plan, API key configured** | Full chat interface with `ChatWindow` |
+
+This three-state flow is handled entirely client-side on the `/ai-assistant` page, reading the org's plan and AI configuration status.
+
+**Settings ↔ Chat Navigation:**
+
+The AI Settings page (`/settings/ai`) and Chat page (`/ai-assistant`) are cross-linked for a seamless setup-to-usage flow:
+
+1. `/ai-assistant` with no provider configured → shows empty state with "Go to AI Settings" button → navigates to `/settings/ai`
+2. `/settings/ai` → user connects a provider (enters API key, selects model) → "Open Chat" button appears → navigates to `/ai-assistant`
+3. Chat header displays a clickable provider/model badge (e.g. "Claude · claude-sonnet-4-20250514") that links back to `/settings/ai` for quick reconfiguration
+
+### 16.6 Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/web/app/api/ai/chat/route.ts` | Chat endpoint; provider-specific LLM handlers with tool-use loop |
+| `apps/web/app/api/settings/ai/route.ts` | AI settings CRUD (provider, model, encrypted API key) |
+| `apps/web/lib/ai/tools.ts` | Tool definitions (JSON Schema) and dispatcher |
+| `apps/web/lib/ai/queries.ts` | Org-scoped Prisma query functions for each tool |
+| `apps/web/lib/crypto.ts` | `encryptField()` / `decryptField()` — AES-256-GCM with scrypt |
+| `apps/web/app/(dashboard)/ai-assistant/page.tsx` | Dashboard page with plan gating logic |
+| `apps/web/components/ai-chat/ChatWindow.tsx` | Main chat interface component |
+| `apps/web/components/ai-chat/ConnectProvider.tsx` | API key configuration panel |
+| `apps/web/components/ai-chat/MessageBubble.tsx` | Message rendering with `remark-gfm` for GFM tables and custom `pre` renderer for chart blocks |
+| `apps/web/components/ai-chat/ChartBlock.tsx` | Chart renderer (bar, line, area, pie) using recharts |
+| `apps/web/components/ai-chat/SuggestionGrid.tsx` | Starter prompt suggestions |
+| `apps/web/components/ai-chat/PaywallOverlay.tsx` | Upgrade prompt for free-plan users |
+| `apps/web/app/(dashboard)/settings/ai/page.tsx` | AI provider settings page (connect/edit/disconnect providers) |
+| `apps/web/app/(dashboard)/settings/layout.tsx` | Settings layout with tabs (General, Webhooks, AI Assistant) |
+
+### 16.7 Charts & Visualizations
+
+The AI assistant can output interactive charts inline in chat responses. When the LLM determines a visualization would help (trends, comparisons, distributions), it outputs a fenced code block with language `chart` containing a JSON spec. The frontend's `MessageBubble` component intercepts these via a custom ReactMarkdown `pre` renderer and renders them using recharts.
+
+**Chart Spec Format:**
+```json
+{
+  "type": "bar | line | area | pie",
+  "title": "Chart Title",
+  "data": [{"label": "A", "value": 10}, ...],
+  "xKey": "label",
+  "yKeys": ["value"],
+  "colors": ["#7C3AED", ...],  // optional
+  "stacked": false              // optional
+}
+```
+
+**Supported Chart Types:**
+| Type | Use Case | recharts Component |
+|------|----------|-------------------|
+| `bar` | Comparisons (rule performance, assignee workload) | `BarChart` + `Bar` |
+| `line` | Trends over time (daily routing volume) | `LineChart` + `Line` |
+| `area` | Volume over time with fill | `AreaChart` + `Area` |
+| `pie` | Proportions (status distribution) | `PieChart` + `Pie` |
+
+Charts render inside a card container with responsive width and 300px height. Default color palette is purple-themed (#7C3AED, #2563EB, #059669, #D97706, #DC2626). Multiple yKeys produce grouped/stacked charts with a legend.
+
+**Markdown Rendering:** Uses `react-markdown` with `remark-gfm` plugin for GFM table support. Custom CSS styles in `.ai-markdown` class (globals.css) handle typography since `@tailwindcss/typography` is incompatible with the Tailwind v4 + pnpm monorepo setup.
+
+## 17. Fuzzy & AI-Powered Matching Engine
+
+### 17.1 Overview
+
+The routing engine supports three levels of string and company name matching: exact, fuzzy (algorithmic), and AI-powered. This manifests in two ways:
+
+1. **Condition operators** — Three new operators (`fuzzy_equals`, `sounds_like`, `similar_to`) available on TEXT-type fields in the condition builder, evaluated in `evaluator.ts`.
+2. **Company name matching** — A dedicated matching mode in the Match step (`router.ts`) that queries Salesforce for candidate accounts and applies STRICT, FUZZY, or AI_SMART comparison.
+
+### 17.2 Fuzzy Algorithms (`lib/fuzzy.ts`)
+
+The core algorithmic library provides:
+
+- **`normalizeCompanyName()`** — Strips legal suffixes (Inc, LLC, Corp, Ltd, GmbH, etc.), lowercases, removes punctuation and extra whitespace
+- **`levenshtein(a, b)`** — Standard Levenshtein distance, returns similarity ratio 0.0–1.0
+- **`soundex(s)`** — Classic Soundex encoding (4-char code)
+- **`doubleMetaphone(s)`** — Double Metaphone algorithm returning primary and alternate encodings
+- **Abbreviation dictionary** — ~85 entries mapping common abbreviations to full names (e.g. "IBM" to "International Business Machines", "HP" to "Hewlett Packard")
+- **`fuzzyCompanyMatch(a, b)`** — Cascading matcher:
+  1. Exact normalized match → true
+  2. Abbreviation dictionary lookup → true
+  3. Levenshtein similarity >= 0.85 → true
+  4. Soundex match → true
+  5. Double Metaphone match (primary or alternate) → true
+  6. Otherwise → false
+
+### 17.3 Condition Operators (Evaluator)
+
+The `evaluator.ts` module (now async) supports three fuzzy operators on TEXT fields:
+
+| Operator | Algorithm | Threshold | Async |
+|----------|-----------|-----------|-------|
+| `fuzzy_equals` | Levenshtein distance | similarity >= 0.8 | No |
+| `sounds_like` | Soundex + Double Metaphone | Either phonetic code matches | No |
+| `similar_to` | Tiered resolution chain | varies (see below) | Yes |
+
+**`similar_to` resolution chain:**
+1. Exact normalized match → true
+2. Abbreviation dictionary hit → true
+3. Fuzzy similarity >= 0.85 → true
+4. Alias cache lookup (L1 → L2 → L3) → cached result
+5. AI provider call (if configured) → cache result, return
+6. Fallback: fuzzy similarity >= 0.7 → true
+
+### 17.4 AI Similarity Client (`lib/ai-client.ts`)
+
+Multi-provider AI client used by the `similar_to` operator and AI_SMART company matching mode.
+
+- **`resolveCompanySimilarity(orgId, companyA, companyB)`** — Returns `{ isSimilar: boolean, confidence: number }` or `null` on any failure
+- **`isAIConfigured(orgId)`** — Quick check if org has a configured AI provider
+- **Config caching** — Org AI config (provider, decrypted key, model, baseUrl, custom headers) cached in-memory with 5-minute TTL
+- **Rate limiting** — 10 calls/sec per org (in-memory sliding window); excess returns `null`
+- **Providers** — Claude (Anthropic API), OpenAI, Gemini, Custom (OpenAI-compatible with custom baseUrl/headers)
+- **Graceful fallback** — All errors caught and return `null`; AI failure never breaks routing
+- **Cost control** — `max_tokens: 50`, JSON-only prompt
+
+### 17.5 Three-Layer Alias Cache (`lib/alias-cache.ts`)
+
+Caches AI similarity results to avoid redundant LLM calls:
+
+| Layer | Storage | Capacity / TTL | Lookup |
+|-------|---------|----------------|--------|
+| **L1** | In-memory LRU Map | 1000 entries/org, 1hr TTL | `checkAliasCache()` checks first |
+| **L2** | Redis hash (`alias:{orgId}`) | 24hr TTL | Falls through from L1 miss |
+| **L3** | Postgres `company_aliases` table | Permanent | Falls through from L2 miss |
+
+On AI result, `cacheAliasResult()` writes to all three layers simultaneously. The `CompanyAlias` model stores `orgId`, `nameA`, `nameB`, `isSimilar`, `confidence`, and `source` (AI provider used).
+
+### 17.6 Encryption (`lib/crypto.ts`)
+
+Decrypt-only counterpart to the web app's `encryptField()`. Uses AES-256-GCM with a key derived from `APP_SECRET` via scrypt (salt: `"lead-routing-field-enc"`, keylen: 32). The engine only decrypts (never encrypts) AI API keys stored in the database.
+
+### 17.7 Company Name Matching in `runMatcher()`
+
+The Match step in `router.ts` includes company name matching as the 4th check (after email, contact, domain/phone matching). Controlled by two `RouteMatchConfig` fields:
+
+- **`matchCompanyName`** (boolean, default `false`) — enables/disables company name matching
+- **`fuzzyMatchMode`** (string, default `"STRICT"`) — one of `"STRICT"`, `"FUZZY"`, or `"AI_SMART"`
+
+**Flow:**
+1. Extract the `Company` field from the incoming record
+2. Query Salesforce for candidate Accounts using `SOQL LIKE '%<first 5 chars>%' LIMIT 20`
+3. For each candidate, apply the configured matching mode:
+   - **STRICT** — exact match after `normalizeCompanyName()` (strips suffixes like Inc/LLC/Corp, lowercases, removes punctuation)
+   - **FUZZY** — `fuzzyCompanyMatch()` cascading matcher (Levenshtein >= 0.8, Soundex, Double Metaphone, abbreviation dictionary)
+   - **AI_SMART** — alias cache lookup (L1 → L2 → L3). On cache miss, calls org's configured LLM. On AI failure/unconfigured, falls back to FUZZY
+4. First matching candidate returns `{ type: "ACCOUNT", recordId, ownerId }` which feeds into the existing `onAccountMatch` handler (ASSIGN_TO_OWNER / ASSIGN_CUSTOM / SKIP)
+
+### 17.8 Database Changes
+
+- **`CompanyAlias` model** — New table `company_aliases` with fields: `id`, `orgId`, `nameA`, `nameB`, `isSimilar`, `confidence`, `source`, `createdAt`. Indexed on `(orgId, nameA, nameB)` for fast lookups.
+- **`RouteMatchConfig` additions** — `matchCompanyName` (Boolean) and `fuzzyMatchMode` (String) fields added to configure per-route company matching behavior.
+
+### 17.9 Web App UI
+
+- **`MatchConfigSheet.tsx`** — Company name matching toggle with mode selector (STRICT / FUZZY / AI_SMART) in the Route Builder Match step configuration
+- **`OperatorSelect.tsx`** — `similar_to` operator displays an "AI" badge to indicate it may use an AI provider
+- **`operators.ts`** — Three new operators (`fuzzy_equals`, `sounds_like`, `similar_to`) added to the TEXT operator type
+- **`types.ts`** — `FuzzyMatchMode` type exported (`"STRICT" | "FUZZY" | "AI_SMART"`)
+- **`builder-to-rule.ts`** — Bidirectional conversion updated to include `matchCompanyName` and `fuzzyMatchMode` fields
+- **`/api/rules` and `/api/rules/[id]/clone`** — Rule create and clone endpoints accept and persist fuzzy fields
+
+### 17.10 Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/engine/src/lib/fuzzy.ts` | Levenshtein, Soundex, Double Metaphone, normalization, abbreviation dict, `fuzzyCompanyMatch()` |
+| `apps/engine/src/lib/crypto.ts` | `decryptField()` — AES-256-GCM decryption using `APP_SECRET` |
+| `apps/engine/src/lib/ai-client.ts` | `resolveCompanySimilarity()`, `isAIConfigured()` — multi-provider AI similarity |
+| `apps/engine/src/lib/alias-cache.ts` | `checkAliasCache()`, `cacheAliasResult()` — three-layer alias cache (L1/L2/L3) |
+| `apps/engine/src/evaluator.ts` | Async condition evaluator — added `fuzzy_equals`, `sounds_like`, `similar_to` operators |
+| `apps/engine/src/router.ts` | `runMatcher()` — company name matching logic (STRICT/FUZZY/AI_SMART) |
+| `apps/engine/src/cache.ts` | `CachedMatchConfig` — includes `matchCompanyName` and `fuzzyMatchMode` fields |
+| `packages/db/prisma/schema.prisma` | `CompanyAlias` model, `matchCompanyName`/`fuzzyMatchMode` on `RouteMatchConfig` |
+| `apps/web/lib/operators.ts` | Fuzzy operators added to TEXT type |
+| `apps/web/components/route-builder/config/MatchConfigSheet.tsx` | Company name matching UI with mode selector |
+| `apps/web/components/route-builder/types.ts` | `FuzzyMatchMode` type definition |
+| `apps/web/lib/builder-to-rule.ts` | Bidirectional conversion for fuzzy fields |
+| `apps/web/components/condition-builder/OperatorSelect.tsx` | AI badge on `similar_to` operator |
+| `apps/web/app/api/rules/route.ts` | Rule create — fuzzy fields |
+| `apps/web/app/api/rules/[id]/clone/route.ts` | Rule clone — fuzzy fields |
+
+### 17.11 Test Coverage
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `apps/engine/src/lib/fuzzy.test.ts` | 79 | Levenshtein, Soundex, Metaphone, normalization, abbreviation dict, cascading matcher |
+| `apps/engine/src/lib/crypto.test.ts` | 6 | Round-trip encryption/decryption, error cases |
+| `apps/engine/src/lib/ai-client.test.ts` | 16 | All providers, error handling, rate limiting, config caching |
+| `apps/engine/src/lib/alias-cache.test.ts` | 11 | L1/L2/L3 cache layers, write-through, TTL expiry |
+| `apps/engine/src/evaluator.test.ts` | 81 total (13 new) | Fuzzy operators: `fuzzy_equals`, `sounds_like`, `similar_to` |
+| `apps/engine/src/router.test.ts` | 72 total (10 new) | Company name matching: STRICT, FUZZY, AI_SMART modes |
+
+**Total new tests added: ~50**

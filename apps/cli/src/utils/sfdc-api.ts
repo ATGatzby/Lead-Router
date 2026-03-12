@@ -1,6 +1,10 @@
 /**
  * Lightweight Salesforce REST API client.
  * Replaces the `sf` CLI dependency — uses built-in fetch() (Node 20+).
+ *
+ * NOTE: This file is duplicated in packages/sfdc/src/sfdc-api.ts for use by the web app.
+ * The CLI keeps its own copy because tsup bundles everything inline and cannot resolve
+ * workspace package imports at build time.
  */
 
 const API_VERSION = 'v59.0'
