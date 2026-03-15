@@ -84,7 +84,7 @@ async function upsertAggregate(
       COALESCE("branchId", ''),
       COALESCE("teamId", ''),
       COALESCE("assigneeId", ''),
-      COALESCE("objectType"::text, '')
+      COALESCE(immutable_object_type_text("objectType"), '')
     ) DO UPDATE SET
       "successCount"  = routing_daily_aggregates."successCount"  + $10,
       "failedCount"   = routing_daily_aggregates."failedCount"   + $11,
