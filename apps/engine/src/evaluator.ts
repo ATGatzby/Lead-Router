@@ -121,3 +121,69 @@ export async function evaluateRule(
   }
   return false;
 }
+
+// ─── Detailed evaluation (for Record Journey trace) ──────────────────────
+
+export interface DetailedCondition {
+  fieldName: string;
+  operator: string;
+  expectedValue: string | null;
+  actualValue: string | null;
+  passed: boolean;
+}
+
+export interface DetailedConditionGroup {
+  groupId: string;
+  groupMatched: boolean;
+  conditions: DetailedCondition[];
+}
+
+export interface DetailedEvalResult {
+  matched: boolean;
+  groups: DetailedConditionGroup[];
+}
+
+/**
+ * Same logic as evaluateRule() but returns per-condition pass/fail with actual values.
+ * Used by the router to build DecisionTrace for Record Journey.
+ */
+export async function evaluateRuleDetailed(
+  record: Record<string, unknown>,
+  conditions: EvalCondition[],
+  orgId: string = ""
+): Promise<DetailedEvalResult> {
+  if (conditions.length === 0) return { matched: true, groups: [] };
+
+  const groupMap = new Map<string, EvalCondition[]>();
+  for (const c of conditions) {
+    if (!groupMap.has(c.groupId)) groupMap.set(c.groupId, []);
+    groupMap.get(c.groupId)!.push(c);
+  }
+
+  let matched = false;
+  const groups: DetailedConditionGroup[] = [];
+
+  for (const [groupId, groupConds] of groupMap.entries()) {
+    const results = await Promise.all(groupConds.map((c) => evalCondition(record, c, orgId)));
+    const groupMatched = results.every(Boolean);
+    if (groupMatched) matched = true;
+
+    groups.push({
+      groupId,
+      groupMatched,
+      conditions: groupConds.map((c, i) => {
+        const lowerKey = c.fieldName.toLowerCase();
+        const raw = record[c.fieldName] ?? record[lowerKey] ?? null;
+        return {
+          fieldName: c.fieldName,
+          operator: c.operator,
+          expectedValue: c.value != null ? String(c.value).substring(0, 200) : null,
+          actualValue: raw != null ? String(raw).substring(0, 200) : null,
+          passed: results[i],
+        };
+      }),
+    });
+  }
+
+  return { matched, groups };
+}

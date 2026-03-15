@@ -1,8 +1,10 @@
 import { prisma } from "@lead-routing/db";
 import { updateOwner, mergeLead } from "@lead-routing/sfdc";
 import { getActiveRules, type CachedRule, type CachedBranch, type CachedMatchConfig } from "./cache.js";
-import { evaluateRule } from "./evaluator.js";
-import { getNextMember } from "./round-robin.js";
+import { evaluateRule, evaluateRuleDetailed } from "./evaluator.js";
+import type { DetailedConditionGroup } from "./evaluator.js";
+import { getNextMember, getNextWeightedMember } from "./round-robin.js";
+import type { WeightedTeamMember } from "./round-robin.js";
 import { getOrgConnection, getSfdcUserId, getSfdcQueueId, evictOrgConnection } from "./sfdc.js";
 import { enqueueRetry } from "./queue.js";
 import { fireWebhook } from "./webhook.js";
@@ -11,16 +13,88 @@ import { stripPii } from "./lib/strip-pii.js";
 import { normalizeCompanyName, fuzzyCompanyMatch } from "./lib/fuzzy.js";
 import { checkAliasCache, cacheAliasResult } from "./lib/alias-cache.js";
 import { resolveCompanySimilarity } from "./lib/ai-client.js";
+import { setCooldown, isInCooldown } from "./cooldown.js";
+
+// ─── Decision Trace types ─────────────────────────────────────────────────
+
+interface TraceMatchCheck {
+  objectType: string;
+  matchField: string;
+  found: boolean;
+  matchedRecordId?: string;
+}
+
+interface TraceRuleEval {
+  ruleId: string;
+  ruleName: string;
+  priority: number;
+  outcome: "MATCHED" | "UNMATCHED" | "SKIPPED_TRIGGER_EVENT";
+  matchPhase?: {
+    config: Record<string, unknown>;
+    checks: TraceMatchCheck[];
+    result: { matched: boolean; matchedType?: string; action?: string };
+  };
+  branches?: Array<{
+    branchId: string;
+    label: string;
+    priority: number;
+    matched: boolean;
+    conditionGroups: DetailedConditionGroup[];
+  }>;
+  legacyConditions?: DetailedConditionGroup[];
+  defaultOwner?: { evaluated: boolean; resolved: boolean };
+}
+
+interface DecisionTrace {
+  version: 1;
+  trigger: { event: string; objectType: string; recordId: string; timestampMs: number };
+  cooldown?: { checked: true; skipped: boolean };
+  rulesEvaluated: TraceRuleEval[];
+  assignment?: {
+    type: string;
+    assigneeName: string;
+    assigneeId: string;
+    teamId?: string;
+    teamName?: string;
+    roundRobinDetail?: { teamMemberCount: number; selectedIndex: number };
+    source: string;
+    branchLabel?: string;
+  };
+  timing: {
+    totalMs: number;
+    cooldownCheckMs?: number;
+    matchPhaseMs?: number;
+    evaluationMs?: number;
+    assignmentMs?: number;
+    sfdcUpdateMs?: number;
+  };
+}
+
+function createTrace(payload: { eventType: string; objectType: string; recordId: string }): DecisionTrace {
+  return {
+    version: 1,
+    trigger: {
+      event: payload.eventType,
+      objectType: payload.objectType,
+      recordId: payload.recordId,
+      timestampMs: Date.now(),
+    },
+    rulesEvaluated: [],
+    timing: { totalMs: 0 },
+  };
+}
 
 // ─── Payload type ─────────────────────────────────────────────────────────
 
 export interface RoutingPayload {
   orgId: string;
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
-  eventType: "INSERT" | "UPDATE" | "BOTH";
+  eventType: "INSERT" | "UPDATE" | "BOTH" | "SEARCH";
   recordId: string;
   timestamp: string;
   fields: Record<string, unknown>;
+  /** When set, only evaluate this specific rule (used by scheduled route runs) */
+  ruleId?: string;
 }
 
 export type RoutingResult = "routed" | "unmatched" | "dry_run" | "merged";
@@ -71,7 +145,7 @@ async function resolveAssigneeFromFields(
       }),
       prisma.roundRobinTeam.findUnique({
         where: { id: assigneeTeamId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, distributionType: true },
       }),
     ]);
 
@@ -83,9 +157,12 @@ async function resolveAssigneeFromFields(
       name: m.user.name,
       email: m.user.email,
       assignmentCount: m.assignmentCount,
+      weight: (m as any).weight ?? 1,
     }));
 
-    const next = await getNextMember(orgId, assigneeTeamId, members);
+    const next = team?.distributionType === "weighted"
+      ? await getNextWeightedMember(orgId, assigneeTeamId, members as WeightedTeamMember[])
+      : await getNextMember(orgId, assigneeTeamId, members);
     if (!next) return null;
 
     await prisma.teamMember.update({
@@ -139,7 +216,7 @@ async function resolveAssignee(rule: CachedRule): Promise<AssigneeInfo | null> {
 
 async function resolveBranchAssignee(branch: CachedBranch, orgId: string): Promise<AssigneeInfo | null> {
   return resolveAssigneeFromFields(
-    branch.assignmentType,
+    branch.assignmentType ?? "",
     branch.assigneeUserId,
     branch.assigneeTeamId,
     branch.assigneeQueueId,
@@ -277,33 +354,131 @@ async function runMatcher(
 
 // ─── Main router ─────────────────────────────────────────────────────────
 
+/** Namespace-prefixed Routing_Action__c field for the managed package */
+const ROUTING_ACTION_FIELD = "lrt__Routing_Action__c";
+
 export async function routeRecord(payload: RoutingPayload, startMs?: number): Promise<RoutingResult> {
-  const { orgId, objectType, eventType, recordId, fields } = payload;
+  const { orgId, objectType, eventType: rawEventType, recordId, fields, ruleId: targetRuleId } = payload;
+  // Cast to `any` because "SEARCH" isn't in the Prisma TriggerEvent enum yet (schema not regenerated)
+  const eventType = rawEventType as any;
+  const trace = createTrace(payload);
+  const routeStartMs = startMs ?? Date.now();
+
+  // ── Layer 3: Cooldown check for UPDATE events ──────────────────────────
+  if (eventType === "UPDATE") {
+    const cooldownStart = Date.now();
+    const cooled = await isInCooldown(orgId, recordId);
+    trace.cooldown = { checked: true, skipped: cooled };
+    trace.timing.cooldownCheckMs = Date.now() - cooldownStart;
+    if (cooled) {
+      trace.timing.totalMs = Date.now() - routeStartMs;
+      await prisma.routingLog.create({
+        data: {
+          orgId,
+          sfdcRecordId: recordId,
+          objectType,
+          eventType,
+          status: "COOLDOWN_SKIPPED" as any,
+          routingDurationMs: startMs ? Date.now() - startMs : null,
+          recordSnapshot: stripPii(fields) as any,
+          decisionTrace: trace as any,
+        },
+      });
+      return "unmatched";
+    }
+  }
+
   const rules = getActiveRules(orgId, objectType);
 
-  // Filter by trigger event
-  const eligibleRules = rules.filter(
-    (r) => r.triggerEvent === "BOTH" || r.triggerEvent === eventType
-  );
+  // Filter by trigger event — track skipped rules in trace
+  const eligibleRules: CachedRule[] = [];
+  for (const r of rules) {
+    // When targetRuleId is set (scheduled run), only evaluate that specific rule
+    if (targetRuleId && r.id !== targetRuleId) {
+      trace.rulesEvaluated.push({
+        ruleId: r.id, ruleName: r.name, priority: r.priority,
+        outcome: "SKIPPED_TRIGGER_EVENT",
+      });
+      continue;
+    }
+
+    if (eventType === "SEARCH") {
+      // SEARCH events only match SCHEDULED rules — skip trigger event check
+      // (the search criteria already filtered the records before they got here)
+      if ((r as any).routeType === "SCHEDULED" || targetRuleId) {
+        eligibleRules.push(r);
+      } else {
+        trace.rulesEvaluated.push({
+          ruleId: r.id, ruleName: r.name, priority: r.priority,
+          outcome: "SKIPPED_TRIGGER_EVENT",
+        });
+      }
+    } else if (r.triggerEvent === "BOTH" || r.triggerEvent === eventType) {
+      eligibleRules.push(r);
+    } else {
+      trace.rulesEvaluated.push({
+        ruleId: r.id, ruleName: r.name, priority: r.priority,
+        outcome: "SKIPPED_TRIGGER_EVENT",
+      });
+    }
+  }
+
+  // Helper: finalize trace and attach to the most recent routing log
+  async function attachTrace() {
+    trace.timing.totalMs = Date.now() - routeStartMs;
+    try {
+      const latestLog = await prisma.routingLog.findFirst({
+        where: { orgId, sfdcRecordId: recordId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (latestLog) {
+        await prisma.routingLog.update({
+          where: { id: latestLog.id },
+          data: { decisionTrace: trace as any },
+        });
+      }
+    } catch (e) {
+      console.error("[router] Failed to attach decision trace:", e);
+    }
+  }
 
   for (const rule of eligibleRules) {
-    // Determine if this is a new-style Route Builder rule (has branches) or legacy rule
     const isNewStyle = rule.branches.length > 0 || rule.matchConfig !== null || rule.defaultOwnerType !== null;
 
     if (isNewStyle) {
-      const result = await routeNewStyle(rule, payload, startMs);
-      if (result !== null) return result;
-      // null = this rule produced no outcome, try next rule (shouldn't happen for new-style but safety)
+      const result = await routeNewStyle(rule, payload, startMs, trace);
+      if (result !== null) {
+        await attachTrace();
+        return result;
+      }
     } else {
       // Legacy routing: evaluate conditions + single assignee
-      if (await evaluateRule(fields, rule.conditions, orgId)) {
-        const result = await routeLegacy(rule, payload, startMs);
-        if (result !== null) return result;
+      const evalStart = Date.now();
+      const evalResult = await evaluateRuleDetailed(fields, rule.conditions, orgId);
+      trace.timing.evaluationMs = (trace.timing.evaluationMs ?? 0) + (Date.now() - evalStart);
+
+      if (evalResult.matched) {
+        trace.rulesEvaluated.push({
+          ruleId: rule.id, ruleName: rule.name, priority: rule.priority,
+          outcome: "MATCHED", legacyConditions: evalResult.groups,
+        });
+        const result = await routeLegacy(rule, payload, startMs, trace);
+        if (result !== null) {
+          await attachTrace();
+          return result;
+        }
+      } else {
+        trace.rulesEvaluated.push({
+          ruleId: rule.id, ruleName: rule.name, priority: rule.priority,
+          outcome: "UNMATCHED", legacyConditions: evalResult.groups,
+        });
       }
     }
   }
 
   // No rule matched at all
+  trace.timing.totalMs = Date.now() - routeStartMs;
   await prisma.routingLog.create({
     data: {
       orgId,
@@ -313,6 +488,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
       status: "UNMATCHED",
       routingDurationMs: startMs ? Date.now() - startMs : null,
       recordSnapshot: stripPii(fields),
+      decisionTrace: trace as any,
     },
   });
   updateAggregates({
@@ -328,9 +504,17 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
 async function routeNewStyle(
   rule: CachedRule,
   payload: RoutingPayload,
-  startMs?: number
+  startMs?: number,
+  trace?: DecisionTrace
 ): Promise<RoutingResult | null> {
-  const { orgId, objectType, eventType, recordId, fields } = payload;
+  const { orgId, objectType, eventType: rawEventType, recordId, fields } = payload;
+  const eventType = rawEventType as any;
+  const ruleTrace: TraceRuleEval = {
+    ruleId: rule.id, ruleName: rule.name, priority: rule.priority,
+    outcome: "UNMATCHED",
+  };
+  // Push early — ruleTrace is mutated in place, so trace always has latest state
+  if (trace) trace.rulesEvaluated.push(ruleTrace);
 
   // Step 1: Match step (optional)
   if (rule.matchConfig) {
@@ -342,9 +526,25 @@ async function routeNewStyle(
     }
 
     if (conn) {
+      const matchStart = Date.now();
       const matchResult = await runMatcher(fields, rule.matchConfig, conn, recordId, orgId);
+      if (trace) trace.timing.matchPhaseMs = (trace.timing.matchPhaseMs ?? 0) + (Date.now() - matchStart);
+
+      // Build match trace
+      const mc = rule.matchConfig;
+      ruleTrace.matchPhase = {
+        config: {
+          checkLeads: mc.checkLeads, checkContacts: mc.checkContacts,
+          checkAccounts: mc.checkAccounts, matchEmail: mc.matchEmail,
+          matchPhone: mc.matchPhone, matchDomain: mc.matchDomain,
+          matchCompanyName: mc.matchCompanyName, fuzzyMatchMode: mc.fuzzyMatchMode,
+        },
+        checks: [],
+        result: { matched: !!matchResult, matchedType: matchResult?.type, action: undefined },
+      };
 
       if (matchResult) {
+        ruleTrace.outcome = "MATCHED";
         const mc = rule.matchConfig;
 
         // ── Lead matched ──
@@ -390,7 +590,8 @@ async function routeNewStyle(
 
           if (mc.onLeadMatch === "ASSIGN_TO_OWNER") {
             if (!rule.isDryRun) {
-              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
+              await setCooldown(orgId, recordId);
+              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
             }
             const leadOwnerLog = await prisma.routingLog.create({
               data: {
@@ -422,7 +623,8 @@ async function routeNewStyle(
             );
             if (assignee) {
               if (!rule.isDryRun) {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+                await setCooldown(orgId, recordId);
+                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
               }
               const leadCustomLog = await prisma.routingLog.create({
                 data: {
@@ -456,7 +658,8 @@ async function routeNewStyle(
         if (matchResult.type === "CONTACT") {
           if (mc.onContactMatch === "ASSIGN_TO_OWNER") {
             if (!rule.isDryRun) {
-              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
+              await setCooldown(orgId, recordId);
+              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
             }
             const contactOwnerLog = await prisma.routingLog.create({
               data: {
@@ -488,7 +691,8 @@ async function routeNewStyle(
             );
             if (assignee) {
               if (!rule.isDryRun) {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+                await setCooldown(orgId, recordId);
+                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
               }
               const contactCustomLog = await prisma.routingLog.create({
                 data: {
@@ -523,7 +727,8 @@ async function routeNewStyle(
         if (matchResult.type === "ACCOUNT") {
           if (mc.onAccountMatch === "ASSIGN_TO_OWNER") {
             if (!rule.isDryRun) {
-              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId);
+              await setCooldown(orgId, recordId);
+              await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
             }
             const accountOwnerLog = await prisma.routingLog.create({
               data: {
@@ -555,7 +760,8 @@ async function routeNewStyle(
             );
             if (assignee) {
               if (!rule.isDryRun) {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+                await setCooldown(orgId, recordId);
+                await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
               }
               const accountCustomLog = await prisma.routingLog.create({
                 data: {
@@ -590,8 +796,23 @@ async function routeNewStyle(
   }
 
   // Step 2: Branch (path) evaluation
+  ruleTrace.branches = [];
   for (const branch of rule.branches) {
-    if (await evaluateRule(fields, branch.conditions, orgId)) {
+    const evalStart = Date.now();
+    const evalResult = await evaluateRuleDetailed(fields, branch.conditions, orgId);
+    if (trace) trace.timing.evaluationMs = (trace.timing.evaluationMs ?? 0) + (Date.now() - evalStart);
+
+    const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
+    ruleTrace.branches!.push({
+      branchId: branch.id,
+      label: branchLabel,
+      priority: branch.priority,
+      matched: evalResult.matched,
+      conditionGroups: evalResult.groups,
+    });
+
+    if (evalResult.matched) {
+      ruleTrace.outcome = "MATCHED";
       const assignee = await resolveBranchAssignee(branch, orgId);
       if (!assignee) continue; // branch has no eligible assignee, try next
 
@@ -629,7 +850,8 @@ async function routeNewStyle(
 
       try {
         const conn = await getOrgConnection(orgId);
-        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+        await setCooldown(orgId, recordId);
+        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
         updateAggregates({
           orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
@@ -674,8 +896,10 @@ async function routeNewStyle(
       rule.defaultOwnerQueueId,
       orgId
     );
+    ruleTrace.defaultOwner = { evaluated: true, resolved: !!assignee };
 
     if (assignee) {
+      ruleTrace.outcome = "MATCHED";
       const log = await prisma.routingLog.create({
         data: {
           orgId, sfdcRecordId: recordId, objectType, eventType,
@@ -709,7 +933,8 @@ async function routeNewStyle(
 
       try {
         const conn = await getOrgConnection(orgId);
-        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+        await setCooldown(orgId, recordId);
+        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
         updateAggregates({
           orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
@@ -758,11 +983,23 @@ async function routeNewStyle(
 async function routeLegacy(
   rule: CachedRule,
   payload: RoutingPayload,
-  startMs?: number
+  startMs?: number,
+  trace?: DecisionTrace
 ): Promise<RoutingResult | null> {
-  const { orgId, objectType, eventType, recordId, fields } = payload;
+  const { orgId, objectType, eventType: rawEventType, recordId, fields } = payload;
+  const eventType = rawEventType as any;
 
   const assignee = await resolveAssignee(rule);
+  if (trace && assignee) {
+    trace.assignment = {
+      type: assignee.assignmentType,
+      assigneeName: assignee.assigneeName,
+      assigneeId: assignee.sfdcOwnerId,
+      teamId: assignee.teamId,
+      teamName: assignee.teamName,
+      source: "LEGACY",
+    };
+  }
   if (!assignee) {
     await prisma.routingLog.create({
       data: {
@@ -813,7 +1050,8 @@ async function routeLegacy(
 
   try {
     const conn = await getOrgConnection(orgId);
-    await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId);
+    await setCooldown(orgId, recordId);
+    await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
     await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
     updateAggregates({
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,

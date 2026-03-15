@@ -6,6 +6,7 @@ const mockPrisma = vi.hoisted(() => ({
   routingLog: {
     create: vi.fn().mockResolvedValue({ id: "log-1" }),
     update: vi.fn().mockResolvedValue({}),
+    findFirst: vi.fn().mockResolvedValue({ id: "log-1" }),
   },
   user: {
     findUnique: vi.fn().mockResolvedValue({ name: "Alice" }),
@@ -25,7 +26,13 @@ const mockPrisma = vi.hoisted(() => ({
 
 const mockGetActiveRules = vi.hoisted(() => vi.fn().mockReturnValue([]));
 const mockEvaluateRule = vi.hoisted(() => vi.fn().mockReturnValue(false));
+// Delegate to mockEvaluateRule so existing tests that set mockEvaluateRule.mockReturnValue(true) still work
+const mockEvaluateRuleDetailed = vi.hoisted(() => vi.fn().mockImplementation(async () => ({
+  matched: mockEvaluateRule(),
+  groups: [],
+})));
 const mockGetNextMember = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockGetNextWeightedMember = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockGetOrgConnection = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const mockGetSfdcUserId = vi.hoisted(() => vi.fn().mockResolvedValue("005SFDC_USER"));
 const mockGetSfdcQueueId = vi.hoisted(() => vi.fn().mockResolvedValue("00GSFDC_QUEUE"));
@@ -46,8 +53,11 @@ const mockResolveCompanySimilarity = vi.hoisted(() => vi.fn().mockResolvedValue(
 vi.mock("@lead-routing/db", () => ({ prisma: mockPrisma }));
 
 vi.mock("./cache.js", () => ({ getActiveRules: mockGetActiveRules }));
-vi.mock("./evaluator.js", () => ({ evaluateRule: mockEvaluateRule }));
-vi.mock("./round-robin.js", () => ({ getNextMember: mockGetNextMember }));
+vi.mock("./evaluator.js", () => ({ evaluateRule: mockEvaluateRule, evaluateRuleDetailed: mockEvaluateRuleDetailed }));
+vi.mock("./round-robin.js", () => ({
+  getNextMember: mockGetNextMember,
+  getNextWeightedMember: mockGetNextWeightedMember,
+}));
 const mockEvictOrgConnection = vi.hoisted(() => vi.fn());
 
 vi.mock("./sfdc.js", () => ({
@@ -55,6 +65,10 @@ vi.mock("./sfdc.js", () => ({
   getSfdcUserId: mockGetSfdcUserId,
   getSfdcQueueId: mockGetSfdcQueueId,
   evictOrgConnection: mockEvictOrgConnection,
+}));
+vi.mock("./cooldown.js", () => ({
+  setCooldown: vi.fn().mockResolvedValue(undefined),
+  isInCooldown: vi.fn().mockResolvedValue(false),
 }));
 vi.mock("./queue.js", () => ({ enqueueRetry: mockEnqueueRetry }));
 vi.mock("./webhook.js", () => ({ fireWebhook: mockFireWebhook }));
@@ -192,6 +206,7 @@ beforeEach(() => {
   // Reset default return values
   mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
   mockPrisma.routingLog.update.mockResolvedValue({});
+  mockPrisma.routingLog.findFirst.mockResolvedValue({ id: "log-1" });
   mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
   mockPrisma.user.update.mockResolvedValue({});
   mockPrisma.teamMember.findMany.mockResolvedValue([]);
@@ -200,6 +215,7 @@ beforeEach(() => {
   mockGetActiveRules.mockReturnValue([]);
   mockEvaluateRule.mockReturnValue(false);
   mockGetNextMember.mockResolvedValue(null);
+  mockGetNextWeightedMember.mockResolvedValue(null);
   mockGetOrgConnection.mockResolvedValue({});
   mockGetSfdcUserId.mockResolvedValue("005SFDC_USER");
   mockGetSfdcQueueId.mockResolvedValue("00GSFDC_QUEUE");
@@ -292,7 +308,7 @@ describe("routeRecord — legacy USER assignment", () => {
 
     expect(result).toBe("routed");
     expect(mockGetSfdcUserId).toHaveBeenCalledWith("user-1");
-    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005SFDC_USER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005SFDC_USER", "lrt__Routing_Action__c");
     expect(mockPrisma.routingLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "SUCCESS" } })
     );
@@ -314,7 +330,7 @@ describe("routeRecord — legacy USER assignment", () => {
     await routeRecord(makePayload({ objectType: "CONTACT" }));
 
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      expect.anything(), "Contact", expect.any(String), expect.any(String)
+      expect.anything(), "Contact", expect.any(String), expect.any(String), "lrt__Routing_Action__c"
     );
   });
 
@@ -326,7 +342,7 @@ describe("routeRecord — legacy USER assignment", () => {
     await routeRecord(makePayload({ objectType: "ACCOUNT" }));
 
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      expect.anything(), "Account", expect.any(String), expect.any(String)
+      expect.anything(), "Account", expect.any(String), expect.any(String), "lrt__Routing_Action__c"
     );
   });
 });
@@ -373,7 +389,7 @@ describe("routeRecord — legacy ROUND_ROBIN assignment", () => {
         data: { lastRoutedAt: expect.any(Date) },
       })
     );
-    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005RR_USER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005RR_USER", "lrt__Routing_Action__c");
   });
 
   it("returns 'unmatched' when no active team members exist", async () => {
@@ -440,7 +456,7 @@ describe("routeRecord — legacy QUEUE assignment", () => {
 
     expect(result).toBe("routed");
     expect(mockGetSfdcQueueId).toHaveBeenCalledWith("queue-1");
-    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "00GSFDC_QUEUE");
+    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "00GSFDC_QUEUE", "lrt__Routing_Action__c");
   });
 
   it("uses queue name from DB in the log", async () => {
@@ -778,7 +794,7 @@ describe("routeRecord — match step: lead matching", () => {
     const result = await routeRecord(makePayload());
 
     expect(result).toBe("routed");
-    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005LEAD_OWNER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005LEAD_OWNER", "lrt__Routing_Action__c");
     expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -871,7 +887,7 @@ describe("routeRecord — match step: lead matching", () => {
 
     expect(result).toBe("routed");
     expect(mockGetSfdcUserId).toHaveBeenCalledWith("custom-user-1");
-    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005SFDC_USER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005SFDC_USER", "lrt__Routing_Action__c");
   });
 });
 
@@ -900,7 +916,7 @@ describe("routeRecord — match step: contact matching", () => {
     const result = await routeRecord(makePayload());
 
     expect(result).toBe("routed");
-    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005CONTACT_OWNER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005CONTACT_OWNER", "lrt__Routing_Action__c");
     expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ assigneeName: "Matched Contact Owner" }),
@@ -985,7 +1001,7 @@ describe("routeRecord — match step: account matching", () => {
     const result = await routeRecord(makePayload());
 
     expect(result).toBe("routed");
-    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005ACCT_OWNER");
+    expect(mockUpdateOwner).toHaveBeenCalledWith(conn, "Lead", "00Q000000000001", "005ACCT_OWNER", "lrt__Routing_Action__c");
     expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ assigneeName: "Matched Account Owner" }),
@@ -1392,7 +1408,7 @@ describe("routeRecord — branch ROUND_ROBIN assignment", () => {
     const result = await routeRecord(makePayload());
 
     expect(result).toBe("routed");
-    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005RR");
+    expect(mockUpdateOwner).toHaveBeenCalledWith({}, "Lead", "00Q000000000001", "005RR", "lrt__Routing_Action__c");
   });
 });
 
@@ -1426,7 +1442,7 @@ describe("routeRecord — default owner ROUND_ROBIN", () => {
 
     expect(result).toBe("routed");
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      expect.anything(), "Lead", "00Q000000000001", "005DEFAULT_RR"
+      expect.anything(), "Lead", "00Q000000000001", "005DEFAULT_RR", "lrt__Routing_Action__c"
     );
   });
 });
@@ -1520,7 +1536,7 @@ describe("Company name matching", () => {
       expect.stringContaining("Account WHERE Name LIKE")
     );
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      conn, "Lead", "00Q000000000001", "005ACCT_OWNER"
+      conn, "Lead", "00Q000000000001", "005ACCT_OWNER", "lrt__Routing_Action__c"
     );
   });
 
@@ -1565,7 +1581,7 @@ describe("Company name matching", () => {
     expect(result).toBe("routed");
     expect(mockFuzzyCompanyMatch).toHaveBeenCalledWith("Acme Corp", "Acme Corporation");
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      conn, "Lead", "00Q000000000001", "005FUZZY_OWNER"
+      conn, "Lead", "00Q000000000001", "005FUZZY_OWNER", "lrt__Routing_Action__c"
     );
   });
 
@@ -1610,7 +1626,7 @@ describe("Company name matching", () => {
     expect(mockCheckAliasCache).toHaveBeenCalledWith("org-1", "Acme Corp", "ACME");
     expect(mockResolveCompanySimilarity).not.toHaveBeenCalled();
     expect(mockUpdateOwner).toHaveBeenCalledWith(
-      conn, "Lead", "00Q000000000001", "005AI_OWNER"
+      conn, "Lead", "00Q000000000001", "005AI_OWNER", "lrt__Routing_Action__c"
     );
   });
 
@@ -1738,5 +1754,396 @@ describe("Company name matching", () => {
 
     expect(result).toBe("unmatched");
     expect(mockResolveCompanySimilarity).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Decision Trace — Record Journey
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("routeRecord — decision trace", () => {
+  it("attaches decisionTrace to routing log via findFirst + update", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+
+    await routeRecord(makePayload());
+
+    // attachTrace calls findFirst then update
+    expect(mockPrisma.routingLog.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orgId: "org-1", sfdcRecordId: "00Q000000000001" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      })
+    );
+    expect(mockPrisma.routingLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "log-1" },
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            version: 1,
+            trigger: expect.objectContaining({ event: "INSERT", objectType: "LEAD" }),
+            rulesEvaluated: expect.any(Array),
+            timing: expect.objectContaining({ totalMs: expect.any(Number) }),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("includes trigger info in trace", async () => {
+    mockGetActiveRules.mockReturnValue([]);
+
+    await routeRecord(makePayload({ eventType: "UPDATE", objectType: "CONTACT" }));
+
+    // UNMATCHED path writes trace directly on log create
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            trigger: expect.objectContaining({ event: "UPDATE", objectType: "CONTACT" }),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("records UNMATCHED rules in rulesEvaluated when no rule matches", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(false);
+
+    await routeRecord(makePayload());
+
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            rulesEvaluated: expect.arrayContaining([
+              expect.objectContaining({
+                ruleId: "rule-1",
+                ruleName: "Test Rule",
+                outcome: "UNMATCHED",
+              }),
+            ]),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("records SKIPPED_TRIGGER_EVENT for rules that don't match the event type", async () => {
+    const rule = makeLegacyRule({ triggerEvent: "UPDATE" });
+    mockGetActiveRules.mockReturnValue([rule]);
+
+    await routeRecord(makePayload({ eventType: "INSERT" }));
+
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            rulesEvaluated: expect.arrayContaining([
+              expect.objectContaining({
+                ruleId: "rule-1",
+                outcome: "SKIPPED_TRIGGER_EVENT",
+              }),
+            ]),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("includes timing data in trace", async () => {
+    mockGetActiveRules.mockReturnValue([]);
+
+    await routeRecord(makePayload());
+
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            timing: expect.objectContaining({
+              totalMs: expect.any(Number),
+            }),
+          }),
+        }),
+      })
+    );
+  });
+
+  it("does not crash when attachTrace findFirst returns null", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+    mockPrisma.routingLog.findFirst.mockResolvedValue(null);
+
+    // Should not throw
+    const result = await routeRecord(makePayload());
+    expect(result).toBe("routed");
+  });
+
+  it("includes branch trace data for new-style rules", async () => {
+    const rule = makeNewStyleRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+
+    await routeRecord(makePayload());
+
+    expect(mockPrisma.routingLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decisionTrace: expect.objectContaining({
+            rulesEvaluated: expect.arrayContaining([
+              expect.objectContaining({
+                ruleId: "rule-1",
+                branches: expect.any(Array),
+              }),
+            ]),
+          }),
+        }),
+      })
+    );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Weighted Round Robin — distributionType branching
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("routeRecord — weighted round-robin assignment", () => {
+  const weightedMembers = [
+    {
+      id: "tm-1", userId: "user-1", status: "ACTIVE", teamId: "team-1",
+      assignmentCount: 0, weight: 60, createdAt: new Date(),
+      user: { id: "user-1", sfdcUserId: "005WRR_USER1", name: "Alice", email: "alice@test.com" },
+    },
+    {
+      id: "tm-2", userId: "user-2", status: "ACTIVE", teamId: "team-1",
+      assignmentCount: 0, weight: 40, createdAt: new Date(),
+      user: { id: "user-2", sfdcUserId: "005WRR_USER2", name: "Bob", email: "bob@test.com" },
+    },
+  ];
+
+  it("uses getNextWeightedMember when team distributionType is 'weighted'", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Weighted Team", distributionType: "weighted",
+    });
+    mockGetNextWeightedMember.mockResolvedValue({
+      id: "tm-1", userId: "user-1", name: "Alice", email: "alice@test.com",
+      assignmentCount: 0, weight: 60,
+    });
+
+    const result = await routeRecord(makePayload());
+
+    expect(result).toBe("routed");
+    expect(mockGetNextWeightedMember).toHaveBeenCalledWith("org-1", "team-1", expect.any(Array));
+    expect(mockGetNextMember).not.toHaveBeenCalled();
+    expect(mockUpdateOwner).toHaveBeenCalledWith(
+      {}, "Lead", "00Q000000000001", "005WRR_USER1", "lrt__Routing_Action__c"
+    );
+  });
+
+  it("uses getNextMember when team distributionType is 'round-robin'", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Equal Team", distributionType: "round-robin",
+    });
+    mockGetNextMember.mockResolvedValue({
+      id: "tm-1", userId: "user-1", name: "Alice", email: "alice@test.com",
+      assignmentCount: 0,
+    });
+
+    const result = await routeRecord(makePayload());
+
+    expect(result).toBe("routed");
+    expect(mockGetNextMember).toHaveBeenCalledWith("org-1", "team-1", expect.any(Array));
+    expect(mockGetNextWeightedMember).not.toHaveBeenCalled();
+  });
+
+  it("defaults to getNextMember when team has no distributionType (null)", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Default Team", distributionType: null,
+    });
+    mockGetNextMember.mockResolvedValue({
+      id: "tm-2", userId: "user-2", name: "Bob", email: "bob@test.com",
+      assignmentCount: 0,
+    });
+
+    const result = await routeRecord(makePayload());
+
+    expect(result).toBe("routed");
+    expect(mockGetNextMember).toHaveBeenCalled();
+    expect(mockGetNextWeightedMember).not.toHaveBeenCalled();
+  });
+
+  it("returns 'unmatched' when getNextWeightedMember returns null", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Weighted Team", distributionType: "weighted",
+    });
+    mockGetNextWeightedMember.mockResolvedValue(null);
+
+    const result = await routeRecord(makePayload());
+
+    expect(result).toBe("unmatched");
+  });
+
+  it("increments assignment count and updates lastRoutedAt for weighted member", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Weighted Team", distributionType: "weighted",
+    });
+    mockGetNextWeightedMember.mockResolvedValue({
+      id: "tm-2", userId: "user-2", name: "Bob", email: "bob@test.com",
+      assignmentCount: 0, weight: 40,
+    });
+
+    await routeRecord(makePayload());
+
+    expect(mockPrisma.teamMember.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "tm-2" },
+        data: { assignmentCount: { increment: 1 } },
+      })
+    );
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "user-2" },
+        data: { lastRoutedAt: expect.any(Date) },
+      })
+    );
+  });
+
+  it("passes weight property through to getNextWeightedMember members array", async () => {
+    const rule = makeLegacyRule({
+      assignmentType: "ROUND_ROBIN",
+      assigneeUserId: null,
+      assigneeTeamId: "team-1",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+
+    mockPrisma.teamMember.findMany.mockResolvedValue(weightedMembers);
+    mockPrisma.roundRobinTeam.findUnique.mockResolvedValue({
+      id: "team-1", name: "Weighted Team", distributionType: "weighted",
+    });
+    mockGetNextWeightedMember.mockResolvedValue({
+      id: "tm-1", userId: "user-1", name: "Alice", email: "alice@test.com",
+      assignmentCount: 0, weight: 60,
+    });
+
+    await routeRecord(makePayload());
+
+    // Verify the members array passed to getNextWeightedMember includes weight
+    const membersArg = mockGetNextWeightedMember.mock.calls[0][2];
+    expect(membersArg[0]).toHaveProperty("weight", 60);
+    expect(membersArg[1]).toHaveProperty("weight", 40);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ruleId targeting (scheduled route runs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("ruleId targeting", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
+    mockPrisma.routingLog.update.mockResolvedValue({});
+    mockPrisma.routingLog.findFirst.mockResolvedValue({ id: "log-1" });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+  });
+
+  it("skips rules that don't match the target ruleId", async () => {
+    const target = makeLegacyRule({ id: "rule-target", name: "Target Rule" });
+    const other = makeLegacyRule({ id: "rule-other", name: "Other Rule" });
+    mockGetActiveRules.mockReturnValue([other, target]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+
+    const result = await routeRecord(
+      makePayload({ eventType: "SEARCH", ruleId: "rule-target" }),
+      Date.now()
+    );
+
+    expect(result).toBe("routed");
+    // evaluateRule should only be called for the target rule, not the other
+    expect(mockEvaluateRule).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns unmatched when target rule doesn't match conditions", async () => {
+    const target = makeLegacyRule({ id: "rule-target", name: "Target Rule" });
+    const other = makeLegacyRule({ id: "rule-other", name: "Other Rule" });
+    mockGetActiveRules.mockReturnValue([other, target]);
+    mockEvaluateRule.mockReturnValue(false);
+
+    const result = await routeRecord(
+      makePayload({ eventType: "SEARCH", ruleId: "rule-target" }),
+      Date.now()
+    );
+
+    expect(result).toBe("unmatched");
+  });
+
+  it("routes without ruleId filter when ruleId is not set", async () => {
+    const rule1 = makeLegacyRule({ id: "rule-1", name: "Rule 1", triggerEvent: "BOTH" });
+    mockGetActiveRules.mockReturnValue([rule1]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+
+    const result = await routeRecord(
+      makePayload({ eventType: "INSERT" }),
+      Date.now()
+    );
+
+    expect(result).toBe("routed");
+    expect(mockEvaluateRule).toHaveBeenCalledTimes(1);
   });
 });
