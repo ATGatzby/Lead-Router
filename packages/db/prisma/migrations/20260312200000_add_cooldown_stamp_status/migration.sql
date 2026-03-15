@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "RoutingStatus" ADD VALUE 'COOLDOWN_SKIPPED';
+ALTER TYPE "RoutingStatus" ADD VALUE 'STAMP_SKIPPED';

@@ -20,6 +20,12 @@ enum TriggerEvent {
   INSERT
   UPDATE
   BOTH
+  SEARCH
+}
+
+enum RouteType {
+  REALTIME
+  SCHEDULED
 }
 
 enum RuleStatus {
@@ -44,6 +50,8 @@ enum RoutingStatus {
   UNMATCHED
   RETRY
   MERGED
+  COOLDOWN_SKIPPED
+  STAMP_SKIPPED
 }
 
 enum LeadMatchAction {
@@ -160,6 +168,7 @@ model User {
   profile      String?
   department   String?
   isLicensed   Boolean   @default(false)
+  licensedVia  String?   // "individual" | "role" | "profile" | "custom_field" — how user was licensed
   isActive     Boolean   @default(true) // false if no longer in SFDC
   lastRoutedAt DateTime?
   syncedAt     DateTime  @default(now())
@@ -179,8 +188,9 @@ model RoundRobinTeam {
   id           String   @id @default(cuid())
   orgId        String
   name         String
-  description  String?
-  pointerIndex Int      @default(0) // kept in sync with Redis; Redis is authoritative
+  description      String?
+  distributionType String   @default("round-robin") // "round-robin" | "weighted"
+  pointerIndex     Int      @default(0) // kept in sync with Redis; Redis is authoritative
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -226,6 +236,20 @@ model RoutingRule {
   isDryRun         Boolean         @default(false)
   triggerName      String          @default("")
   criteriaSyncedAt DateTime?
+  // Route type (real-time Apex trigger vs scheduled search)
+  routeType         RouteType       @default(REALTIME)
+  // Scheduled route fields
+  scheduleFrequency String?         // "DAILY" | "WEEKLY" | "MONTHLY" | null (one-time)
+  scheduleTime      String?         // "06:00" (24h format)
+  scheduleTimezone  String?         // "UTC", "US/Eastern", etc.
+  scheduleCron      String?         // computed cron expression for BullMQ
+  searchCriteria    Json?           // ConditionGroup[] — search trigger criteria
+  lastRunAt         DateTime?
+  lastRunStatus     String?         // "SUCCESS" | "FAILED" | "PARTIAL"
+  lastRunRecords    Int?            // records routed in last run
+  lastRunDurationMs Int?
+  totalRuns         Int             @default(0)
+  totalRecordsRouted Int            @default(0)
   // Default owner: absolute catch-all for new Route Builder routes
   defaultOwnerType     AssignmentType?
   defaultOwnerUserId   String?
@@ -374,6 +398,7 @@ model RoutingLog {
   retryCount      Int             @default(0)
   dismissed       Boolean         @default(false)
   recordSnapshot  Json?           // full field payload from SFDC at time of routing
+  decisionTrace   Json?           // structured routing decision trace for Record Journey
   teamId             String?
   teamName           String?
   routingDurationMs  Int?              // ms from webhook receipt → SFDC assignment
@@ -388,6 +413,7 @@ model RoutingLog {
   @@index([orgId, status])
   @@index([orgId, teamId])
   @@index([orgId, ruleId])
+  @@index([orgId, sfdcRecordId, createdAt])
   @@map("routing_logs")
 }
 
@@ -414,6 +440,7 @@ model SfdcQueue {
   orgId       String
   sfdcQueueId String   // SFDC Queue ID (00G...)
   name        String
+  isLicensed  Boolean  @default(false) // whether queue can receive routed records
   syncedAt    DateTime @default(now())
 
   org               Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
