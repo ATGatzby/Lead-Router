@@ -25,6 +25,7 @@ interface Team {
   id: string;
   name: string;
   description: string | null;
+  distributionType: string;
   memberCount: number;
   activeCount: number;
   totalAssigned: number;
@@ -126,7 +127,7 @@ export default function RoundRobinsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Teams</h1>
+          <h1 className="text-2xl font-semibold font-display">Teams</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Create pools of reps for fair, sequential lead distribution.
           </p>
@@ -178,6 +179,16 @@ export default function RoundRobinsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{team.name}</span>
+                  <Badge
+                    variant={team.distributionType === "weighted" ? "default" : "outline"}
+                    className={`text-xs shrink-0 ${
+                      team.distributionType === "weighted"
+                        ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                        : "bg-green-50 text-green-700 hover:bg-green-50 dark:bg-green-950 dark:text-green-300 border-green-200 dark:border-green-800"
+                    }`}
+                  >
+                    {team.distributionType === "weighted" ? "Weighted" : "Round Robin"}
+                  </Badge>
                   {team.activeCount < team.memberCount && team.memberCount > 0 && (
                     <Badge variant="outline" className="text-xs shrink-0">
                       {team.activeCount} active

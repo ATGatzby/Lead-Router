@@ -29,6 +29,7 @@ export async function GET(_req: NextRequest) {
         id: team.id,
         name: team.name,
         description: team.description,
+        distributionType: team.distributionType,
         memberCount,
         activeCount,
         totalAssigned,
@@ -57,8 +58,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
+    const distributionType = body.distributionType ?? "round-robin";
+    if (distributionType !== "round-robin" && distributionType !== "weighted") {
+      return NextResponse.json({ error: "distributionType must be 'round-robin' or 'weighted'" }, { status: 400 });
+    }
+
     const team = await prisma.roundRobinTeam.create({
-      data: { orgId, name, description: description ?? undefined },
+      data: { orgId, name, description: description ?? undefined, distributionType },
     });
 
     await prisma.auditLog.create({

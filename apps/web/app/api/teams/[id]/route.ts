@@ -44,6 +44,7 @@ export async function GET(
       name: m.user.name,
       email: m.user.email,
       status: m.status,
+      weight: m.weight,
       assignmentCount: m.assignmentCount,
       sharePercent:
         totalAssigned > 0
@@ -57,6 +58,7 @@ export async function GET(
         id: team.id,
         name: team.name,
         description: team.description,
+        distributionType: team.distributionType,
         pointerIndex: team.pointerIndex,
         createdAt: team.createdAt,
         memberCount: team.members.length,
@@ -85,7 +87,7 @@ export async function PUT(
 
     const existing = await prisma.roundRobinTeam.findFirst({
       where: { id, orgId },
-      select: { id: true, name: true, description: true },
+      select: { id: true, name: true, description: true, distributionType: true },
     });
 
     if (!existing) {
@@ -93,16 +95,36 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const name = (body.name ?? "").trim();
-    const description = (body.description ?? "").trim() || null;
 
-    if (!name) {
-      return NextResponse.json({ error: "name is required" }, { status: 400 });
+    const updateData: Record<string, string | null> = {};
+
+    // Name is optional — only validate if provided
+    if (body.name !== undefined) {
+      const name = (body.name ?? "").trim();
+      if (!name) {
+        return NextResponse.json({ error: "name is required" }, { status: 400 });
+      }
+      updateData.name = name;
+    }
+
+    if (body.description !== undefined) {
+      updateData.description = (body.description ?? "").trim() || null;
+    }
+
+    if (body.distributionType !== undefined) {
+      if (body.distributionType !== "round-robin" && body.distributionType !== "weighted") {
+        return NextResponse.json({ error: "distributionType must be 'round-robin' or 'weighted'" }, { status: 400 });
+      }
+      updateData.distributionType = body.distributionType;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
 
     const updated = await prisma.roundRobinTeam.update({
-      where: { id },
-      data: { name, description: description ?? undefined },
+      where: { id, orgId },
+      data: updateData,
     });
 
     await prisma.auditLog.create({
@@ -113,8 +135,8 @@ export async function PUT(
         action: "TEAM_UPDATED",
         entityType: "RoundRobinTeam",
         entityId: id,
-        beforeState: { name: existing.name, description: existing.description },
-        afterState: { name, description },
+        beforeState: { name: existing.name, description: existing.description, distributionType: existing.distributionType },
+        afterState: updateData,
       },
     });
 

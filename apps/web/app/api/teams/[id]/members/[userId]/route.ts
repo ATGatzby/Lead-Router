@@ -39,9 +39,16 @@ export async function PATCH(
       );
     }
 
+    const weight = body.weight;
+    if (weight !== undefined) {
+      if (!Number.isInteger(weight) || weight < 0) {
+        return NextResponse.json({ error: "weight must be a non-negative integer" }, { status: 400 });
+      }
+    }
+
     await prisma.teamMember.update({
       where: { teamId_userId: { teamId, userId } },
-      data: { status: newStatus },
+      data: { status: newStatus, ...(weight !== undefined && { weight }) },
     });
 
     await prisma.auditLog.create({
