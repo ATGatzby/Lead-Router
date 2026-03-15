@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockPrisma = vi.hoisted(() => ({
-  $executeRawUnsafe: vi.fn().mockResolvedValue(0),
+  $executeRawUnsafe: vi.fn().mockResolvedValue(1),
   conversionTracking: {
     create: vi.fn().mockResolvedValue({}),
   },
@@ -34,22 +34,20 @@ const baseInput = {
 describe("updateAggregates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: UPDATE returns 0 rows → triggers INSERT fallback
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(0);
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
   });
 
   it("fires only org-level upsert when all dimension IDs are null", async () => {
     await updateAggregates({ ...baseInput });
 
-    // 1 org-level upsert = UPDATE (returns 0) + INSERT = 2 calls
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
+    // 1 atomic INSERT ... ON CONFLICT per dimension level
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
   });
 
   it("fires org-level + per-rule upserts when ruleId is provided", async () => {
     await updateAggregates({ ...baseInput, ruleId: "rule-1" });
 
-    // 2 upserts × 2 calls each = 4
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(4);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
   });
 
   it("fires org-level + per-rule + per-path upserts when ruleId and pathLabel are provided", async () => {
@@ -60,29 +58,25 @@ describe("updateAggregates", () => {
       branchId: "branch-1",
     });
 
-    // 3 upserts × 2 calls each = 6
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(6);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(3);
   });
 
   it("does NOT fire per-path upsert when pathLabel is set but ruleId is null", async () => {
     await updateAggregates({ ...baseInput, pathLabel: "Path A" });
 
-    // Only org-level = 2 calls
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
   });
 
   it("fires per-team upsert when teamId is provided", async () => {
     await updateAggregates({ ...baseInput, teamId: "team-1" });
 
-    // org-level + per-team = 2 upserts × 2 calls = 4
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(4);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
   });
 
   it("fires per-assignee upsert when assigneeId is provided", async () => {
     await updateAggregates({ ...baseInput, assigneeId: "user-1" });
 
-    // org-level + per-assignee = 2 upserts × 2 calls = 4
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(4);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
   });
 
   it("fires per-team AND per-assignee when both teamId and assigneeId are provided", async () => {
@@ -92,8 +86,7 @@ describe("updateAggregates", () => {
       assigneeId: "user-1",
     });
 
-    // org-level + per-team + per-assignee = 3 upserts × 2 calls = 6
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(6);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(3);
   });
 
   it("fires all 5 dimension upserts when every field is populated", async () => {
@@ -106,17 +99,7 @@ describe("updateAggregates", () => {
       assigneeId: "user-1",
     });
 
-    // 5 upserts × 2 calls each = 10
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(10);
-  });
-
-  it("skips INSERT when UPDATE returns 1 (row already existed)", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
-
-    await updateAggregates({ ...baseInput });
-
-    // 1 upsert: only the UPDATE call, no INSERT
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(5);
   });
 
   it("does not throw when $executeRawUnsafe rejects", async () => {
@@ -127,61 +110,51 @@ describe("updateAggregates", () => {
   });
 
   it("passes status increments correctly for FAILED status", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1); // skip INSERT
-
     await updateAggregates({ ...baseInput, status: "FAILED" });
 
     const args = mockPrisma.$executeRawUnsafe.mock.calls[0];
-    // args: [sql, success, failed, unmatched, merged, durationMs, orgId, ...]
-    expect(args[1]).toBe(0); // success_count increment
-    expect(args[2]).toBe(1); // failed_count increment
-    expect(args[3]).toBe(0); // unmatched_count increment
-    expect(args[4]).toBe(0); // merged_count increment
+    // New param order: [sql, id, orgId, date, ruleId, pathLabel, branchId, teamId, assigneeId, objectType, success, failed, unmatched, merged, durationMs]
+    expect(args[10]).toBe(0); // success_count increment
+    expect(args[11]).toBe(1); // failed_count increment
+    expect(args[12]).toBe(0); // unmatched_count increment
+    expect(args[13]).toBe(0); // merged_count increment
   });
 
   it("passes status increments correctly for UNMATCHED status", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
-
     await updateAggregates({ ...baseInput, status: "UNMATCHED" });
 
     const args = mockPrisma.$executeRawUnsafe.mock.calls[0];
-    expect(args[1]).toBe(0); // success
-    expect(args[2]).toBe(0); // failed
-    expect(args[3]).toBe(1); // unmatched
-    expect(args[4]).toBe(0); // merged
+    expect(args[10]).toBe(0); // success
+    expect(args[11]).toBe(0); // failed
+    expect(args[12]).toBe(1); // unmatched
+    expect(args[13]).toBe(0); // merged
   });
 
   it("passes status increments correctly for MERGED status", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
-
     await updateAggregates({ ...baseInput, status: "MERGED" });
 
     const args = mockPrisma.$executeRawUnsafe.mock.calls[0];
-    expect(args[1]).toBe(0); // success
-    expect(args[2]).toBe(0); // failed
-    expect(args[3]).toBe(0); // unmatched
-    expect(args[4]).toBe(1); // merged
+    expect(args[10]).toBe(0); // success
+    expect(args[11]).toBe(0); // failed
+    expect(args[12]).toBe(0); // unmatched
+    expect(args[13]).toBe(1); // merged
   });
 
   it("passes durationMs as null when not provided", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
-
     await updateAggregates({ ...baseInput, durationMs: null });
 
     const args = mockPrisma.$executeRawUnsafe.mock.calls[0];
-    expect(args[5]).toBeNull(); // durationMs parameter
+    expect(args[14]).toBeNull(); // durationMs parameter
   });
 
   it("normalises date to start of UTC day", async () => {
-    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
-
     await updateAggregates({
       ...baseInput,
       date: new Date("2026-03-10T18:45:30.123Z"),
     });
 
     const args = mockPrisma.$executeRawUnsafe.mock.calls[0];
-    const dateArg = args[7] as Date; // date parameter position
+    const dateArg = args[3] as Date; // date is param $3
     expect(dateArg.toISOString()).toBe("2026-03-10T00:00:00.000Z");
   });
 });

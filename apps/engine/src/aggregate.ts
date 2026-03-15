@@ -60,37 +60,49 @@ async function upsertAggregate(
   const inc = statusIncrements(status);
   const dayDate = startOfDay(date);
 
-  // Try UPDATE first
-  const updated: number = await prisma.$executeRawUnsafe(
-    `UPDATE routing_daily_aggregates SET
-      "successCount"  = "successCount"  + $1,
-      "failedCount"   = "failedCount"   + $2,
-      "unmatchedCount" = "unmatchedCount" + $3,
-      "mergedCount"   = "mergedCount"   + $4,
-      "totalCount"    = "totalCount"    + 1,
-      "avgDurationMs" = CASE WHEN $5::integer IS NOT NULL THEN
-        (COALESCE("avgDurationMs", 0) * "totalCount" + $5::integer) / ("totalCount" + 1)
-        ELSE "avgDurationMs" END,
-      "minDurationMs" = CASE WHEN $5::integer IS NOT NULL THEN
-        LEAST(COALESCE("minDurationMs", $5::integer), $5::integer)
-        ELSE "minDurationMs" END,
-      "maxDurationMs" = CASE WHEN $5::integer IS NOT NULL THEN
-        GREATEST(COALESCE("maxDurationMs", $5::integer), $5::integer)
-        ELSE "maxDurationMs" END,
-      "updatedAt" = NOW()
-    WHERE "orgId"      = $6
-      AND date         = $7
-      AND "ruleId"     IS NOT DISTINCT FROM $8
-      AND "pathLabel"  IS NOT DISTINCT FROM $9
-      AND "branchId"   IS NOT DISTINCT FROM $10
-      AND "teamId"     IS NOT DISTINCT FROM $11
-      AND "assigneeId" IS NOT DISTINCT FROM $12
-      AND "objectType" IS NOT DISTINCT FROM $13::"SfdcObjectType"`,
-    inc.success,
-    inc.failed,
-    inc.unmatched,
-    inc.merged,
-    durationMs,
+  // Atomic upsert using the functional unique index (COALESCE handles NULLs).
+  // ON CONFLICT eliminates the race condition where concurrent requests
+  // could both INSERT duplicate rows with the UPDATE-then-INSERT pattern.
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO routing_daily_aggregates (
+      id, "orgId", date, "ruleId", "pathLabel", "branchId",
+      "teamId", "assigneeId", "objectType",
+      "successCount", "failedCount", "unmatchedCount", "mergedCount", "totalCount",
+      "avgDurationMs", "minDurationMs", "maxDurationMs",
+      "createdAt", "updatedAt"
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6,
+      $7, $8, $9::"SfdcObjectType",
+      $10, $11, $12, $13, 1,
+      $14::double precision, $14::integer, $14::integer,
+      NOW(), NOW()
+    )
+    ON CONFLICT (
+      "orgId", date,
+      COALESCE("ruleId", ''),
+      COALESCE("pathLabel", ''),
+      COALESCE("branchId", ''),
+      COALESCE("teamId", ''),
+      COALESCE("assigneeId", ''),
+      COALESCE("objectType"::text, '')
+    ) DO UPDATE SET
+      "successCount"  = routing_daily_aggregates."successCount"  + $10,
+      "failedCount"   = routing_daily_aggregates."failedCount"   + $11,
+      "unmatchedCount" = routing_daily_aggregates."unmatchedCount" + $12,
+      "mergedCount"   = routing_daily_aggregates."mergedCount"   + $13,
+      "totalCount"    = routing_daily_aggregates."totalCount"    + 1,
+      "avgDurationMs" = CASE WHEN $14::integer IS NOT NULL THEN
+        (COALESCE(routing_daily_aggregates."avgDurationMs", 0) * routing_daily_aggregates."totalCount" + $14::integer)
+        / (routing_daily_aggregates."totalCount" + 1)
+        ELSE routing_daily_aggregates."avgDurationMs" END,
+      "minDurationMs" = CASE WHEN $14::integer IS NOT NULL THEN
+        LEAST(COALESCE(routing_daily_aggregates."minDurationMs", $14::integer), $14::integer)
+        ELSE routing_daily_aggregates."minDurationMs" END,
+      "maxDurationMs" = CASE WHEN $14::integer IS NOT NULL THEN
+        GREATEST(COALESCE(routing_daily_aggregates."maxDurationMs", $14::integer), $14::integer)
+        ELSE routing_daily_aggregates."maxDurationMs" END,
+      "updatedAt" = NOW()`,
+    randomUUID(),
     orgId,
     dayDate,
     ruleId,
@@ -99,39 +111,12 @@ async function upsertAggregate(
     teamId,
     assigneeId,
     objectType,
+    inc.success,
+    inc.failed,
+    inc.unmatched,
+    inc.merged,
+    durationMs,
   );
-
-  if (updated === 0) {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO routing_daily_aggregates (
-        id, "orgId", date, "ruleId", "pathLabel", "branchId",
-        "teamId", "assigneeId", "objectType",
-        "successCount", "failedCount", "unmatchedCount", "mergedCount", "totalCount",
-        "avgDurationMs", "minDurationMs", "maxDurationMs",
-        "createdAt", "updatedAt"
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9::"SfdcObjectType",
-        $10, $11, $12, $13, 1,
-        $14::double precision, $14::integer, $14::integer,
-        NOW(), NOW()
-      )`,
-      randomUUID(),
-      orgId,
-      dayDate,
-      ruleId,
-      pathLabel,
-      branchId,
-      teamId,
-      assigneeId,
-      objectType,
-      inc.success,
-      inc.failed,
-      inc.unmatched,
-      inc.merged,
-      durationMs,
-    );
-  }
 }
 
 /* ------------------------------------------------------------------ */
