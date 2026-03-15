@@ -168,9 +168,9 @@ export default function ChartBlock({ spec }: { spec: ChartSpec }) {
   const colors = spec.colors ?? DEFAULT_COLORS;
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-lg border bg-white dark:bg-gray-950 p-4">
       {spec.title && (
-        <h4 className="mb-3 text-sm font-semibold text-gray-800">{spec.title}</h4>
+        <h4 className="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-200">{spec.title}</h4>
       )}
       <ResponsiveContainer width="100%" height={300}>
         {spec.type === "bar" ? (

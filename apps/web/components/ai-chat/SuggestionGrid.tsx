@@ -18,7 +18,7 @@ export function SuggestionGrid({ onSelect }: SuggestionGridProps) {
         <button
           key={s.text}
           onClick={() => onSelect(s.text)}
-          className="rounded-xl border bg-card p-3 text-left text-sm leading-snug transition hover:border-violet-400 hover:bg-violet-50"
+          className="rounded-xl border bg-card p-3 text-left text-sm leading-snug transition hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950"
         >
           <span className="mb-1 block text-base">{s.icon}</span>
           {s.text}

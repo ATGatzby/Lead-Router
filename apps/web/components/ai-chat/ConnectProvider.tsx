@@ -23,22 +23,22 @@ const PROVIDERS: ProviderOption[] = [
     name: "Anthropic (Claude)",
     description: "Claude Sonnet 4.5 for fast queries, Opus 4 for deep analysis. Best tool-use accuracy.",
     tag: "Recommended",
-    tagColor: "bg-green-100 text-green-800",
-    color: "bg-amber-50",
+    tagColor: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300",
+    color: "bg-amber-50 dark:bg-amber-950",
   },
   {
     id: "openai",
     name: "OpenAI (ChatGPT)",
     description: "GPT-4o for balanced performance, o1 for reasoning. Compatible with Azure OpenAI.",
     tag: "Popular",
-    tagColor: "bg-indigo-100 text-indigo-800",
-    color: "bg-green-50",
+    tagColor: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300",
+    color: "bg-green-50 dark:bg-green-950",
   },
   {
     id: "gemini",
     name: "Google (Gemini)",
     description: "Gemini 2.5 Pro for complex analysis, Flash for fast queries. 1M token context.",
-    color: "bg-blue-50",
+    color: "bg-blue-50 dark:bg-blue-950",
   },
   {
     id: "custom",
@@ -123,8 +123,8 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-6 w-6 text-green-600" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+            <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
           </div>
           <h3 className="text-base font-semibold">Connected to {providerName}</h3>
           <p className="text-sm text-muted-foreground">
@@ -132,7 +132,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
           </p>
           <button
             onClick={onConnected}
-            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-violet-600 dark:bg-violet-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 dark:hover:bg-violet-600"
           >
             Start chatting
             <ArrowRight className="h-4 w-4" />
@@ -162,8 +162,8 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
               className={cn(
                 "flex items-center gap-3.5 rounded-xl border-2 p-4 text-left transition",
                 provider === p.id
-                  ? "border-violet-500 bg-violet-50/50 shadow-sm shadow-violet-500/10"
-                  : "border-border hover:border-violet-300 hover:bg-violet-50/30"
+                  ? "border-violet-500 bg-violet-50/50 dark:bg-violet-950/50 shadow-sm shadow-violet-500/10"
+                  : "border-border hover:border-violet-300 dark:hover:border-violet-700 hover:bg-violet-50/30 dark:hover:bg-violet-950/30"
               )}
             >
               <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg", p.color)}>
@@ -182,9 +182,9 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
               </div>
               <div className={cn(
                 "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition",
-                provider === p.id ? "border-violet-500" : "border-border"
+                provider === p.id ? "border-violet-500 dark:border-violet-400" : "border-border"
               )}>
-                {provider === p.id && <div className="h-2 w-2 rounded-full bg-violet-500" />}
+                {provider === p.id && <div className="h-2 w-2 rounded-full bg-violet-500 dark:bg-violet-400" />}
               </div>
             </button>
           ))}
@@ -199,7 +199,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={provider === "claude" ? "sk-ant-api03-..." : provider === "openai" ? "sk-proj-..." : provider === "gemini" ? "AIza..." : "your-api-key"}
-              className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 dark:focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:focus:ring-violet-400/20"
             />
           </div>
 
@@ -209,7 +209,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-xs focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-xs focus:border-violet-500 dark:focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:focus:ring-violet-400/20"
               >
                 {MODEL_OPTIONS[provider].map((m) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
@@ -227,7 +227,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="https://api.your-provider.com/v1"
-                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 dark:focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:focus:ring-violet-400/20"
                 />
               </div>
               <div className="space-y-1.5">
@@ -237,7 +237,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
                   value={customModel}
                   onChange={(e) => setCustomModel(e.target.value)}
                   placeholder="e.g., llama-3.1-70b"
-                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 dark:focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:focus:ring-violet-400/20"
                 />
               </div>
               <div className="space-y-1.5">
@@ -249,7 +249,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
                   value={customHeaders}
                   onChange={(e) => setCustomHeaders(e.target.value)}
                   placeholder='{"X-Custom-Header": "value"}'
-                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs focus:border-violet-500 dark:focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:focus:ring-violet-400/20"
                 />
               </div>
             </>
@@ -257,9 +257,9 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
         </div>
 
         {/* Security note */}
-        <div className="flex items-start gap-2.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 mb-6">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-          <p className="text-xs text-green-800 leading-relaxed">
+        <div className="flex items-start gap-2.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 px-4 py-3 mb-6">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+          <p className="text-xs text-green-800 dark:text-green-300 leading-relaxed">
             <strong>Your key stays on your server.</strong> It&apos;s encrypted with your APP_SECRET and stored in your self-hosted database. API calls go directly from your server to the provider.
           </p>
         </div>
@@ -269,7 +269,7 @@ export function ConnectProvider({ onConnected }: ConnectProviderProps) {
           <button
             onClick={() => saveMutation.mutate()}
             disabled={!apiKey || saveMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 dark:bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saveMutation.isPending ? (
               <>

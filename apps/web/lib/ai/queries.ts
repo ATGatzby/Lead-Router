@@ -14,7 +14,7 @@ function dateFilter(range: DateRange) {
 
 export async function queryRoutingLogs(
   orgId: string,
-  filters: DateRange & { status?: string; ruleId?: string; assigneeId?: string; objectType?: string; limit?: number }
+  filters: DateRange & { status?: string; ruleId?: string; assigneeId?: string; assigneeName?: string; objectType?: string; pathLabel?: string; branchId?: string; limit?: number }
 ) {
   return prisma.routingLog.findMany({
     where: {
@@ -22,7 +22,10 @@ export async function queryRoutingLogs(
       ...(filters.status && { status: filters.status as any }),
       ...(filters.ruleId && { ruleId: filters.ruleId }),
       ...(filters.assigneeId && { assigneeId: filters.assigneeId }),
+      ...(filters.assigneeName && { assigneeName: { contains: filters.assigneeName, mode: "insensitive" as const } }),
       ...(filters.objectType && { objectType: filters.objectType as any }),
+      ...(filters.pathLabel && { pathLabel: filters.pathLabel }),
+      ...(filters.branchId && { branchId: filters.branchId }),
       ...(dateFilter(filters) && { createdAt: dateFilter(filters) }),
     },
     orderBy: { createdAt: "desc" },
@@ -73,6 +76,35 @@ export async function getRulePerformance(orgId: string, range: DateRange) {
     rules.set(key, existing);
   }
   return Array.from(rules.values()).sort((a, b) => b.total - a.total);
+}
+
+export async function getBranchPerformance(orgId: string, filters: DateRange & { ruleId: string }) {
+  const logs = await prisma.routingLog.groupBy({
+    by: ["branchId", "pathLabel", "status"],
+    where: {
+      orgId,
+      ruleId: filters.ruleId,
+      ...(dateFilter(filters) && { createdAt: dateFilter(filters) }),
+    },
+    _count: { id: true },
+    _avg: { routingDurationMs: true },
+  });
+
+  // Pivot into per-branch summary
+  const branches = new Map<string, { branchId: string | null; pathLabel: string | null; success: number; failed: number; unmatched: number; merged: number; total: number; avgDurationMs: number | null }>();
+  for (const row of logs) {
+    const key = row.branchId ?? row.pathLabel ?? "default";
+    const existing = branches.get(key) ?? { branchId: row.branchId, pathLabel: row.pathLabel, success: 0, failed: 0, unmatched: 0, merged: 0, total: 0, avgDurationMs: null };
+    const count = row._count.id;
+    existing.total += count;
+    if (row.status === "SUCCESS") existing.success += count;
+    else if (row.status === "FAILED") existing.failed += count;
+    else if (row.status === "UNMATCHED") existing.unmatched += count;
+    else if (row.status === "MERGED") existing.merged += count;
+    if (row._avg.routingDurationMs) existing.avgDurationMs = row._avg.routingDurationMs;
+    branches.set(key, existing);
+  }
+  return Array.from(branches.values()).sort((a, b) => b.total - a.total);
 }
 
 export async function getTeamWorkload(orgId: string, range: DateRange) {
@@ -227,6 +259,291 @@ export async function getRoutingTimeline(orgId: string, sfdcRecordId: string) {
       status: true,
       errorMessage: true,
       routingDurationMs: true,
+      createdAt: true,
+    },
+  });
+}
+
+// ─── New: Full database coverage ──────────────────────────────────────────────
+
+export async function listTeams(orgId: string, filters: { teamId?: string }) {
+  return prisma.roundRobinTeam.findMany({
+    where: {
+      orgId,
+      ...(filters.teamId && { id: filters.teamId }),
+    },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      pointerIndex: true,
+      createdAt: true,
+      updatedAt: true,
+      members: {
+        select: {
+          id: true,
+          status: true,
+          weight: true,
+          assignmentCount: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              sfdcUserId: true,
+              isActive: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+}
+
+export async function listUsers(
+  orgId: string,
+  filters: { isLicensed?: boolean; isActive?: boolean; department?: string; search?: string; limit?: number }
+) {
+  return prisma.user.findMany({
+    where: {
+      orgId,
+      ...(filters.isLicensed !== undefined && { isLicensed: filters.isLicensed }),
+      ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+      ...(filters.department && { department: filters.department }),
+      ...(filters.search && {
+        OR: [
+          { name: { contains: filters.search, mode: "insensitive" as const } },
+          { email: { contains: filters.search, mode: "insensitive" as const } },
+        ],
+      }),
+    },
+    orderBy: { name: "asc" },
+    take: filters.limit ?? 100,
+    select: {
+      id: true,
+      sfdcUserId: true,
+      name: true,
+      email: true,
+      role: true,
+      profile: true,
+      department: true,
+      isLicensed: true,
+      isActive: true,
+      lastRoutedAt: true,
+      syncedAt: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function queryAuditLogs(
+  orgId: string,
+  filters: DateRange & { action?: string; entityType?: string; entityId?: string; actorId?: string; limit?: number }
+) {
+  return prisma.auditLog.findMany({
+    where: {
+      orgId,
+      ...(filters.action && { action: filters.action }),
+      ...(filters.entityType && { entityType: filters.entityType }),
+      ...(filters.entityId && { entityId: filters.entityId }),
+      ...(filters.actorId && { actorId: filters.actorId }),
+      ...(dateFilter(filters) && { createdAt: dateFilter(filters) }),
+    },
+    orderBy: { createdAt: "desc" },
+    take: filters.limit ?? 50,
+    select: {
+      id: true,
+      actorId: true,
+      actorName: true,
+      action: true,
+      entityType: true,
+      entityId: true,
+      beforeState: true,
+      afterState: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function listQueues(orgId: string) {
+  return prisma.sfdcQueue.findMany({
+    where: { orgId },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      sfdcQueueId: true,
+      name: true,
+      syncedAt: true,
+    },
+  });
+}
+
+export async function queryCompanyAliases(
+  orgId: string,
+  filters: { name?: string; isSimilar?: boolean; source?: string; limit?: number }
+) {
+  return prisma.companyAlias.findMany({
+    where: {
+      orgId,
+      ...(filters.isSimilar !== undefined && { isSimilar: filters.isSimilar }),
+      ...(filters.source && { source: filters.source }),
+      ...(filters.name && {
+        OR: [
+          { nameA: { contains: filters.name, mode: "insensitive" as const } },
+          { nameB: { contains: filters.name, mode: "insensitive" as const } },
+        ],
+      }),
+    },
+    orderBy: { hitCount: "desc" },
+    take: filters.limit ?? 50,
+    select: {
+      id: true,
+      nameA: true,
+      nameB: true,
+      isSimilar: true,
+      confidence: true,
+      source: true,
+      hitCount: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function listFields(orgId: string, filters: { objectType?: string }) {
+  return prisma.fieldSchema.findMany({
+    where: {
+      orgId,
+      ...(filters.objectType && { objectType: filters.objectType as any }),
+    },
+    orderBy: [{ objectType: "asc" }, { fieldLabel: "asc" }],
+    select: {
+      id: true,
+      objectType: true,
+      fieldApiName: true,
+      fieldLabel: true,
+      fieldType: true,
+      picklistValues: true,
+      syncedAt: true,
+    },
+  });
+}
+
+export async function getOrgSettings(orgId: string) {
+  return prisma.organization.findUniqueOrThrow({
+    where: { id: orgId },
+    select: {
+      id: true,
+      sfdcOrgId: true,
+      sfdcInstanceUrl: true,
+      // Intentionally omit: oauthAccessToken, oauthRefreshToken, webhookSecret, aiApiKey
+      packageDeployedAt: true,
+      packageDeployId: true,
+      packageVersion: true,
+      objectConfig: true,
+      fieldsSyncedAt: true,
+      plan: true,
+      isActive: true,
+      seatsPurchased: true,
+      seatsUsed: true,
+      routingQuotaUsed: true,
+      quotaResetAt: true,
+      onboardingDone: true,
+      notificationWebhookUrl: true,
+      aiProvider: true,
+      aiModelName: true,
+      aiBaseUrl: true,
+      aiChatCount: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function listAppUsers(orgId: string, filters: { role?: string; isActive?: boolean }) {
+  return prisma.appUser.findMany({
+    where: {
+      orgId,
+      ...(filters.role && { role: filters.role }),
+      ...(filters.isActive !== undefined && { isActive: filters.isActive }),
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+      // Intentionally omit: passwordHash
+    },
+  });
+}
+
+export async function listInvites(orgId: string, filters: { status?: string }) {
+  const now = new Date();
+  const where: any = { orgId };
+
+  if (filters.status === "pending") {
+    where.acceptedAt = null;
+    where.expiresAt = { gt: now };
+  } else if (filters.status === "accepted") {
+    where.acceptedAt = { not: null };
+  } else if (filters.status === "expired") {
+    where.acceptedAt = null;
+    where.expiresAt = { lte: now };
+  }
+
+  return prisma.invite.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      email: true,
+      // Intentionally omit: token
+      expiresAt: true,
+      acceptedAt: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function getBillingInfo(orgId: string) {
+  return prisma.billingInfo.findUnique({
+    where: { orgId },
+    select: {
+      id: true,
+      entityName: true,
+      gstin: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      pinCode: true,
+      invoiceEmail: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function listSessions(orgId: string, filters: { activeOnly?: boolean }) {
+  const where: any = { orgId };
+  if (filters.activeOnly !== false) {
+    where.expiresAt = { gt: new Date() };
+  }
+
+  return prisma.session.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    select: {
+      // Intentionally omit: id (session token)
+      orgId: true,
+      userId: true,
+      userName: true,
+      userEmail: true,
+      expiresAt: true,
       createdAt: true,
     },
   });

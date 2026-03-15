@@ -21,7 +21,7 @@ export function MessageBubble({ role, content, toolCalls, userInitials = "U" }: 
         className={cn(
           "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
           role === "assistant"
-            ? "bg-gradient-to-br from-violet-600 to-purple-500 text-white"
+            ? "bg-gradient-to-br from-violet-600 to-purple-500 dark:from-violet-500 dark:to-purple-400 text-white"
             : "bg-primary text-primary-foreground"
         )}
       >
@@ -44,7 +44,7 @@ export function MessageBubble({ role, content, toolCalls, userInitials = "U" }: 
         {/* Tool call indicators */}
         {toolCalls?.map((tc) => (
           <div key={tc.name} className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500 dark:bg-green-400" />
             Called <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{tc.name}</code>
             {tc.description && <span>— {tc.description}</span>}
           </div>

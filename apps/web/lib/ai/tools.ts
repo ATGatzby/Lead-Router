@@ -8,6 +8,18 @@ import {
   getAssigneeStats,
   explainRule,
   getRoutingTimeline,
+  listTeams,
+  listUsers,
+  queryAuditLogs,
+  listQueues,
+  queryCompanyAliases,
+  listFields,
+  getOrgSettings,
+  listAppUsers,
+  listInvites,
+  getBillingInfo,
+  listSessions,
+  getBranchPerformance,
 } from "./queries";
 
 // Claude tool format
@@ -21,9 +33,12 @@ export const TOOLS = [
         status: { type: "string", enum: ["SUCCESS", "FAILED", "UNMATCHED", "RETRY", "MERGED"], description: "Filter by routing outcome status" },
         ruleId: { type: "string", description: "Filter by specific routing rule ID" },
         assigneeId: { type: "string", description: "Filter by SFDC user/queue ID who received the assignment" },
+        assigneeName: { type: "string", description: "Filter by assignee name (case-insensitive contains match)" },
         objectType: { type: "string", enum: ["LEAD", "CONTACT", "ACCOUNT"], description: "Filter by Salesforce object type" },
         dateFrom: { type: "string", description: "Start date (ISO format, e.g. 2026-03-01)" },
         dateTo: { type: "string", description: "End date (ISO format, e.g. 2026-03-12)" },
+        pathLabel: { type: "string", description: "Filter by branch/path label (e.g. 'Enterprise', 'SMB')" },
+        branchId: { type: "string", description: "Filter by specific branch ID" },
         limit: { type: "number", description: "Max results to return (default 50, max 200)" },
       },
     },
@@ -117,6 +132,137 @@ export const TOOLS = [
       required: ["sfdcRecordId"],
     },
   },
+  {
+    name: "list_teams",
+    description: "List round-robin teams with their members, weights, and active/paused status. Use to check team configuration, member weights, who is paused, or current pointer position. Optionally filter to a single team for full detail.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        teamId: { type: "string", description: "Optional: filter to a specific team ID for full detail" },
+      },
+    },
+  },
+  {
+    name: "list_users",
+    description: "List Salesforce users synced to the organization. Filter by licensed status, active status, department, or search by name/email. Use to find specific reps, check who is licensed, or see user details.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        isLicensed: { type: "boolean", description: "Filter by licensed status" },
+        isActive: { type: "boolean", description: "Filter by active status" },
+        department: { type: "string", description: "Filter by department name" },
+        search: { type: "string", description: "Search by name or email (case-insensitive)" },
+        limit: { type: "number", description: "Max results (default 100)" },
+      },
+    },
+  },
+  {
+    name: "query_audit_logs",
+    description: "Search the audit trail for configuration changes — rule creates/edits/deletes, user licensing changes, team modifications, etc. Use to answer 'who changed this rule', 'what was modified recently', or 'show me the change history'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", description: "Filter by action type (e.g. RULE_CREATED, RULE_UPDATED, USER_LICENSED, TEAM_CREATED)" },
+        entityType: { type: "string", description: "Filter by entity type (e.g. RoutingRule, User, RoundRobinTeam)" },
+        entityId: { type: "string", description: "Filter by specific entity ID" },
+        actorId: { type: "string", description: "Filter by who made the change (user ID)" },
+        dateFrom: { type: "string", description: "Start date (ISO format)" },
+        dateTo: { type: "string", description: "End date (ISO format)" },
+        limit: { type: "number", description: "Max results (default 50, max 200)" },
+      },
+    },
+  },
+  {
+    name: "list_queues",
+    description: "List Salesforce queues synced to the organization. Shows queue name and SFDC queue ID. Use when the user asks about available queues for assignment.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "query_company_aliases",
+    description: "View the company name matching cache — pairs of company names that have been compared for fuzzy/AI similarity. Shows whether they matched, confidence scores, source (AI/MANUAL/DICTIONARY), and how many times each pair was encountered.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Search for a company name (matches either side of the pair)" },
+        isSimilar: { type: "boolean", description: "Filter by match result (true = similar, false = not similar)" },
+        source: { type: "string", enum: ["AI", "MANUAL", "DICTIONARY"], description: "Filter by how the alias was determined" },
+        limit: { type: "number", description: "Max results (default 50)" },
+      },
+    },
+  },
+  {
+    name: "list_fields",
+    description: "List available Salesforce fields for a given object type. Shows field API name, label, data type, and picklist values. Use when the user asks 'what fields can I use in conditions' or wants to understand available data.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        objectType: { type: "string", enum: ["LEAD", "CONTACT", "ACCOUNT"], description: "Filter by Salesforce object type" },
+      },
+    },
+  },
+  {
+    name: "get_org_settings",
+    description: "Get organization configuration — plan tier, seat counts and usage, routing quota, Salesforce connection status, package deploy info, onboarding status, and AI provider config. Use when the user asks about their plan, quotas, connection status, or org settings.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "list_app_users",
+    description: "List dashboard login users (not SFDC users). Shows email, name, role (ADMIN/MEMBER), and active status. Use when the user asks 'who has access to the dashboard' or about admin accounts.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        role: { type: "string", enum: ["ADMIN", "MEMBER"], description: "Filter by role" },
+        isActive: { type: "boolean", description: "Filter by active status" },
+      },
+    },
+  },
+  {
+    name: "list_invites",
+    description: "List pending, accepted, and expired invitations to the dashboard. Use when the user asks about outstanding invites or who has been invited.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["pending", "accepted", "expired"], description: "Filter by invite status" },
+      },
+    },
+  },
+  {
+    name: "get_billing_info",
+    description: "Get billing and invoice details — entity name, GSTIN, address, and invoice email. Use when the user asks about their billing configuration.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "get_branch_performance",
+    description: "Get per-branch/path performance breakdown within a specific routing rule. Shows success, failed, unmatched, and merged counts plus average duration for each branch. Use this when the user asks 'how are the branches performing', 'break down by path', or wants to compare branches within a rule.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        ruleId: { type: "string", description: "The routing rule ID to break down by branch" },
+        dateFrom: { type: "string", description: "Start date (ISO format)" },
+        dateTo: { type: "string", description: "End date (ISO format)" },
+      },
+      required: ["ruleId"],
+    },
+  },
+  {
+    name: "list_sessions",
+    description: "List login sessions — shows who is logged in, when they logged in, and when their session expires. Use when the user asks 'who is currently logged in' or about active sessions.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        activeOnly: { type: "boolean", description: "Only show non-expired sessions (default true)" },
+      },
+    },
+  },
 ];
 
 // Convert Claude tools to OpenAI function calling format
@@ -156,6 +302,30 @@ export async function executeTool(
       return explainRule(orgId, args.ruleId as string);
     case "get_routing_timeline":
       return getRoutingTimeline(orgId, args.sfdcRecordId as string);
+    case "list_teams":
+      return listTeams(orgId, args as any);
+    case "list_users":
+      return listUsers(orgId, args as any);
+    case "query_audit_logs":
+      return queryAuditLogs(orgId, args as any);
+    case "list_queues":
+      return listQueues(orgId);
+    case "query_company_aliases":
+      return queryCompanyAliases(orgId, args as any);
+    case "list_fields":
+      return listFields(orgId, args as any);
+    case "get_org_settings":
+      return getOrgSettings(orgId);
+    case "list_app_users":
+      return listAppUsers(orgId, args as any);
+    case "list_invites":
+      return listInvites(orgId, args as any);
+    case "get_billing_info":
+      return getBillingInfo(orgId);
+    case "get_branch_performance":
+      return getBranchPerformance(orgId, args as any);
+    case "list_sessions":
+      return listSessions(orgId, args as any);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
