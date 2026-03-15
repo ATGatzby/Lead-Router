@@ -161,9 +161,9 @@ describe("GET /api/teams/:id", () => {
 
   it("returns null nextMember when no active members", async () => {
     const noActive = teamWithMembers();
-    noActive.members = noActive.members.map((m: Record<string, unknown>) => ({
+    noActive.members = noActive.members.map((m) => ({
       ...m,
-      status: "PAUSED",
+      status: "PAUSED" as const,
     }));
     mockPrisma.roundRobinTeam.findFirst.mockResolvedValue(noActive);
 
@@ -197,7 +197,7 @@ describe("GET /api/teams/:id", () => {
 
   it("returns 0 sharePercent when totalAssigned is 0", async () => {
     const noAssignments = teamWithMembers();
-    noAssignments.members = noAssignments.members.map((m: Record<string, unknown>) => ({
+    noAssignments.members = noAssignments.members.map((m) => ({
       ...m,
       assignmentCount: 0,
     }));
