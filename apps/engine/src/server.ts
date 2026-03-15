@@ -2,6 +2,8 @@ import Fastify from "fastify";
 import { loadAllRules, startCacheInvalidationListener } from "./cache.js";
 import { routePlugin } from "./routes/route.js";
 import { analyticsPlugin } from "./routes/analytics.js";
+import { scheduledPlugin } from "./routes/scheduled.js";
+import { initScheduler, syncScheduledJobs } from "./scheduler.js";
 // Import workers to start them (side-effect: registers BullMQ event handlers)
 import "./queue.js";
 import "./batch-queue.js";
@@ -39,6 +41,7 @@ const start = async () => {
   try {
     await app.register(routePlugin);
     await app.register(analyticsPlugin);
+    await app.register(scheduledPlugin);
 
     // Pre-warm rule cache from DB
     await loadAllRules();
@@ -46,6 +49,10 @@ const start = async () => {
     // Subscribe to cache invalidation events from the web app
     const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
     startCacheInvalidationListener(redisUrl);
+
+    // Initialize scheduler for scheduled routes (cron jobs)
+    initScheduler(redisUrl);
+    await syncScheduledJobs();
 
     const port = Number(process.env.ENGINE_PORT ?? 3001);
     await app.listen({ port, host: "0.0.0.0" });
