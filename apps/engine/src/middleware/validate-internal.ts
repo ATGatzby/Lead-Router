@@ -11,9 +11,9 @@ export function validateInternalToken(
 ): void {
   const expectedKey = process.env.INTERNAL_API_KEY;
   if (!expectedKey) {
-    // Key not configured — allow (backward compat, log warning)
-    console.warn("[auth] INTERNAL_API_KEY not set — analytics endpoints are unprotected");
-    return done();
+    console.error("[auth] INTERNAL_API_KEY not set — rejecting request");
+    reply.code(503).send({ error: "INTERNAL_API_KEY not configured" });
+    return;
   }
 
   const auth = request.headers.authorization;

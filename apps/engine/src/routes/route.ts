@@ -175,7 +175,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data;
 
-    const { sfdcOrgId, objectType, eventType, timestamp, records } = body;
+    const { sfdcOrgId, objectType, eventType, timestamp, records, ruleId } = body as typeof body & { ruleId?: string };
 
     // ── 2. Org lookup + HMAC (once for entire batch) ────────────────────
     const org = await prisma.organization.findUnique({
@@ -307,6 +307,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       timestamp,
       fields: r.fields,
       batchId,
+      ...(ruleId ? { ruleId } : {}),
     }));
 
     await enqueueBatchJobs(jobs);

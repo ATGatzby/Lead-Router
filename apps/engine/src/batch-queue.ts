@@ -10,11 +10,12 @@ const QUEUE_NAME = "routing-batch";
 export interface BatchJobData {
   orgId: string;
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
-  eventType: "INSERT" | "UPDATE" | "BOTH";
+  eventType: "INSERT" | "UPDATE" | "BOTH" | "SEARCH";
   recordId: string;
   timestamp: string;
   fields: Record<string, unknown>;
   batchId: string;
+  ruleId?: string;
 }
 
 // ─── Queue ────────────────────────────────────────────────────────────────
@@ -37,8 +38,8 @@ export const batchQueue = new Queue<BatchJobData>(QUEUE_NAME, {
 export const batchWorker = new Worker<BatchJobData>(
   QUEUE_NAME,
   async (job: Job<BatchJobData>) => {
-    const { orgId, objectType, eventType, recordId, timestamp, fields } = job.data;
-    const payload: RoutingPayload = { orgId, objectType, eventType, recordId, timestamp, fields };
+    const { orgId, objectType, eventType, recordId, timestamp, fields, ruleId } = job.data;
+    const payload: RoutingPayload = { orgId, objectType, eventType, recordId, timestamp, fields, ruleId };
     const result = await routeRecord(payload, Date.now());
     return result;
   },

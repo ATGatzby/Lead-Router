@@ -36,9 +36,9 @@ describe("claimIdempotencyKey", () => {
     expect(mockSet).toHaveBeenCalledWith(
       "idem:org1:rec1:INSERT:2026-01-01T00:00:00Z",
       "1",
-      "NX",
       "EX",
-      3600
+      3600,
+      "NX"
     );
   });
 
@@ -83,9 +83,9 @@ describe("claimIdempotencyKeys", () => {
     expect(mockPipelineSet).toHaveBeenCalledWith(
       "idem:orgX:00Q1:UPDATE:2026-03-10T00:00:00Z",
       "1",
-      "NX",
       "EX",
-      3600
+      3600,
+      "NX"
     );
   });
 

@@ -9,7 +9,7 @@ export interface CachedBranch {
   id: string;
   label: string | null;
   priority: number;
-  assignmentType: string;
+  assignmentType: string | null;
   assigneeUserId: string | null;
   assigneeTeamId: string | null;
   assigneeQueueId: string | null;
@@ -74,6 +74,19 @@ export interface CachedRule {
   defaultOwnerUserId: string | null;
   defaultOwnerTeamId: string | null;
   defaultOwnerQueueId: string | null;
+  // Scheduled route fields
+  routeType: string; // "REALTIME" | "SCHEDULED"
+  searchCriteria: Array<{
+    id: string;
+    conditions: Array<{
+      fieldApiName: string;
+      fieldType?: string;
+      operator: string;
+      value: string | null;
+    }>;
+  }> | null;
+  scheduleFrequency: string | null;
+  scheduleCron: string | null;
 }
 
 // ─── In-memory store ──────────────────────────────────────────────────────
@@ -169,6 +182,10 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
     defaultOwnerUserId: r.defaultOwnerUserId,
     defaultOwnerTeamId: r.defaultOwnerTeamId,
     defaultOwnerQueueId: r.defaultOwnerQueueId,
+    routeType: (r as any).routeType ?? "REALTIME",
+    searchCriteria: (r as any).searchCriteria as CachedRule["searchCriteria"],
+    scheduleFrequency: (r as any).scheduleFrequency ?? null,
+    scheduleCron: (r as any).scheduleCron ?? null,
   }));
 
   store.set(cacheKey(orgId, objectType), cached);

@@ -15,7 +15,7 @@ export async function claimIdempotencyKey(
 ): Promise<boolean> {
   const key = `idem:${orgId}:${recordId}:${eventType}:${timestamp}`;
   // SET key 1 NX EX ttl — returns "OK" if set (new), null if already exists
-  const result = await redis.set(key, "1", "NX", "EX", TTL_SECONDS);
+  const result = await redis.set(key, "1", "EX", TTL_SECONDS, "NX");
   return result === "OK";
 }
 
@@ -31,7 +31,7 @@ export async function claimIdempotencyKeys(
 
   for (const r of records) {
     const key = `idem:${orgId}:${r.recordId}:${r.eventType}:${r.timestamp}`;
-    pipeline.set(key, "1", "NX", "EX", TTL_SECONDS);
+    pipeline.set(key, "1", "EX", TTL_SECONDS, "NX");
   }
 
   const results = await pipeline.exec();

@@ -172,7 +172,7 @@ async function checkConversions(_job: Job): Promise<void> {
 
       for (const batch of batches) {
         // 2d. Query SFDC for converted leads in this batch
-        const inClause = batch.map((id) => `'${id}'`).join(",");
+        const inClause = batch.filter((id) => /^[a-zA-Z0-9]+$/.test(id)).map((id) => `'${id}'`).join(",");
         const leadResult = await conn.query<SfdcLeadResult>(
           `SELECT Id, IsConverted, ConvertedDate, ConvertedOpportunityId FROM Lead WHERE Id IN (${inClause}) AND IsConverted = true`
         );
