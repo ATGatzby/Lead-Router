@@ -9,6 +9,7 @@ const TABS = [
   { href: "/activity/stats", label: "Assignment Stats", exact: false },
   { href: "/activity/failed", label: "Failed Routings", exact: false },
   { href: "/activity/audit", label: "Audit Log", exact: false },
+  { href: "/activity/journey", label: "Record Journey", exact: false },
 ];
 
 export default function HistoryLayout({ children }: { children: React.ReactNode }) {

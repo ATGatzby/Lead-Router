@@ -6,14 +6,30 @@ import { getOrgIdFromHeaders } from "@/lib/auth";
 export async function GET(req: NextRequest) {
   try {
     const orgId = await getOrgIdFromHeaders();
-    const objectType = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? "LEAD";
+    const objectParam = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? req.nextUrl.searchParams.get("objectType")?.toUpperCase() ?? "LEAD";
+    const customOnly = req.nextUrl.searchParams.get("customOnly") === "true";
 
-    if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
+    if (!["LEAD", "CONTACT", "ACCOUNT", "USER"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
+    // For USER object type, we query LEAD fields that end with __c as a placeholder
+    // since FieldSchema doesn't have a USER enum value yet
+    const where: Record<string, unknown> = { orgId };
+    if (objectParam === "USER") {
+      // Return custom fields from LEAD as proxy (User custom fields share naming conventions)
+      where.objectType = "LEAD";
+      where.fieldApiName = { endsWith: "__c" };
+    } else {
+      where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT";
+    }
+
+    if (customOnly) {
+      where.fieldApiName = { endsWith: "__c" };
+    }
+
     const fields = await prisma.fieldSchema.findMany({
-      where: { orgId, objectType: objectType as "LEAD" | "CONTACT" | "ACCOUNT" },
+      where,
       orderBy: { fieldLabel: "asc" },
       select: {
         id: true,

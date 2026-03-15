@@ -20,7 +20,6 @@ const PUBLIC_PREFIXES = [
   "/register",
   "/api/auth/",
   "/api/cli-auth/",    // CLI OAuth bridge — request + poll endpoints (no user session)
-  "/api/health",
   "/api/setup/",       // /api/setup/status + /api/setup/onboarding-done (Apex callouts, no session)
   "/api/fields/sync",  // Called by OnboardingController.syncFieldSchema — X-Sfdc-Org-Id auth
   "/_next/",
@@ -56,6 +55,10 @@ export async function proxy(req: NextRequest) {
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
+  // Exact-match public paths (no prefix matching)
+  if (pathname === "/api/health") {
+    return NextResponse.next();
+  }
 
   // CSRF: validate Origin for mutating requests on session-protected routes
   const method = req.method;
@@ -82,7 +85,7 @@ export async function proxy(req: NextRequest) {
       Math.floor(Date.now() / 1000) - session.issuedAt > MAX_SESSION_AGE_SECONDS);
 
   if (sessionExpired) {
-    if (session.orgId) session.destroy(); // Clear stale session
+    if (session.orgId) await session.destroy(); // Clear stale session
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }

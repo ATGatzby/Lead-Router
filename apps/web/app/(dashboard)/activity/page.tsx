@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, ExternalLink, History, Braces } from "lucide-react";
+import { Download, ExternalLink, History, Braces, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody } from "@/components/ui/sheet";
 import { Popover } from "radix-ui";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
+import { TraceDetail, NoTraceDetail } from "@/components/record-journey/JourneyStep";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -22,10 +25,13 @@ interface RoutingLog {
   pathLabel: string | null;
   assigneeName: string | null;
   assignmentType: string | null;
-  status: "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY" | "MERGED";
+  status: "SUCCESS" | "FAILED" | "UNMATCHED" | "RETRY" | "MERGED" | "COOLDOWN_SKIPPED" | "STAMP_SKIPPED";
   errorMessage: string | null;
   retryCount: number;
   recordSnapshot: Record<string, unknown> | null;
+  decisionTrace: unknown;
+  routingDurationMs: number | null;
+  teamName: string | null;
   createdAt: string;
 }
 
@@ -82,21 +88,79 @@ function RecordSnapshotPopover({ snapshot }: { snapshot: Record<string, unknown>
   );
 }
 
+const ANTI_RECURSION_TOOLTIP = "This event was blocked by the anti-recursion safeguard. The routing engine detected this record was recently routed.";
+
 function StatusBadge({ status }: { status: RoutingLog["status"] }) {
-  const cfg = {
+  const cfg: Record<string, string> = {
     SUCCESS: "bg-green-50 text-green-700 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800",
     FAILED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800",
     UNMATCHED: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/50 dark:text-yellow-400 dark:border-yellow-800",
     RETRY: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:border-blue-800",
     MERGED: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-400 dark:border-purple-800",
-  }[status];
-  const label = { SUCCESS: "Success", FAILED: "Failed", UNMATCHED: "Unmatched", RETRY: "Retry", MERGED: "Merged" }[status];
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium", cfg)}>
+    COOLDOWN_SKIPPED: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-800",
+    STAMP_SKIPPED: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-800",
+  };
+  const label: Record<string, string> = {
+    SUCCESS: "Success",
+    FAILED: "Failed",
+    UNMATCHED: "Unmatched",
+    RETRY: "Retry",
+    MERGED: "Merged",
+    COOLDOWN_SKIPPED: "Cooldown Skip",
+    STAMP_SKIPPED: "Stamp Skip",
+  };
+
+  const isAntiRecursion = status === "COOLDOWN_SKIPPED" || status === "STAMP_SKIPPED";
+
+  const badge = (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium", cfg[status])}>
+      {isAntiRecursion && <AlertTriangle className="h-3 w-3" />}
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {label}
+      {label[status] ?? status}
     </span>
   );
+
+  if (isAntiRecursion) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {ANTI_RECURSION_TOOLTIP}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return badge;
+}
+
+/** Detect records that appear 2+ times within 60 seconds (both SUCCESS), indicating a recursive bounce. */
+function buildRecursiveSet(logs: RoutingLog[]): Set<string> {
+  const ids = new Set<string>();
+  const byRecord = new Map<string, number[]>();
+  for (const log of logs) {
+    if (log.status !== "SUCCESS") continue;
+    const ts = new Date(log.createdAt).getTime();
+    const existing = byRecord.get(log.sfdcRecordId);
+    if (existing) {
+      existing.push(ts);
+    } else {
+      byRecord.set(log.sfdcRecordId, [ts]);
+    }
+  }
+  for (const [recordId, timestamps] of byRecord) {
+    if (timestamps.length < 2) continue;
+    timestamps.sort((a, b) => a - b);
+    for (let i = 1; i < timestamps.length; i++) {
+      if (timestamps[i] - timestamps[i - 1] <= 60_000) {
+        ids.add(recordId);
+        break;
+      }
+    }
+  }
+  return ids;
 }
 
 function fmtTime(iso: string) {
@@ -121,6 +185,7 @@ function buildQuery(filters: Record<string, string>, page: number) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
+  const [selectedLog, setSelectedLog] = useState<RoutingLog | null>(null);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     from: "",
@@ -164,6 +229,7 @@ export default function HistoryPage() {
   const logs = query.data?.logs ?? [];
   const total = query.data?.total ?? 0;
   const pageCount = query.data?.pageCount ?? 1;
+  const recursiveIds = useMemo(() => buildRecursiveSet(logs), [logs]);
 
   const setFilter = (key: string, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -183,7 +249,7 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Routing History</h1>
+          <h1 className="text-2xl font-semibold font-display">Routing History</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Every routing decision made by the engine.
           </p>
@@ -233,6 +299,8 @@ export default function HistoryPage() {
               <SelectItem value="UNMATCHED">Unmatched</SelectItem>
               <SelectItem value="RETRY">Retry</SelectItem>
               <SelectItem value="MERGED">Merged</SelectItem>
+              <SelectItem value="COOLDOWN_SKIPPED">Cooldown Skip</SelectItem>
+              <SelectItem value="STAMP_SKIPPED">Stamp Skip</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filters.ruleId} onValueChange={(v) => setFilter("ruleId", v)}>
@@ -302,10 +370,25 @@ export default function HistoryPage() {
           {logs.map((log) => (
             <div
               key={log.id}
-              className="grid grid-cols-[1.6fr_90px_90px_1.4fr_1.4fr_110px_110px] items-center gap-3 px-4 py-3 border-b last:border-b-0 bg-card hover:bg-muted/20 transition-colors"
+              className="grid grid-cols-[1.6fr_90px_90px_1.4fr_1.4fr_110px_110px] items-center gap-3 px-4 py-3 border-b last:border-b-0 bg-card hover:bg-muted/20 transition-colors cursor-pointer"
+              onMouseDown={() => setSelectedLog(log)}
             >
               {/* Record ID */}
               <div className="flex items-center gap-1.5 min-w-0">
+                {recursiveIds.has(log.sfdcRecordId) && log.status === "SUCCESS" && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="shrink-0 text-amber-500 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        Possible recursive routing: this record was routed multiple times within 60 seconds.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <span className="font-mono text-xs truncate">{log.sfdcRecordId}</span>
                 {log.recordSnapshot && <RecordSnapshotPopover snapshot={log.recordSnapshot} />}
                 <a
@@ -382,6 +465,49 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
+
+      {/* Detail Side Panel */}
+      <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <SheetContent side="right" className="sm:max-w-xl w-full">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <span className="font-mono text-sm">{selectedLog?.sfdcRecordId}</span>
+              <a
+                href={`https://salesforce.com/${selectedLog?.sfdcRecordId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </SheetTitle>
+            <SheetDescription>
+              {selectedLog?.ruleName ?? "No rule matched"} · {selectedLog?.status?.toLowerCase()}
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody>
+            {selectedLog && (() => {
+              const entry = {
+                id: selectedLog.id,
+                eventType: selectedLog.eventType,
+                status: selectedLog.status,
+                ruleName: selectedLog.ruleName,
+                pathLabel: selectedLog.pathLabel,
+                assigneeId: null,
+                assigneeName: selectedLog.assigneeName,
+                assignmentType: selectedLog.assignmentType,
+                teamName: selectedLog.teamName ?? null,
+                routingDurationMs: selectedLog.routingDurationMs ?? null,
+                decisionTrace: selectedLog.decisionTrace,
+                createdAt: selectedLog.createdAt,
+              };
+              return selectedLog.decisionTrace
+                ? <TraceDetail trace={selectedLog.decisionTrace} entry={entry} />
+                : <NoTraceDetail entry={entry} />;
+            })()}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

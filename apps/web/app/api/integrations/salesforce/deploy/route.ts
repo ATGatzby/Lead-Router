@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { SalesforceApi, DuplicateError, zipSourcePackage } from "@lead-routing/sfdc";
+import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -143,7 +144,9 @@ export async function POST() {
         "SELECT Id FROM lrt__Routing_Settings__c LIMIT 1"
       );
 
-      const settingsData: Record<string, string> = {
+      // Write URLs + secret only; routing flags will be computed by syncRoutingFlags()
+      // based on actual active rules (on fresh deploy = all false)
+      const settingsData: Record<string, string | boolean> = {
         lrt__App_Url__c: appUrl,
         lrt__Engine_Endpoint__c: engineUrl,
       };
@@ -159,6 +162,14 @@ export async function POST() {
       settingsWritten = true;
     } catch (err) {
       console.error("[sfdc-deploy] lrt__Routing_Settings__c write failed:", err);
+    }
+
+    // ── 3b. Sync routing flags based on active rules ──────────────────────
+    // On fresh deploy with no rules, all flags will be false (correct behavior)
+    if (settingsWritten) {
+      syncRoutingFlags(orgId).catch((err) => {
+        console.warn("[sfdc-deploy] syncRoutingFlags failed (non-critical):", err);
+      });
     }
 
     // ── 4. Update org record ───────────────────────────────────────────────

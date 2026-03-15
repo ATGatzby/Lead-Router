@@ -98,7 +98,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground text-xl font-bold mb-2">
             LR
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Lead Router</h1>
+          <h1 className="text-2xl font-semibold tracking-tight font-display">Lead Router</h1>
           <p className="text-sm text-muted-foreground">
             Real-time lead routing for Salesforce
           </p>

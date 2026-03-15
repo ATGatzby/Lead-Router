@@ -28,14 +28,14 @@ export default function SettingsGeneralPage() {
         </div>
 
         {/* Reconnect */}
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-3">
+        <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 space-y-3">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-medium text-amber-800">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                 Seeing &ldquo;Retry&rdquo; or &ldquo;Failed&rdquo; on all records?
               </p>
-              <p className="text-sm text-amber-700 mt-0.5">
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
                 Your Salesforce access token may have expired. Re-authenticate to get a fresh token.
                 This won&apos;t affect your rules, teams, or users.
               </p>
@@ -43,7 +43,7 @@ export default function SettingsGeneralPage() {
           </div>
           <a
             href="/api/auth/sfdc/login"
-            className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 dark:bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 dark:hover:bg-amber-600 transition-colors"
           >
             <Link2 className="h-3.5 w-3.5" />
             Reconnect Salesforce
@@ -61,7 +61,7 @@ export default function SettingsGeneralPage() {
             {syncMutation.isPending ? "Syncing…" : "Sync Webhook Secret"}
           </button>
           {syncStatus === "ok" && (
-            <span className="text-sm text-green-600">Synced to Salesforce</span>
+            <span className="text-sm text-green-600 dark:text-green-400">Synced to Salesforce</span>
           )}
           {syncStatus === "error" && (
             <span className="text-sm text-destructive">Sync failed — check Salesforce connection</span>

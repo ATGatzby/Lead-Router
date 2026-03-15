@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { RecursiveAlertBanner } from "@/components/recursive-alert-banner";
 
 export default function DashboardLayout({
   children,
@@ -9,9 +10,11 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden relative">
+        <div className="aurora-bg" aria-hidden="true" />
         <Topbar />
-        <main className="flex-1 overflow-y-auto p-6 bg-muted/30">{children}</main>
+        <RecursiveAlertBanner />
+        <main className="relative z-[1] flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );

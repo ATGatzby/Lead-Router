@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend
 } from "recharts";
-import { TrendingUp, TrendingDown, Minus, Zap, Target, Clock, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Zap, Target, Clock, BarChart3, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Helper to build API query string from search params
@@ -63,11 +63,11 @@ function KpiCard({
         <span className="text-sm text-muted-foreground">{title}</span>
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
-      <div className="text-2xl font-bold">{formatted}</div>
+      <div className="text-2xl font-bold font-display tracking-tight">{formatted}</div>
       {delta !== null && delta !== undefined && (
         <div className={cn(
           "flex items-center gap-1 text-xs mt-1",
-          delta > 0 ? "text-emerald-600" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+          delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground"
         )}>
           {delta > 0 ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
           <span>{delta > 0 ? "+" : ""}{Math.round(delta * 10) / 10}% vs prior period</span>
@@ -111,6 +111,17 @@ function OverviewContent() {
       if (!res.ok) throw new Error("Failed to load volume");
       return res.json();
     },
+  });
+
+  // Fetch trigger health data
+  const { data: triggerHealth } = useQuery({
+    queryKey: ["trigger-health"],
+    queryFn: async () => {
+      const res = await fetch("/api/health/recursive");
+      if (!res.ok) throw new Error("Failed to load trigger health");
+      return res.json();
+    },
+    refetchInterval: 60_000,
   });
 
   // Fetch rules for top rules table
@@ -171,6 +182,46 @@ function OverviewContent() {
           icon={Zap}
           format="percent"
         />
+      </div>
+
+      {/* Trigger Health */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-3">System Health</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">Recursive Events</span>
+              <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className={cn(
+              "text-2xl font-bold font-display tracking-tight",
+              triggerHealth?.recursiveBounces?.last24h > 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+            )}>
+              {triggerHealth?.recursiveBounces?.last24h?.toLocaleString() ?? "\u2014"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Last 24h</p>
+          </div>
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">Cooldown Skips</span>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-bold font-display tracking-tight text-blue-600 dark:text-blue-400">
+              {triggerHealth?.cooldownSkips?.last24h?.toLocaleString() ?? "\u2014"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Last 24h</p>
+          </div>
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">Stamp Skips</span>
+              <Target className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-bold font-display tracking-tight text-blue-600 dark:text-blue-400">
+              {triggerHealth?.stampSkips?.last24h?.toLocaleString() ?? "\u2014"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Last 24h</p>
+          </div>
+        </div>
       </div>
 
       {/* Row 2: Volume Chart */}

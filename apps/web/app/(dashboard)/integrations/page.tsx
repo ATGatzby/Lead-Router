@@ -17,7 +17,7 @@ export default async function IntegrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
+        <h1 className="text-2xl font-semibold tracking-tight font-display">Integrations</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Connect your CRM and other tools to power lead routing.
         </p>
@@ -25,10 +25,10 @@ export default async function IntegrationsPage() {
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Salesforce */}
-        <div className="rounded-xl border border-border bg-white shadow-sm hover:shadow-md transition-shadow">
+        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm hover:shadow-md transition-shadow">
           <div className="p-6 space-y-4">
             <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950">
                 <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none">
                   <path
                     d="M10.01 4.18c.9-.96 2.15-1.56 3.54-1.56 1.72 0 3.23.9 4.09 2.25a5.46 5.46 0 0 1 2.16-.45C22.16 4.42 24 6.29 24 8.6c0 .34-.04.68-.12 1a3.75 3.75 0 0 1 .12.94c0 2.28-1.85 4.13-4.13 4.13-.37 0-.72-.05-1.06-.14a4.52 4.52 0 0 1-3.96 2.35c-.6 0-1.17-.12-1.69-.33a4.84 4.84 0 0 1-4.34 2.7 4.84 4.84 0 0 1-4.56-3.23A4.16 4.16 0 0 1 0 12.04c0-1.56.86-2.92 2.14-3.63a4.24 4.24 0 0 1-.18-1.23c0-2.33 1.89-4.22 4.22-4.22 1.33 0 2.52.62 3.29 1.58l.54-.36z"
@@ -41,7 +41,7 @@ export default async function IntegrationsPage() {
                   CRM
                 </Badge>
                 {sfConnected ? (
-                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+                  <Badge className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900">
                     Connected
                   </Badge>
                 ) : (
@@ -77,11 +77,11 @@ export default async function IntegrationsPage() {
         </div>
 
         {/* HubSpot — Coming Soon */}
-        <div className="rounded-xl border border-border bg-white shadow-sm opacity-60">
+        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm opacity-60">
           <div className="p-6 space-y-4">
             <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-50">
-                <div className="h-7 w-7 rounded-full bg-orange-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-950">
+                <div className="h-7 w-7 rounded-full bg-orange-400 dark:bg-orange-500" />
               </div>
               <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
                 Coming Soon
@@ -104,11 +104,11 @@ export default async function IntegrationsPage() {
         </div>
 
         {/* Zoho — Coming Soon */}
-        <div className="rounded-xl border border-border bg-white shadow-sm opacity-60">
+        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm opacity-60">
           <div className="p-6 space-y-4">
             <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-50">
-                <div className="h-7 w-7 rounded-full bg-red-500" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950">
+                <div className="h-7 w-7 rounded-full bg-red-500 dark:bg-red-400" />
               </div>
               <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
                 Coming Soon

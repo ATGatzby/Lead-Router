@@ -12,10 +12,12 @@ import {
   BarChart3,
   Plug,
   BrainCircuit,
+  HeartPulse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   href: string;
@@ -66,6 +68,12 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Verify & Debug",
+    items: [
+      { href: "/trigger-health", label: "Trigger Health", icon: HeartPulse },
+    ],
+  },
+  {
     label: "Settings",
     items: [
       {
@@ -87,7 +95,7 @@ export function Sidebar() {
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
           LR
         </div>
-        <span className="text-sm font-semibold text-sidebar-foreground">Lead Router</span>
+        <span className="text-sm font-semibold text-sidebar-foreground font-display">Lead Router</span>
         <div className="ml-auto">
           <Zap className="h-3.5 w-3.5 text-sidebar-muted-foreground" />
         </div>
@@ -137,6 +145,11 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Footer */}
+      <div className="flex items-center justify-end border-t border-sidebar-border px-3 py-2">
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

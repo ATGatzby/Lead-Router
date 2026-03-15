@@ -248,7 +248,7 @@ function SalesforceIntegrationInner() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950">
           <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none">
             <path
               d="M10.01 4.18c.9-.96 2.15-1.56 3.54-1.56 1.72 0 3.23.9 4.09 2.25a5.46 5.46 0 0 1 2.16-.45C22.16 4.42 24 6.29 24 8.6c0 .34-.04.68-.12 1a3.75 3.75 0 0 1 .12.94c0 2.28-1.85 4.13-4.13 4.13-.37 0-.72-.05-1.06-.14a4.52 4.52 0 0 1-3.96 2.35c-.6 0-1.17-.12-1.69-.33a4.84 4.84 0 0 1-4.34 2.7 4.84 4.84 0 0 1-4.56-3.23A4.16 4.16 0 0 1 0 12.04c0-1.56.86-2.92 2.14-3.63a4.24 4.24 0 0 1-.18-1.23c0-2.33 1.89-4.22 4.22-4.22 1.33 0 2.52.62 3.29 1.58l.54-.36z"
@@ -263,17 +263,17 @@ function SalesforceIntegrationInner() {
       </div>
 
       {/* Section 1: Connection */}
-      <section className="rounded-xl border border-border bg-white shadow-sm p-6 space-y-4">
+      <section className="rounded-xl border border-border bg-white dark:bg-[#12121a] shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Connection</h2>
           {isConnected ? (
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-sm font-medium text-emerald-700">Connected</span>
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Connected</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-gray-300" />
+              <span className="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600" />
               <span className="text-sm font-medium text-muted-foreground">Not Connected</span>
             </div>
           )}
@@ -292,7 +292,7 @@ function SalesforceIntegrationInner() {
                   href={org.sfdcInstanceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:underline"
+                  className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   {org.sfdcInstanceUrl.replace("https://", "")}
                   <ExternalLink className="h-3 w-3" />
@@ -323,14 +323,14 @@ function SalesforceIntegrationInner() {
       </section>
 
       {/* Section 2: Package Deploy */}
-      <section className="rounded-xl border border-border bg-white shadow-sm p-6 space-y-4">
+      <section className="rounded-xl border border-border bg-white dark:bg-[#12121a] shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
             <h2 className="font-semibold">Package Deploy</h2>
           </div>
           {isDeployed && (
-            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+            <Badge className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900">
               Deployed
             </Badge>
           )}
@@ -359,22 +359,22 @@ function SalesforceIntegrationInner() {
 
         {/* Deploy progress / result */}
         {deploying && (
-          <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <div className="flex items-center gap-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-4">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
             <div>
-              <p className="text-sm font-medium text-blue-800">Deploying package...</p>
-              <p className="text-xs text-blue-600 mt-0.5">This may take up to 2 minutes.</p>
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Deploying package...</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">This may take up to 2 minutes.</p>
             </div>
           </div>
         )}
 
         {deployResult?.success && (
-          <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          <div className="flex items-center gap-3 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 p-4">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             <div>
-              <p className="text-sm font-medium text-emerald-800">Package deployed successfully</p>
+              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Package deployed successfully</p>
               {deployResult.componentCount && (
-                <p className="text-xs text-emerald-600 mt-0.5">
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
                   {deployResult.componentCount} components deployed
                 </p>
               )}
@@ -383,11 +383,11 @@ function SalesforceIntegrationInner() {
         )}
 
         {deployResult && !deployResult.success && (
-          <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
-            <XCircle className="h-5 w-5 text-red-600" />
+          <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
+            <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
             <div>
-              <p className="text-sm font-medium text-red-800">Deploy failed</p>
-              <p className="text-xs text-red-600 mt-0.5">{deployResult.error}</p>
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">Deploy failed</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{deployResult.error}</p>
             </div>
           </div>
         )}
@@ -411,7 +411,7 @@ function SalesforceIntegrationInner() {
       </section>
 
       {/* Section 3: Object Configuration */}
-      <section className="rounded-xl border border-border bg-white shadow-sm p-6 space-y-4">
+      <section className="rounded-xl border border-border bg-white dark:bg-[#12121a] shadow-sm p-6 space-y-4">
         <div>
           <h2 className="font-semibold">Object Configuration</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -461,7 +461,7 @@ function SalesforceIntegrationInner() {
             )}
           </Button>
           {configSaved && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <span className="flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Saved
             </span>
@@ -470,7 +470,7 @@ function SalesforceIntegrationInner() {
       </section>
 
       {/* Section 4: Field Sync */}
-      <section className="rounded-xl border border-border bg-white shadow-sm p-6 space-y-4">
+      <section className="rounded-xl border border-border bg-white dark:bg-[#12121a] shadow-sm p-6 space-y-4">
         <div>
           <h2 className="font-semibold">Field Sync</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -486,8 +486,8 @@ function SalesforceIntegrationInner() {
         </div>
 
         {syncResult?.success && syncResult.counts && (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
-            <p className="text-sm font-medium text-green-800">
+          <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-4 space-y-2">
+            <p className="text-sm font-medium text-green-800 dark:text-green-200">
               Synced {syncResult.total ?? Object.values(syncResult.counts).reduce((a, b) => a + b, 0)} fields
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -502,8 +502,8 @@ function SalesforceIntegrationInner() {
         )}
 
         {syncResult && !syncResult.success && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">
+          <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 p-4">
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">
               Field sync failed{syncResult.error ? `: ${syncResult.error}` : ""}
             </p>
           </div>

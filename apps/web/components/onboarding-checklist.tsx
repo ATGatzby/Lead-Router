@@ -87,7 +87,7 @@ export function OnboardingChecklist() {
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium leading-none">Getting started</p>
           {allDone ? (
-            <p className="text-[11px] text-green-600 mt-0.5 flex items-center gap-1">
+            <p className="text-[11px] text-green-600 dark:text-green-400 mt-0.5 flex items-center gap-1">
               <PartyPopper className="h-3 w-3" />
               All done!
             </p>
@@ -123,7 +123,7 @@ export function OnboardingChecklist() {
         <div
           className={cn(
             "h-full transition-all duration-500",
-            allDone ? "bg-green-500" : "bg-primary"
+            allDone ? "bg-green-500 dark:bg-green-500" : "bg-primary"
           )}
           style={{ width: `${pct}%` }}
         />
@@ -136,7 +136,7 @@ export function OnboardingChecklist() {
             const content = (
               <>
                 {item.done ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 dark:text-green-400 shrink-0 mt-0.5" />
                 ) : (
                   <Circle className="h-3.5 w-3.5 text-sidebar-muted-foreground shrink-0 mt-0.5" />
                 )}

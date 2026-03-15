@@ -40,9 +40,9 @@ const PROVIDERS: ProviderConfig[] = [
     shortName: "Claude",
     description: "Advanced reasoning & analysis with best tool-use accuracy.",
     tag: "Recommended",
-    tagColor: "bg-green-100 text-green-800",
-    color: "bg-amber-50",
-    activeColor: "border-amber-400",
+    tagColor: "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200",
+    color: "bg-amber-50 dark:bg-amber-950",
+    activeColor: "border-amber-400 dark:border-amber-600",
     dotColor: "bg-amber-500",
     keyPlaceholder: "sk-ant-api03-...",
     models: [
@@ -57,9 +57,9 @@ const PROVIDERS: ProviderConfig[] = [
     shortName: "OpenAI",
     description: "GPT-4o for balanced performance. Compatible with Azure OpenAI.",
     tag: "Popular",
-    tagColor: "bg-indigo-100 text-indigo-800",
-    color: "bg-green-50",
-    activeColor: "border-green-400",
+    tagColor: "bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200",
+    color: "bg-green-50 dark:bg-green-950",
+    activeColor: "border-green-400 dark:border-green-600",
     dotColor: "bg-green-500",
     keyPlaceholder: "sk-proj-...",
     models: [
@@ -73,8 +73,8 @@ const PROVIDERS: ProviderConfig[] = [
     name: "Google (Gemini)",
     shortName: "Gemini",
     description: "Gemini 2.5 with 1M token context window.",
-    color: "bg-blue-50",
-    activeColor: "border-blue-400",
+    color: "bg-blue-50 dark:bg-blue-950",
+    activeColor: "border-blue-400 dark:border-blue-600",
     dotColor: "bg-blue-500",
     keyPlaceholder: "AIzaSy...",
     models: [
@@ -87,8 +87,8 @@ const PROVIDERS: ProviderConfig[] = [
     name: "Custom / Self-Hosted",
     shortName: "Custom",
     description: "Any OpenAI-compatible API — Ollama, Together AI, Groq.",
-    color: "bg-violet-50",
-    activeColor: "border-violet-400",
+    color: "bg-violet-50 dark:bg-violet-950",
+    activeColor: "border-violet-400 dark:border-violet-600",
     dotColor: "bg-violet-500",
     keyPlaceholder: "your-api-key",
     models: [],
@@ -229,7 +229,7 @@ export default function AiSettingsPage() {
       {isConnected && connectedProvider && (
         <div className="flex items-center justify-between rounded-lg border bg-card p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-purple-500 shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 dark:from-violet-500 to-purple-500 dark:to-purple-400 shadow-sm">
               <BrainCircuit className="h-5 w-5 text-white" />
             </div>
             <div>
@@ -247,7 +247,7 @@ export default function AiSettingsPage() {
           </div>
           <a
             href="/ai-assistant"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 dark:bg-violet-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 dark:hover:bg-violet-600"
           >
             Open Chat
             <ArrowRight className="h-3.5 w-3.5" />
@@ -268,7 +268,7 @@ export default function AiSettingsPage() {
                   "relative rounded-xl border bg-card p-5 transition hover:shadow-md",
                   isActive
                     ? cn("border-2", prov.activeColor)
-                    : "hover:border-violet-300"
+                    : "hover:border-violet-300 dark:hover:border-violet-700"
                 )}
               >
                 {/* Header */}
@@ -295,8 +295,8 @@ export default function AiSettingsPage() {
                 {isActive ? (
                   <>
                     <div className="flex items-center gap-1.5 mb-3">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-xs font-medium text-green-700">Connected</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
+                      <span className="text-xs font-medium text-green-700 dark:text-green-300">Connected</span>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 space-y-1.5 mb-4 text-xs">
                       <div className="flex justify-between">
@@ -325,7 +325,7 @@ export default function AiSettingsPage() {
                       <button
                         onClick={() => disconnectMutation.mutate()}
                         disabled={disconnectMutation.isPending}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-xs font-medium text-red-700 dark:text-red-300 transition hover:bg-red-100 dark:hover:bg-red-900"
                       >
                         <Unplug className="h-3 w-3" />
                         Disconnect
@@ -335,7 +335,7 @@ export default function AiSettingsPage() {
                 ) : (
                   <button
                     onClick={() => openEditModal(prov.id)}
-                    className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50/50 px-3 py-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 hover:border-violet-400"
+                    className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-violet-300 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/50 px-3 py-2.5 text-xs font-medium text-violet-700 dark:text-violet-300 transition hover:bg-violet-100 dark:hover:bg-violet-900 hover:border-violet-400 dark:hover:border-violet-600"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Connect {prov.shortName}
@@ -363,9 +363,9 @@ export default function AiSettingsPage() {
       </div>
 
       {/* Security Note */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-        <p className="text-xs text-green-800 leading-relaxed">
+      <div className="flex items-start gap-2.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 px-4 py-3">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+        <p className="text-xs text-green-800 dark:text-green-200 leading-relaxed">
           <strong>Your key stays on your server.</strong> Encrypted with AES-256-GCM using your APP_SECRET.
           API calls go directly from your server to the provider — never through a third party.
         </p>
@@ -475,7 +475,7 @@ export default function AiSettingsPage() {
               {testResult && (
                 <div className={cn(
                   "flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium",
-                  testResult.ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                  testResult.ok ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300" : "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300"
                 )}>
                   {testResult.ok ? (
                     <>
@@ -521,7 +521,7 @@ export default function AiSettingsPage() {
                 <button
                   onClick={() => saveMutation.mutate()}
                   disabled={saveMutation.isPending || (!apiKey && !(connectedProvider === editingProvider && isConnected))}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 dark:bg-violet-700 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saveMutation.isPending ? (
                     <>

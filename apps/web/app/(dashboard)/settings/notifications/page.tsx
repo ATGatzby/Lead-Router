@@ -112,7 +112,7 @@ export default function NotificationsSettingsPage() {
             {mutation.isPending ? "Saving…" : "Save Webhook"}
           </Button>
           {saved && (
-            <span className="text-sm text-green-600 font-medium">Saved successfully</span>
+            <span className="text-sm text-green-600 dark:text-green-400 font-medium">Saved successfully</span>
           )}
           {mutation.isError && (
             <span className="text-sm text-destructive">
@@ -125,7 +125,7 @@ export default function NotificationsSettingsPage() {
       {/* WhatsApp template preview */}
       <section className="rounded-lg border p-6 space-y-4">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-green-600" />
+          <MessageSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
           <h2 className="font-semibold">WhatsApp Cloud API Template</h2>
         </div>
         <p className="text-sm text-muted-foreground">
