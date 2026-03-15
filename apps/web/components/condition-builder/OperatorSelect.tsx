@@ -29,7 +29,7 @@ export function OperatorSelect({ fieldType, value, onChange }: Props) {
             <span className="flex items-center gap-1.5">
               {op.label}
               {op.value === "similar_to" && (
-                <span className="text-[10px] font-semibold text-violet-700 bg-violet-100 px-1 py-0.5 rounded">
+                <span className="text-[10px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900 px-1 py-0.5 rounded">
                   AI
                 </span>
               )}

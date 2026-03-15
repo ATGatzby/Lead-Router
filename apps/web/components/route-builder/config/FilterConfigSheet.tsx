@@ -122,7 +122,7 @@ export function FilterConfigSheet({
             </div>
           )}
           {fieldsQuery.isSuccess && fields.length === 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 mb-4">
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-4 py-3 text-sm text-amber-700 dark:text-amber-300 mb-4">
               No fields synced yet. Use &quot;Sync Fields&quot; on the routing rules list to import fields from
               Salesforce.
             </div>

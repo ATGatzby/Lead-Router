@@ -16,6 +16,7 @@ function makeBuilderState(
 ): RouteBuilderState {
   return {
     name: "Test Route",
+    routeType: "REALTIME",
     trigger: {
       triggerName: "",
       objectType: "LEAD",
@@ -23,6 +24,7 @@ function makeBuilderState(
       isDryRun: false,
       triggerConditions: [],
     },
+    searchTrigger: null,
     matchConfig: null,
     paths: [],
     defaultOwner: null,
@@ -217,9 +219,10 @@ describe("apiRuleToBuilderState", () => {
 
     const state = apiRuleToBuilderState(rule);
     expect(state.name).toBe("My Rule");
-    expect(state.trigger.objectType).toBe("CONTACT");
-    expect(state.trigger.triggerEvent).toBe("UPDATE");
-    expect(state.trigger.isDryRun).toBe(true);
+    expect(state.trigger).not.toBeNull();
+    expect(state.trigger!.objectType).toBe("CONTACT");
+    expect(state.trigger!.triggerEvent).toBe("UPDATE");
+    expect(state.trigger!.isDryRun).toBe(true);
     expect(state.matchConfig).toBeNull();
     expect(state.defaultOwner).toBeNull();
     // Should have at least one default path when branches is empty
@@ -339,9 +342,11 @@ describe("apiRuleToBuilderState", () => {
     const state = apiRuleToBuilderState(rule);
 
     expect(state.name).toBe("Untitled Route");
-    expect(state.trigger.objectType).toBe("LEAD");
-    expect(state.trigger.triggerEvent).toBe("INSERT");
-    expect(state.trigger.isDryRun).toBe(false);
+    // Empty rule has no trigger conditions, defaults to REALTIME with trigger
+    expect(state.trigger).not.toBeNull();
+    expect(state.trigger!.objectType).toBe("LEAD");
+    expect(state.trigger!.triggerEvent).toBe("INSERT");
+    expect(state.trigger!.isDryRun).toBe(false);
   });
 });
 
@@ -389,9 +394,10 @@ describe("round-trip conversion", () => {
 
     // Core fields preserved
     expect(restored.name).toBe(original.name);
-    expect(restored.trigger.objectType).toBe(original.trigger.objectType);
-    expect(restored.trigger.triggerEvent).toBe(original.trigger.triggerEvent);
-    expect(restored.trigger.isDryRun).toBe(original.trigger.isDryRun);
+    expect(restored.trigger).not.toBeNull();
+    expect(restored.trigger!.objectType).toBe(original.trigger!.objectType);
+    expect(restored.trigger!.triggerEvent).toBe(original.trigger!.triggerEvent);
+    expect(restored.trigger!.isDryRun).toBe(original.trigger!.isDryRun);
 
     // Branches preserved
     expect(restored.paths).toHaveLength(1);

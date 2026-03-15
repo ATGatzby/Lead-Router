@@ -23,7 +23,8 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Separate sections by type
-  const triggerSection = review.sections.find((s) => s.type === "trigger")
+  const triggerSection = review.sections.find((s) => s.type === "trigger" && s.id === "trigger")
+  const searchTriggerSection = review.sections.find((s) => s.type === "trigger" && s.id === "search-trigger")
   const matchSection = review.sections.find((s) => s.type === "match")
   const pathSections = review.sections.filter((s) => s.type === "path")
   const defaultSection = review.sections.find((s) => s.type === "default")
@@ -82,6 +83,22 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
               isSelected={selectedSectionId === triggerSection.id}
             />
           </div>
+        )}
+
+        {/* Search Trigger */}
+        {searchTriggerSection && (
+          <>
+            {triggerSection && <Divider />}
+            <div ref={(el) => { if (el) sectionRefs.current.set(searchTriggerSection.id, el) }}>
+              <EnglishSectionCard
+                section={searchTriggerSection}
+                isExpanded={true}
+                onToggleExpand={() => {}}
+                onSelect={setSelectedSectionId}
+                isSelected={selectedSectionId === searchTriggerSection.id}
+              />
+            </div>
+          </>
         )}
 
         {/* Match */}
@@ -172,17 +189,17 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
                 </h3>
                 <div className="flex items-center gap-1">
                   {errorCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
                       {errorCount} error{errorCount !== 1 ? "s" : ""}
                     </span>
                   )}
                   {warningCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
                       {warningCount}
                     </span>
                   )}
                   {infoCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
                       {infoCount}
                     </span>
                   )}
@@ -211,7 +228,8 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
           section={selectedSection}
           path={selectedPath ?? undefined}
           matchConfig={selectedSection.type === "match" ? state.matchConfig : undefined}
-          trigger={selectedSection.type === "trigger" ? state.trigger : undefined}
+          trigger={selectedSection.type === "trigger" && selectedSection.id === "trigger" ? state.trigger : undefined}
+          searchTrigger={selectedSection.type === "trigger" && selectedSection.id === "search-trigger" ? state.searchTrigger : undefined}
           defaultOwner={selectedSection.type === "default" ? state.defaultOwner : undefined}
           onClose={() => setSelectedSectionId(null)}
           onEditInCanvas={onEditInCanvas}
@@ -247,10 +265,10 @@ function WarningRow({
 
   const colorClasses =
     warning.severity === "error"
-      ? "text-red-700 bg-red-50 border-red-200"
+      ? "text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800"
       : warning.severity === "warning"
-      ? "text-amber-700 bg-amber-50 border-amber-200"
-      : "text-blue-700 bg-blue-50 border-blue-200"
+      ? "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800"
+      : "text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800"
 
   return (
     <button

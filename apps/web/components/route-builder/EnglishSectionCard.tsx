@@ -11,26 +11,26 @@ const SECTION_META: Record<
   trigger: {
     icon: Zap,
     borderOk: "border-l-violet-500",
-    iconBg: "bg-violet-100",
-    iconColor: "text-violet-600",
+    iconBg: "bg-violet-100 dark:bg-violet-900",
+    iconColor: "text-violet-600 dark:text-violet-400",
   },
   match: {
     icon: Search,
     borderOk: "border-l-blue-500",
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
+    iconBg: "bg-blue-100 dark:bg-blue-900",
+    iconColor: "text-blue-600 dark:text-blue-400",
   },
   path: {
     icon: Filter,
     borderOk: "border-l-indigo-500",
-    iconBg: "bg-indigo-100",
-    iconColor: "text-indigo-600",
+    iconBg: "bg-indigo-100 dark:bg-indigo-900",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
   },
   default: {
     icon: AlertTriangle,
     borderOk: "border-l-amber-500",
-    iconBg: "bg-amber-100",
-    iconColor: "text-amber-600",
+    iconBg: "bg-amber-100 dark:bg-amber-900",
+    iconColor: "text-amber-600 dark:text-amber-400",
   },
 }
 
@@ -49,7 +49,11 @@ export function EnglishSectionCard({
   onSelect,
   isSelected,
 }: EnglishSectionCardProps) {
-  const meta = SECTION_META[section.type]
+  const baseMeta = SECTION_META[section.type]
+  // Override styling for search triggers (teal + Search icon instead of violet + Zap)
+  const meta = section.id === "search-trigger"
+    ? { icon: Search, borderOk: "border-l-teal-500", iconBg: "bg-teal-100 dark:bg-teal-900", iconColor: "text-teal-600 dark:text-teal-400" }
+    : baseMeta
   const Icon = meta.icon
 
   const borderColor =
@@ -65,7 +69,7 @@ export function EnglishSectionCard({
   return (
     <div
       className={[
-        "border-l-4 rounded-lg border bg-white transition-colors cursor-pointer",
+        "border-l-4 rounded-lg border bg-white dark:bg-gray-900 transition-colors cursor-pointer",
         borderColor,
         isSelected ? "ring-2 ring-primary/30 shadow-md" : "hover:shadow-sm",
       ].join(" ")}
@@ -108,12 +112,12 @@ export function EnglishSectionCard({
 
         {/* Status badge */}
         {section.status === "error" && (
-          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
+          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
             Error
           </span>
         )}
         {section.status === "warning" && (
-          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
             Warning
           </span>
         )}

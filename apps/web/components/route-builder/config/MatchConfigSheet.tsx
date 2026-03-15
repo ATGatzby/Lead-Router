@@ -83,7 +83,7 @@ function RadioOption({ id, name, value, checked, onChange, label, description, r
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{label}</span>
           {recommended && (
-            <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] font-semibold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 px-1.5 py-0.5 rounded-full">
               Recommended
             </span>
           )}

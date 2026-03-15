@@ -1,10 +1,10 @@
 "use client"
 
-import { Zap, Search, Filter, AlertTriangle } from "lucide-react"
+import { Zap, Search, Filter, AlertTriangle, SearchIcon } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CanvasNodeType = "trigger" | "match" | "filter" | "assign" | "defaultOwner"
+export type CanvasNodeType = "trigger" | "searchTrigger" | "match" | "filter" | "assign" | "defaultOwner"
 
 interface StepDefinition {
   type: CanvasNodeType
@@ -20,21 +20,21 @@ const STEPS: StepDefinition[] = [
     icon: Search,
     label: "Match",
     description: "Check for existing records",
-    color: "text-blue-600 bg-blue-100",
+    color: "text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900",
   },
   {
     type: "filter",
     icon: Filter,
     label: "Filter + Assign",
     description: "Add a branching path",
-    color: "text-indigo-600 bg-indigo-100",
+    color: "text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900",
   },
   {
     type: "defaultOwner",
     icon: AlertTriangle,
     label: "Default Owner",
     description: "Fallback assignment",
-    color: "text-amber-600 bg-amber-100",
+    color: "text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900",
   },
 ]
 
@@ -49,7 +49,7 @@ interface StepRegistryProps {
 
 export function StepRegistry({ activeTypes }: StepRegistryProps) {
   return (
-    <div className="w-[220px] flex-shrink-0 border-l bg-white flex flex-col">
+    <div className="w-[220px] flex-shrink-0 border-l bg-white dark:bg-gray-950 flex flex-col">
       {/* Panel header */}
       <div className="px-4 py-3 border-b">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -58,20 +58,95 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {/* Trigger — always present, not draggable */}
-        <div className="rounded-lg border border-dashed border-border px-3 py-2.5 opacity-60 select-none">
-          <div className="flex items-center gap-2.5">
-            <div className="flex-shrink-0 flex items-center justify-center size-7 rounded-md bg-violet-100 text-violet-600">
-              <Zap className="size-3.5" />
+        {/* Section: Triggers */}
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">
+          Triggers
+        </p>
+
+        {/* Real-Time Trigger — singleton, draggable */}
+        {(() => {
+          const isAdded = activeTypes.includes("trigger")
+          return (
+            <div
+              draggable={!isAdded}
+              onDragStart={(e) => {
+                if (isAdded) return
+                e.dataTransfer.setData("stepType", "trigger")
+                e.dataTransfer.effectAllowed = "copy"
+              }}
+              className={[
+                "rounded-lg border px-3 py-2.5 transition-colors",
+                isAdded
+                  ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
+                  : "border-border bg-white dark:bg-gray-900 hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/50 cursor-grab active:cursor-grabbing",
+              ].join(" ")}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex-shrink-0 flex items-center justify-center size-7 rounded-md bg-violet-100 dark:bg-violet-900 text-violet-600 dark:text-violet-400">
+                  <Zap className="size-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium leading-tight">
+                    Real-Time Trigger
+                    {isAdded && (
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                        (added)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                    Apex trigger on record change
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium leading-tight">Trigger</p>
-              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-                Always present
-              </p>
+          )
+        })()}
+
+        {/* Search Salesforce Trigger — singleton, draggable */}
+        {(() => {
+          const isAdded = activeTypes.includes("searchTrigger")
+          return (
+            <div
+              draggable={!isAdded}
+              onDragStart={(e) => {
+                if (isAdded) return
+                e.dataTransfer.setData("stepType", "searchTrigger")
+                e.dataTransfer.effectAllowed = "copy"
+              }}
+              className={[
+                "rounded-lg border px-3 py-2.5 transition-colors",
+                isAdded
+                  ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
+                  : "border-border bg-white dark:bg-gray-900 hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/50 cursor-grab active:cursor-grabbing",
+              ].join(" ")}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex-shrink-0 flex items-center justify-center size-7 rounded-md bg-teal-100 dark:bg-teal-900 text-teal-600 dark:text-teal-400">
+                  <SearchIcon className="size-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium leading-tight">
+                    Search Salesforce
+                    {isAdded && (
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                        (added)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                    Query records on a schedule
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )
+        })()}
+
+        {/* Section: Actions */}
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-2">
+          Actions
+        </p>
 
         {/* Draggable step cards */}
         {STEPS.map((step) => {
@@ -93,7 +168,7 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
                 "rounded-lg border px-3 py-2.5 transition-colors",
                 isAdded
                   ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
-                  : "border-border bg-white hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing",
+                  : "border-border bg-white dark:bg-gray-900 hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing",
               ].join(" ")}
             >
               <div className="flex items-center gap-2.5">

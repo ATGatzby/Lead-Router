@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
+import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 
 // PATCH /api/rules/:id/status — toggle ACTIVE / INACTIVE
 export async function PATCH(
@@ -43,6 +44,7 @@ export async function PATCH(
     });
 
     await invalidateRulesCache(orgId, rule.objectType);
+    syncRoutingFlags(orgId).catch(() => {});
 
     return NextResponse.json({ rule: updated });
   } catch (err) {

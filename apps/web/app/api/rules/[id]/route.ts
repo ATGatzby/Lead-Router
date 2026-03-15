@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders, requireSession, requireRole } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
+import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 import { buildMatchConfigData } from "@/app/api/rules/route";
 
 // GET /api/rules/:id — full rule detail with conditions and branches
@@ -96,6 +97,13 @@ export async function PUT(
       triggerName = "",
       triggerConditions = [],
       conditions = [],
+      // Scheduled route fields
+      routeType,
+      scheduleFrequency,
+      scheduleTime,
+      scheduleTimezone,
+      scheduleCron,
+      searchCriteria,
       // New Route Builder fields
       branches = [],
       matchConfig = null,
@@ -134,6 +142,12 @@ export async function PUT(
         assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
         assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun: isDryRun ?? false,
+        routeType: routeType ?? "REALTIME",
+        scheduleFrequency: scheduleFrequency ?? null,
+        scheduleTime: scheduleTime ?? null,
+        scheduleTimezone: scheduleTimezone ?? null,
+        scheduleCron: scheduleCron ?? null,
+        searchCriteria: searchCriteria ?? undefined,
         triggerName: triggerName || "",
         triggerConditions: {
           create: triggerConditions.map(
@@ -220,6 +234,7 @@ export async function PUT(
     });
 
     await invalidateRulesCache(orgId, updated.objectType);
+    syncRoutingFlags(orgId).catch(() => {});
 
     return NextResponse.json({ rule: updated });
   } catch (err) {
@@ -264,6 +279,7 @@ export async function DELETE(
     });
 
     await invalidateRulesCache(orgId, rule.objectType);
+    syncRoutingFlags(orgId).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (err) {

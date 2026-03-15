@@ -73,7 +73,7 @@ export function DefaultOwnerConfigSheet({
         </SheetHeader>
 
         <SheetBody className="space-y-4">
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             This owner receives leads when no path conditions match. It is strongly recommended to
             configure a default owner to prevent leads from going unassigned.
           </div>

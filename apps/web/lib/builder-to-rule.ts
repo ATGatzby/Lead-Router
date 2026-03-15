@@ -1,4 +1,5 @@
 import type { RouteBuilderState } from "@/components/route-builder/types"
+import { resolveObjectType } from "@/components/route-builder/types"
 
 /**
  * Converts RouteBuilderState to the PUT /api/rules/:id body format expected by the API.
@@ -7,23 +8,26 @@ export function builderToApiBody(
   state: RouteBuilderState,
   _existingRuleId?: string
 ): Record<string, unknown> {
-  return {
+  const body: Record<string, unknown> = {
     name: state.name,
-    objectType: state.trigger.objectType,
-    triggerEvent: state.trigger.triggerEvent,
-    isDryRun: state.trigger.isDryRun,
-    triggerName: state.trigger.triggerName || "",
+    routeType: state.searchTrigger ? "SCHEDULED" : "REALTIME",
+    objectType: resolveObjectType(state),
+    triggerEvent: state.trigger?.triggerEvent ?? "SEARCH",
+    isDryRun: state.trigger?.isDryRun ?? state.searchTrigger?.isDryRun ?? false,
+    triggerName: state.trigger?.triggerName || "",
 
-    triggerConditions: state.trigger.triggerConditions.flatMap((group, gi) =>
-      group.conditions.map((cond, ci) => ({
-        groupId: group.id,
-        fieldName: cond.fieldApiName,
-        fieldType: cond.fieldType ?? "TEXT",
-        operator: cond.operator,
-        value: cond.value || null,
-        sortOrder: gi * 100 + ci,
-      }))
-    ),
+    triggerConditions: state.trigger
+      ? state.trigger.triggerConditions.flatMap((group, gi) =>
+          group.conditions.map((cond, ci) => ({
+            groupId: group.id,
+            fieldName: cond.fieldApiName,
+            fieldType: cond.fieldType ?? "TEXT",
+            operator: cond.operator,
+            value: cond.value || null,
+            sortOrder: gi * 100 + ci,
+          }))
+        )
+      : [],
 
     matchConfig: state.matchConfig
       ? {
@@ -89,6 +93,19 @@ export function builderToApiBody(
         ? state.defaultOwner.assigneeId
         : null,
   }
+
+  // Search trigger → Scheduled route fields
+  if (state.searchTrigger) {
+    body.routeType = "SCHEDULED"
+    body.objectType = state.searchTrigger.objectType
+    body.searchCriteria = state.searchTrigger.searchCriteria
+    body.scheduleFrequency = state.searchTrigger.frequency
+    body.scheduleTime = state.searchTrigger.scheduleTime
+    body.scheduleTimezone = state.searchTrigger.scheduleTimezone
+    body.triggerEvent = "SEARCH"
+  }
+
+  return body
 }
 
 /**
@@ -239,15 +256,42 @@ export function apiRuleToBuilderState(rule: any): RouteBuilderState {
     triggerConditionGroups.push(...tcGroupMap.values())
   }
 
-  return {
-    name: rule.name ?? "Untitled Route",
-    trigger: {
+  // Search trigger config
+  let searchTrigger: RouteBuilderState["searchTrigger"] = null
+  if (rule.routeType === "SCHEDULED" || rule.triggerEvent === "SEARCH") {
+    searchTrigger = {
       triggerName: rule.triggerName ?? "",
       objectType: rule.objectType ?? "LEAD",
-      triggerEvent: rule.triggerEvent ?? "INSERT",
+      searchCriteria: Array.isArray(rule.searchCriteria) ? rule.searchCriteria : [],
+      frequency: rule.scheduleFrequency ?? null,
+      scheduleTime: rule.scheduleTime ?? "06:00",
+      scheduleTimezone: rule.scheduleTimezone ?? "UTC",
+      batchSize: rule.batchSize ?? 100,
+      skipRecentlyRouted: rule.skipRecentlyRouted ?? true,
       isDryRun: rule.isDryRun ?? false,
-      triggerConditions: triggerConditionGroups,
-    },
+    }
+  }
+
+  // Determine if this route has a real-time trigger.
+  // Scheduled-only routes (triggerEvent === SEARCH with no trigger conditions) have no real-time trigger.
+  const isScheduledOnly =
+    (rule.routeType === "SCHEDULED" || rule.triggerEvent === "SEARCH") &&
+    triggerConditionGroups.length === 0
+  const trigger: RouteBuilderState["trigger"] = isScheduledOnly
+    ? null
+    : {
+        triggerName: rule.triggerName ?? "",
+        objectType: rule.objectType ?? "LEAD",
+        triggerEvent: rule.triggerEvent ?? "INSERT",
+        isDryRun: rule.isDryRun ?? false,
+        triggerConditions: triggerConditionGroups,
+      }
+
+  return {
+    name: rule.name ?? "Untitled Route",
+    routeType: rule.routeType ?? "REALTIME",
+    trigger,
+    searchTrigger,
     matchConfig,
     paths: paths.length > 0 ? paths : [
       {

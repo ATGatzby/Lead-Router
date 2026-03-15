@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
+import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,17 @@ export async function GET(req: NextRequest) {
       isDryRun: r.isDryRun,
       triggerName: r.triggerName,
       triggerConditions: r.triggerConditions,
+      routeType: (r as any).routeType ?? "REALTIME",
+      scheduleFrequency: (r as any).scheduleFrequency ?? null,
+      scheduleTime: (r as any).scheduleTime ?? null,
+      scheduleTimezone: (r as any).scheduleTimezone ?? null,
+      searchCriteria: (r as any).searchCriteria ?? null,
+      lastRunAt: (r as any).lastRunAt ?? null,
+      lastRunStatus: (r as any).lastRunStatus ?? null,
+      lastRunRecords: (r as any).lastRunRecords ?? null,
+      lastRunDurationMs: (r as any).lastRunDurationMs ?? null,
+      totalRuns: (r as any).totalRuns ?? 0,
+      totalRecordsRouted: (r as any).totalRecordsRouted ?? 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -152,6 +164,13 @@ export async function POST(req: NextRequest) {
       triggerName = "",
       triggerConditions = [],
       conditions = [],
+      // Scheduled route fields
+      routeType = "REALTIME",
+      scheduleFrequency = null,
+      scheduleTime = null,
+      scheduleTimezone = null,
+      scheduleCron = null,
+      searchCriteria = undefined,
       // New Route Builder fields
       branches = [],
       matchConfig = null,
@@ -167,7 +186,7 @@ export async function POST(req: NextRequest) {
     if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
       return NextResponse.json({ error: "Invalid objectType" }, { status: 400 });
     }
-    if (!["INSERT", "UPDATE", "BOTH"].includes(triggerEvent)) {
+    if (!["INSERT", "UPDATE", "BOTH", "SEARCH"].includes(triggerEvent)) {
       return NextResponse.json({ error: "Invalid triggerEvent" }, { status: 400 });
     }
 
@@ -197,6 +216,12 @@ export async function POST(req: NextRequest) {
         assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? assigneeTeamId : null,
         assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? assigneeQueueId : null,
         isDryRun,
+        routeType: routeType ?? "REALTIME",
+        scheduleFrequency: scheduleFrequency ?? null,
+        scheduleTime: scheduleTime ?? null,
+        scheduleTimezone: scheduleTimezone ?? null,
+        scheduleCron: scheduleCron ?? null,
+        searchCriteria: searchCriteria ?? undefined,
         triggerName: triggerName || "",
         triggerConditions: {
           create: triggerConditions.map(
@@ -266,6 +291,7 @@ export async function POST(req: NextRequest) {
     });
 
     await invalidateRulesCache(orgId, objectType);
+    syncRoutingFlags(orgId).catch(() => {});
 
     return NextResponse.json({ rule }, { status: 201 });
   } catch (err) {

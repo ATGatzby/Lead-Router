@@ -7,6 +7,8 @@ import type {
   ObjectType,
   TriggerEvent,
   AssignmentType,
+  SearchTriggerConfig,
+  ScheduleFrequency,
 } from "@/components/route-builder/types";
 
 // ---------------------------------------------------------------------------
@@ -167,7 +169,7 @@ function serializeConditions(groups: ConditionGroup[]): string {
 // ---------------------------------------------------------------------------
 
 function buildTriggerSection(state: RouteBuilderState): EnglishSection {
-  const { objectType, triggerEvent, isDryRun, triggerConditions } = state.trigger;
+  const { objectType, triggerEvent, isDryRun, triggerConditions } = state.trigger!;
   const obj = objectLabel(objectType);
   const evt = eventLabel(triggerEvent);
   const lines: string[] = [];
@@ -190,6 +192,60 @@ function buildTriggerSection(state: RouteBuilderState): EnglishSection {
     id: "trigger",
     type: "trigger",
     title: "TRIGGER",
+    lines,
+    status: "ok",
+  };
+}
+
+function frequencyLabel(freq: ScheduleFrequency | null): string {
+  switch (freq) {
+    case "DAILY":
+      return "daily";
+    case "WEEKLY":
+      return "weekly";
+    case "MONTHLY":
+      return "monthly";
+    default:
+      return "one-time";
+  }
+}
+
+function buildSearchTriggerSection(config: SearchTriggerConfig): EnglishSection {
+  const obj = objectLabel(config.objectType);
+  const lines: string[] = [];
+
+  // Schedule description
+  const freq = frequencyLabel(config.frequency);
+  if (config.frequency) {
+    lines.push(
+      `Search Salesforce for ${obj}s ${freq} at ${config.scheduleTime} ${config.scheduleTimezone}`
+    );
+  } else {
+    lines.push(`Search Salesforce for ${obj}s (one-time / manual run)`);
+  }
+
+  // Search criteria
+  if (hasConditions(config.searchCriteria)) {
+    lines.push(`Where ${conditionsToText(config.searchCriteria)}`);
+  } else {
+    lines.push(`No search criteria — all ${objectLabelPlural(config.objectType)} will be queried`);
+  }
+
+  // Options
+  if (config.skipRecentlyRouted) {
+    lines.push("Skipping records routed in the last 24 hours");
+  }
+  if (config.isDryRun) {
+    lines.push("Dry run mode — records will be logged but not assigned");
+  }
+  if (config.batchSize !== 200) {
+    lines.push(`Batch size: ${config.batchSize} records`);
+  }
+
+  return {
+    id: "search-trigger",
+    type: "trigger",
+    title: "SEARCH TRIGGER",
     lines,
     status: "ok",
   };
@@ -387,7 +443,7 @@ function detectWarnings(
   }
 
   // No trigger criteria
-  if (!hasConditions(state.trigger.triggerConditions)) {
+  if (state.trigger && !hasConditions(state.trigger.triggerConditions)) {
     warnings.push({
       severity: "info",
       message: "No trigger criteria \u2014 all records will enter the routing flow",
@@ -395,12 +451,28 @@ function detectWarnings(
     });
   }
 
+  // Search trigger warnings
+  if (state.searchTrigger && !hasConditions(state.searchTrigger.searchCriteria)) {
+    warnings.push({
+      severity: "warning",
+      message: "No search criteria \u2014 all records of this object type will be queried",
+      relatedSection: "search-trigger",
+    });
+  }
+
   // Dry run active
-  if (state.trigger.isDryRun) {
+  if (state.trigger?.isDryRun) {
     warnings.push({
       severity: "info",
       message: "Dry run is active \u2014 no records will actually be assigned",
       relatedSection: "trigger",
+    });
+  }
+  if (state.searchTrigger?.isDryRun) {
+    warnings.push({
+      severity: "info",
+      message: "Search trigger dry run is active \u2014 no records will actually be assigned",
+      relatedSection: "search-trigger",
     });
   }
 
@@ -414,8 +486,13 @@ function detectWarnings(
 export function routeToEnglish(state: RouteBuilderState): EnglishReview {
   const sections: EnglishSection[] = [];
 
-  // Trigger section — always present
-  sections.push(buildTriggerSection(state));
+  // Trigger section — real-time or search trigger
+  if (state.trigger) {
+    sections.push(buildTriggerSection(state));
+  }
+  if (state.searchTrigger) {
+    sections.push(buildSearchTriggerSection(state.searchTrigger));
+  }
 
   // Match section — only if configured
   if (state.matchConfig) {

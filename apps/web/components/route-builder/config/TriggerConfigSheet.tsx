@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator"
 import { Filter } from "lucide-react"
 import { ConditionBuilder } from "@/components/condition-builder"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
-import type { RouteBuilderState, ObjectType, TriggerEvent } from "../types"
+import type { TriggerConfig, ObjectType, TriggerEvent } from "../types"
 
 interface FieldsResponse {
   fields: FieldSchema[]
@@ -35,8 +35,8 @@ interface FieldsResponse {
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  trigger: RouteBuilderState["trigger"]
-  onSave: (trigger: RouteBuilderState["trigger"]) => void
+  trigger: TriggerConfig
+  onSave: (trigger: TriggerConfig) => void
 }
 
 export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Props) {

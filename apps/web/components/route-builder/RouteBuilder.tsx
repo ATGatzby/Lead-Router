@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText } from "lucide-react"
+import { useTheme } from "next-themes"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText, Play, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StepRegistry, type CanvasNodeType } from "./StepRegistry"
 import { TriggerConfigSheet } from "./config/TriggerConfigSheet"
+import { SearchTriggerConfigSheet } from "./config/SearchTriggerConfigSheet"
 import { MatchConfigSheet, defaultMatchConfig } from "./config/MatchConfigSheet"
 import { FilterConfigSheet } from "./config/FilterConfigSheet"
 import { ActionConfigSheet } from "./config/ActionConfigSheet"
@@ -14,11 +16,13 @@ import type {
   MatchConfig,
   DefaultOwner,
   PathAction,
+  SearchTriggerConfig,
 } from "./types"
-import { defaultBuilderState, triggerEventLabel } from "./types"
+import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType } from "./types"
 import type { RuleConditions } from "@/components/condition-builder"
 import { EnglishView } from "./EnglishView"
 import { routeToEnglish } from "@/lib/route-to-english"
+import { RunPanel, type RunningStep } from "./RunPanel"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,6 +58,7 @@ interface CanvasEdge {
 
 type ActiveSheet =
   | { type: "trigger"; nodeId: string }
+  | { type: "searchTrigger"; nodeId: string }
   | { type: "match"; nodeId: string }
   | { type: "filter"; nodeId: string; pathId: string }
   | { type: "assign"; nodeId: string; pathId: string }
@@ -79,36 +84,43 @@ const NODE_META: Record<
     icon: Zap,
     label: "Trigger",
     borderClass: "border-l-4 border-l-violet-500",
-    iconBg: "bg-violet-100",
-    iconColor: "text-violet-600",
+    iconBg: "bg-violet-100 dark:bg-violet-900",
+    iconColor: "text-violet-600 dark:text-violet-400",
+  },
+  searchTrigger: {
+    icon: Search,
+    label: "Search Salesforce",
+    borderClass: "border-l-4 border-l-teal-500",
+    iconBg: "bg-teal-100 dark:bg-teal-900",
+    iconColor: "text-teal-600 dark:text-teal-400",
   },
   match: {
     icon: Search,
     label: "Match",
     borderClass: "border-l-4 border-l-blue-500",
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
+    iconBg: "bg-blue-100 dark:bg-blue-900",
+    iconColor: "text-blue-600 dark:text-blue-400",
   },
   filter: {
     icon: Filter,
     label: "Filter",
     borderClass: "border-l-4 border-l-indigo-500",
-    iconBg: "bg-indigo-100",
-    iconColor: "text-indigo-600",
+    iconBg: "bg-indigo-100 dark:bg-indigo-900",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
   },
   assign: {
     icon: UserCheck,
     label: "Assign",
     borderClass: "border-l-4 border-l-green-500",
-    iconBg: "bg-green-100",
-    iconColor: "text-green-600",
+    iconBg: "bg-green-100 dark:bg-green-900",
+    iconColor: "text-green-600 dark:text-green-400",
   },
   defaultOwner: {
     icon: AlertTriangle,
     label: "Default Owner",
     borderClass: "border-l-4 border-l-amber-500",
-    iconBg: "bg-amber-100",
-    iconColor: "text-amber-600",
+    iconBg: "bg-amber-100 dark:bg-amber-900",
+    iconColor: "text-amber-600 dark:text-amber-400",
   },
 }
 
@@ -119,9 +131,13 @@ const NODE_META: Record<
 function computeEdges(nodes: CanvasNode[]): CanvasEdge[] {
   const edges: CanvasEdge[] = []
   const trigger = nodes.find((n) => n.type === "trigger")
+  const searchTrigger = nodes.find((n) => n.type === "searchTrigger")
   const match = nodes.find((n) => n.type === "match")
-  if (trigger && match) edges.push({ fromId: trigger.id, toId: match.id })
-  const splitNode = match ?? trigger
+  // Both triggers fan-out to match (or to the first action node)
+  const firstAction = match ?? nodes.find((n) => n.type === "filter") ?? nodes.find((n) => n.type === "defaultOwner")
+  if (trigger && firstAction) edges.push({ fromId: trigger.id, toId: firstAction.id })
+  if (searchTrigger && firstAction) edges.push({ fromId: searchTrigger.id, toId: firstAction.id })
+  const splitNode = match ?? trigger ?? searchTrigger
   if (!splitNode) return edges
 
   const filterNodes = nodes.filter((n) => n.type === "filter")
@@ -155,9 +171,17 @@ function computeEdges(nodes: CanvasNode[]): CanvasEdge[] {
 function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
   switch (node.type) {
     case "trigger": {
+      if (!state.trigger) return "Not configured"
       const base = state.trigger.triggerName || triggerEventLabel(state.trigger.objectType, state.trigger.triggerEvent)
       const criteriaCount = state.trigger.triggerConditions.flatMap(g => g.conditions).length
       return criteriaCount > 0 ? `${base} · ${criteriaCount} criteria` : base
+    }
+    case "searchTrigger": {
+      if (!state.searchTrigger) return "Not configured"
+      const freq = state.searchTrigger.frequency ? state.searchTrigger.frequency.charAt(0) + state.searchTrigger.frequency.slice(1).toLowerCase() : "One-time"
+      const obj = state.searchTrigger.objectType === "LEAD" ? "Lead" : state.searchTrigger.objectType === "CONTACT" ? "Contact" : "Account"
+      const criteriaCount = state.searchTrigger.searchCriteria.flatMap(g => g.conditions).length
+      return criteriaCount > 0 ? `${freq} · ${obj} · ${criteriaCount} criteria` : `${freq} · ${obj}`
     }
     case "match": {
       if (!state.matchConfig) return "Not configured"
@@ -237,6 +261,7 @@ interface CanvasNodeCardProps {
   title?: string                             // override header label (filter nodes show path label)
   subtitle: string
   isDragging: boolean
+  glowState?: "running" | "done" | null      // run-time glow
   onMouseDown: (e: React.MouseEvent, nodeId: string) => void
   onClick: (nodeId: string) => void
   onDelete: (nodeId: string) => void
@@ -248,6 +273,7 @@ function CanvasNodeCard({
   title,
   subtitle,
   isDragging,
+  glowState,
   onMouseDown,
   onClick,
   onDelete,
@@ -270,9 +296,11 @@ function CanvasNodeCard({
         userSelect: "none",
       }}
       className={[
-        "rounded-lg border bg-white shadow-sm flex items-center gap-3 px-3",
+        "rounded-lg border bg-white dark:bg-[#12121a] shadow-sm flex items-center gap-3 px-3 transition-shadow duration-300",
         meta.borderClass,
         isDragging ? "shadow-lg ring-2 ring-primary/30 cursor-grabbing" : "cursor-grab hover:shadow-md",
+        glowState === "running" ? "ring-2 ring-teal-300 dark:ring-teal-600 shadow-lg shadow-teal-100/50 dark:shadow-teal-900/50" : "",
+        glowState === "done" ? "ring-2 ring-green-200 dark:ring-green-700" : "",
       ].join(" ")}
       onMouseDown={(e) => onMouseDown(e, node.id)}
       onClick={(e) => {
@@ -311,9 +339,8 @@ function CanvasNodeCard({
         </p>
       </div>
 
-      {/* Delete button — hidden for trigger */}
-      {node.type !== "trigger" && (
-        <button
+      {/* Delete button */}
+      <button
           type="button"
           className="flex-shrink-0 flex items-center justify-center size-5 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
           onClick={(e) => {
@@ -324,7 +351,6 @@ function CanvasNodeCard({
         >
           <X className="size-3" />
         </button>
-      )}
     </div>
   )
 }
@@ -334,9 +360,17 @@ function CanvasNodeCard({
 // Builds nodes from the loaded route data (no-op for new routes with no paths).
 //
 function buildNodesFromState(initialState?: Partial<RouteBuilderState>): CanvasNode[] {
-  const nodes: CanvasNode[] = [
-    { id: "trigger", type: "trigger", x: 300, y: 120 },
-  ]
+  const hasTrigger = !!initialState?.trigger
+  const hasSearchTrigger = !!initialState?.searchTrigger
+  const bothTriggers = hasTrigger && hasSearchTrigger
+  const nodes: CanvasNode[] = []
+
+  if (hasTrigger) {
+    nodes.push({ id: "trigger", type: "trigger", x: bothTriggers ? 180 : 300, y: 120 })
+  }
+  if (hasSearchTrigger) {
+    nodes.push({ id: "searchTrigger", type: "searchTrigger", x: bothTriggers ? 440 : 300, y: 120 })
+  }
   const matchConfig = initialState?.matchConfig
   const paths = initialState?.paths ?? []
   const defaultOwner = initialState?.defaultOwner
@@ -375,12 +409,17 @@ export function RouteBuilder({
   onSave,
   isSaving: externalIsSaving,
 }: RouteBuilderProps) {
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === "dark"
+
   // ── Builder state (the source of truth for the route data) ─────────────────
   const base = defaultBuilderState()
   const [state, setState] = useState<RouteBuilderState>(() => ({
     ...base,
     ...initialState,
-    trigger: { ...base.trigger, ...initialState?.trigger },
+    trigger: initialState?.trigger
+      ? { ...defaultTriggerConfig(), ...initialState.trigger }
+      : null,
     paths: initialState?.paths ?? base.paths,
   }))
 
@@ -389,6 +428,55 @@ export function RouteBuilder({
   const isSaving = externalIsSaving ?? internalIsSaving
   const [saveError, setSaveError] = useState<string | null>(null)
   const isDirty = JSON.stringify(state) !== JSON.stringify(savedState)
+
+  // ── Run panel state ────────────────────────────────────────────────────────
+  const [showRunPanel, setShowRunPanel] = useState(false)
+  const [runningStep, setRunningStep] = useState<RunningStep>(null)
+  const [isRunActive, setIsRunActive] = useState(false)
+  const [doneSteps, setDoneSteps] = useState<Set<RunningStep>>(new Set())
+
+  // Track which steps have completed for glow
+  const handleRunningStepChange = useCallback((step: RunningStep) => {
+    setRunningStep((prev) => {
+      // When a step transitions away, mark it as done
+      if (prev && prev !== step) {
+        setDoneSteps((ds) => new Set(ds).add(prev))
+      }
+      return step
+    })
+  }, [])
+
+  const handleRunStateChange = useCallback((running: boolean) => {
+    setIsRunActive(running)
+    if (!running) {
+      // Clear all glows after 2 seconds
+      setTimeout(() => {
+        setDoneSteps(new Set())
+        setRunningStep(null)
+      }, 2000)
+    } else {
+      // Starting a new run — clear previous done steps
+      setDoneSteps(new Set())
+    }
+  }, [])
+
+  // Compute glow state for a canvas node type
+  const glowForNode = useCallback((nodeType: CanvasNodeType): "running" | "done" | null => {
+    // Map canvas node types to RunningStep values
+    const typeToStep: Record<string, RunningStep> = {
+      trigger: "trigger",
+      searchTrigger: "trigger",
+      match: "match",
+      filter: "filter",
+      assign: "assign",
+      defaultOwner: "assign", // default owner glows with assign step
+    }
+    const step = typeToStep[nodeType]
+    if (!step) return null
+    if (runningStep === step) return "running"
+    if (doneSteps.has(step)) return "done"
+    return null
+  }, [runningStep, doneSteps])
 
   // ── Canvas / English tab toggle ────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"canvas" | "english">("canvas")
@@ -611,7 +699,7 @@ export function RouteBuilder({
     if (!node) return
     if ((node.type === "filter" || node.type === "assign") && node.pathId) {
       setActiveSheet({ type: node.type, nodeId: node.id, pathId: node.pathId })
-    } else if (node.type === "trigger" || node.type === "match" || node.type === "defaultOwner") {
+    } else if (node.type === "trigger" || node.type === "searchTrigger" || node.type === "match" || node.type === "defaultOwner") {
       setActiveSheet({ type: node.type, nodeId: node.id })
     }
   }, [nodes])
@@ -640,6 +728,72 @@ export function RouteBuilder({
       if (!stepType) return
 
       const newId = `${stepType}-${Date.now()}`
+
+      // ── Real-Time Trigger: singleton ──────────────────────────────────────────
+      if (stepType === "trigger") {
+        const existing = nodes.find((n) => n.type === "trigger")
+        if (existing) return // singleton
+        const searchNode = nodes.find((n) => n.type === "searchTrigger")
+
+        if (searchNode) {
+          // Place beside search trigger, shift search right
+          setNodes((prev) => [
+            ...prev.map((n) =>
+              n.type === "searchTrigger" ? { ...n, x: n.x + (NODE_WIDTH / 2 + 20) } : n
+            ),
+            { id: newId, type: "trigger" as CanvasNodeType, x: searchNode.x - (NODE_WIDTH / 2 + 20), y: searchNode.y },
+          ])
+        } else {
+          setNodes((prev) => [
+            ...prev,
+            { id: newId, type: "trigger" as CanvasNodeType, x: 300, y: 120 },
+          ])
+        }
+
+        setState((s) => ({ ...s, trigger: defaultTriggerConfig() }))
+        setActiveSheet({ type: "trigger", nodeId: newId })
+        return
+      }
+
+      // ── Search Salesforce Trigger: place beside real-time trigger ────────────
+      if (stepType === "searchTrigger") {
+        const triggerNode = nodes.find((n) => n.type === "trigger")
+        const existing = nodes.find((n) => n.type === "searchTrigger")
+        if (existing) return // singleton
+
+        const siblingX = triggerNode?.x ?? 300
+        const siblingY = triggerNode?.y ?? 120
+
+        if (triggerNode) {
+          // Shift real-time trigger left to center the pair
+          setNodes((prev) => [
+            ...prev.map((n) =>
+              n.type === "trigger" ? { ...n, x: n.x - (NODE_WIDTH / 2 + 20) } : n
+            ),
+            { id: newId, type: "searchTrigger" as CanvasNodeType, x: siblingX + NODE_WIDTH + 40 - (NODE_WIDTH / 2 + 20), y: siblingY },
+          ])
+        } else {
+          setNodes((prev) => [
+            ...prev,
+            { id: newId, type: "searchTrigger" as CanvasNodeType, x: 300, y: 120 },
+          ])
+        }
+
+        const defaultSearch: SearchTriggerConfig = {
+          triggerName: "",
+          objectType: resolveObjectType(state),
+          searchCriteria: [],
+          frequency: "DAILY",
+          scheduleTime: "06:00",
+          scheduleTimezone: "UTC",
+          batchSize: 200,
+          skipRecentlyRouted: false,
+          isDryRun: false,
+        }
+        setState((s) => ({ ...s, routeType: "SCHEDULED", searchTrigger: defaultSearch }))
+        setActiveSheet({ type: "searchTrigger", nodeId: newId })
+        return
+      }
 
       // ── Match step: insert between trigger and filters ──────────────────────
       if (stepType === "match") {
@@ -737,7 +891,31 @@ export function RouteBuilder({
   // ── Delete a node ─────────────────────────────────────────────────────────────
   const handleDeleteNode = useCallback((nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId)
-    if (!node || node.type === "trigger") return
+    if (!node) return
+
+    if (node.type === "trigger") {
+      // Re-center the search trigger if present
+      setNodes((prev) =>
+        prev
+          .filter((n) => n.id !== nodeId)
+          .map((n) => n.type === "searchTrigger" ? { ...n, x: 300 } : n)
+      )
+      setState((s) => ({ ...s, trigger: null }))
+      if (activeSheet?.type === "trigger") setActiveSheet(null)
+      return
+    }
+
+    if (node.type === "searchTrigger") {
+      // Re-center the real-time trigger if present
+      setNodes((prev) =>
+        prev
+          .filter((n) => n.id !== nodeId)
+          .map((n) => n.type === "trigger" ? { ...n, x: 300 } : n)
+      )
+      setState((s) => ({ ...s, searchTrigger: null }))
+      if (activeSheet?.type === "searchTrigger") setActiveSheet(null)
+      return
+    }
 
     if (node.type === "match") {
       // Shift filter/assign/defaultOwner back up
@@ -839,7 +1017,7 @@ export function RouteBuilder({
     >
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div
-        className="flex-shrink-0 flex items-center gap-3 px-4 border-b bg-white"
+        className="flex-shrink-0 flex items-center gap-3 px-4 border-b bg-white dark:bg-[#12121a]"
         style={{ height: TOP_BAR_HEIGHT }}
       >
         <input
@@ -858,7 +1036,7 @@ export function RouteBuilder({
             onClick={() => setActiveTab("canvas")}
             className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
               activeTab === "canvas"
-                ? "bg-white text-foreground shadow-sm"
+                ? "bg-white dark:bg-[#1a1a24] text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -869,7 +1047,7 @@ export function RouteBuilder({
             onClick={() => setActiveTab("english")}
             className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
               activeTab === "english"
-                ? "bg-white text-foreground shadow-sm"
+                ? "bg-white dark:bg-[#1a1a24] text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -893,6 +1071,27 @@ export function RouteBuilder({
             {saveError}
           </span>
         )}
+        {state.routeType === "SCHEDULED" && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setShowRunPanel(true)}
+            disabled={isRunActive}
+            className={[
+              "gap-1.5",
+              isRunActive
+                ? "bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800 pointer-events-none"
+                : "bg-teal-500 hover:bg-teal-600 dark:bg-teal-600 dark:hover:bg-teal-700 text-white",
+            ].join(" ")}
+          >
+            {isRunActive ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Play className="size-3.5" />
+            )}
+            {isRunActive ? "Running…" : "Run Route"}
+          </Button>
+        )}
         <Button
           type="button"
           size="sm"
@@ -906,7 +1105,7 @@ export function RouteBuilder({
       </div>
 
       {/* ── Body (canvas + registry OR english view) ────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {activeTab === "english" ? (
           <EnglishView state={state} onEditInCanvas={handleFocusPath} />
         ) : (<>
@@ -916,7 +1115,7 @@ export function RouteBuilder({
           className="flex-1 overflow-hidden relative"
           style={{
             backgroundImage:
-              "radial-gradient(circle, #d1d5db 1.5px, transparent 1.5px)",
+              `radial-gradient(circle, ${isDark ? 'rgba(255,255,255,0.08)' : '#d1d5db'} 1.5px, transparent 1.5px)`,
             backgroundSize: `${24 * scale}px ${24 * scale}px`,
             backgroundPosition: `${panX}px ${panY}px`,
             cursor: isPanning ? "grabbing" : "grab",
@@ -977,6 +1176,7 @@ export function RouteBuilder({
                   title={pathLabel}
                   subtitle={nodeSubtitle(node, state)}
                   isDragging={draggingId === node.id}
+                  glowState={glowForNode(node.type)}
                   onMouseDown={(e, id) => {
                     setDraggingId(id)
                     handleNodeMouseDown(e, id)
@@ -1000,7 +1200,7 @@ export function RouteBuilder({
           </div>
 
           {/* ── Zoom controls ──────────────────────────────────────────────── */}
-          <div className="absolute bottom-4 left-4 flex items-center gap-1 rounded-lg border bg-white/90 backdrop-blur-sm shadow-sm p-1 z-50">
+          <div className="absolute bottom-4 left-4 flex items-center gap-1 rounded-lg border bg-white/90 dark:bg-[rgba(18,18,26,0.9)] backdrop-blur-sm shadow-sm p-1 z-50">
             <button
               type="button"
               onClick={zoomOut}
@@ -1043,16 +1243,44 @@ export function RouteBuilder({
         {/* Step registry panel */}
         <StepRegistry activeTypes={activeTypes} />
         </>)}
+
+        {/* ── Run panel (slides in from right over canvas) ───────────────────── */}
+        {state.routeType === "SCHEDULED" && (
+          <RunPanel
+            ruleId={_ruleId ?? ""}
+            routeName={state.name}
+            isOpen={showRunPanel}
+            onClose={() => setShowRunPanel(false)}
+            onRunningStepChange={handleRunningStepChange}
+            onRunStateChange={handleRunStateChange}
+            routeSteps={{
+              hasMatch: state.matchConfig !== null,
+              hasPaths: state.paths.length > 0,
+              hasDefaultOwner: state.defaultOwner !== null,
+            }}
+          />
+        )}
       </div>
 
       {/* ── Config sheets ────────────────────────────────────────────────────── */}
 
-      <TriggerConfigSheet
-        open={activeSheet?.type === "trigger"}
-        onOpenChange={(open) => !open && closeSheet()}
-        trigger={state.trigger}
-        onSave={(trigger) => setState((s) => ({ ...s, trigger }))}
-      />
+      {state.trigger && (
+        <TriggerConfigSheet
+          open={activeSheet?.type === "trigger"}
+          onOpenChange={(open) => !open && closeSheet()}
+          trigger={state.trigger}
+          onSave={(trigger) => setState((s) => ({ ...s, trigger }))}
+        />
+      )}
+
+      {state.searchTrigger && (
+        <SearchTriggerConfigSheet
+          open={activeSheet?.type === "searchTrigger"}
+          onOpenChange={(open) => !open && closeSheet()}
+          searchTrigger={state.searchTrigger}
+          onSave={(searchTrigger) => setState((s) => ({ ...s, searchTrigger }))}
+        />
+      )}
 
       <MatchConfigSheet
         open={activeSheet?.type === "match"}
@@ -1076,7 +1304,7 @@ export function RouteBuilder({
             ? (state.paths.find((p) => p.id === activeFilterPathId)?.conditions ?? [])
             : []
         }
-        objectType={state.trigger.objectType}
+        objectType={resolveObjectType(state)}
         onSave={(conditions: RuleConditions) => {
           if (!activeFilterPathId) return
           const pathId = activeFilterPathId
@@ -1133,6 +1361,7 @@ export function RouteBuilder({
         }
         onClear={() => setState((s) => ({ ...s, defaultOwner: null }))}
       />
+
     </div>
   )
 }

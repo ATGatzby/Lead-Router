@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,18 +11,22 @@ import {
   Pencil,
   Trash2,
   RefreshCw,
+  Zap,
+  Search,
+  Play,
+  ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +42,7 @@ import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 
 type ObjectType = "LEAD" | "CONTACT" | "ACCOUNT";
 type AssignmentType = "USER" | "ROUND_ROBIN" | "QUEUE";
+type FilterType = "ALL" | "REALTIME" | "SCHEDULED";
 
 interface Rule {
   id: string;
@@ -53,10 +58,20 @@ interface Rule {
   conditionCount: number;
   isDryRun: boolean;
   updatedAt: string;
-  // New Route Builder fields
+  // Route Builder fields
   branches?: Array<{ id: string }>;
   matchConfig?: object | null;
   defaultOwnerType?: string | null;
+  // Route type fields
+  routeType: "REALTIME" | "SCHEDULED";
+  scheduleFrequency: string | null;
+  scheduleTime: string | null;
+  scheduleTimezone: string | null;
+  lastRunAt: string | null;
+  lastRunStatus: string | null;
+  lastRunRecords: number | null;
+  totalRuns: number;
+  totalRecordsRouted: number;
 }
 
 interface RulesResponse {
@@ -69,14 +84,145 @@ function objectLabel(type: ObjectType): string {
   return type.charAt(0) + type.slice(1).toLowerCase();
 }
 
+function formatSchedule(rule: Rule): string {
+  if (rule.scheduleFrequency === "once" || rule.scheduleFrequency === "ONE_TIME") {
+    return "One-time";
+  }
+  const freq = rule.scheduleFrequency
+    ? rule.scheduleFrequency.charAt(0).toUpperCase() + rule.scheduleFrequency.slice(1).toLowerCase()
+    : "Daily";
+  const time = rule.scheduleTime ?? "6:00 AM";
+  const tz = rule.scheduleTimezone ?? "UTC";
+  return `${freq} \u00b7 ${time} ${tz}`;
+}
+
+function formatLastRun(rule: Rule): string {
+  if (!rule.lastRunAt) return "Never run";
+  const date = new Date(rule.lastRunAt);
+  const formatted = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const records = rule.lastRunRecords ?? 0;
+  return `Last run: ${formatted} \u00b7 ${records} record${records !== 1 ? "s" : ""}`;
+}
+
+// ─── New Route Dropdown ────────────────────────────────────────────────────
+
+function NewRouteDropdown() {
+  const router = useRouter();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm">
+          <Plus className="h-4 w-4 mr-1" />
+          New Route
+          <ChevronDown className="h-3.5 w-3.5 ml-1" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => router.push("/routing-rules/new?type=realtime")}>
+          <Zap className="h-4 w-4 mr-2 text-violet-600 dark:text-violet-400" />
+          Real-Time Route
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/routing-rules/new?type=scheduled")}>
+          <Search className="h-4 w-4 mr-2 text-teal-600 dark:text-teal-400" />
+          Scheduled Route
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function RoutingRulesPage() {
   const router = useRouter();
   const qc = useQueryClient();
 
+  // Filter & search state
+  const [filterType, setFilterType] = useState<FilterType>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Delete dialog
   const [deleteRule, setDeleteRule] = useState<Rule | null>(null);
+
+  // Run progress state
+  const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
+  const [runProgress, setRunProgress] = useState<{ phase: string; pct: number } | null>(null);
+  const [completedRuleId, setCompletedRuleId] = useState<string | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressStartRef = useRef<number>(0);
+
+  const cleanupProgress = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  }, []);
+
+  const startRunProgress = useCallback(
+    (ruleId: string, ruleName: string) => {
+      cleanupProgress();
+      setRunningRuleId(ruleId);
+      setRunProgress({ phase: "Querying Salesforce...", pct: 0 });
+      progressStartRef.current = Date.now();
+
+      // Fire the actual API call concurrently
+      fetch(`/api/rules/${ruleId}/run`, { method: "POST" })
+        .then((res) => res.json())
+        .then((data) => {
+          // API returned — fast-forward to 100% if not there yet
+          cleanupProgress();
+          setRunProgress({ phase: "Complete!", pct: 100 });
+
+          const records = data.recordsRouted ?? data.records ?? 0;
+
+          setTimeout(() => {
+            setRunningRuleId(null);
+            setRunProgress(null);
+            setCompletedRuleId(ruleId);
+            qc.invalidateQueries({ queryKey: ["rules"] });
+            toast.success(`${ruleName} completed -- ${records} records routed`);
+
+            // Clear completed state after 2 seconds
+            setTimeout(() => setCompletedRuleId(null), 2000);
+          }, 500);
+        })
+        .catch((err) => {
+          cleanupProgress();
+          setRunningRuleId(null);
+          setRunProgress(null);
+          toast.error(err.message ?? "Failed to run route");
+        });
+
+      // Simulate progress client-side
+      progressIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - progressStartRef.current;
+
+        if (elapsed < 800) {
+          // Phase 1: 0→15%
+          const pct = Math.round((elapsed / 800) * 15);
+          setRunProgress({ phase: "Querying Salesforce...", pct });
+        } else if (elapsed < 1300) {
+          // Phase 2: 15→35%
+          const pct = Math.round(15 + ((elapsed - 800) / 500) * 20);
+          setRunProgress({ phase: "Matching records...", pct });
+        } else if (elapsed < 3000) {
+          // Phase 3: 35→85%
+          const progress3 = (elapsed - 1300) / 1700;
+          const pct = Math.round(35 + progress3 * 50);
+          const counter = Math.round(progress3 * 247);
+          setRunProgress({ phase: `Routing records... ${counter}/247`, pct });
+        } else if (elapsed < 3500) {
+          // Phase 4: 85→100%
+          const pct = Math.round(85 + ((elapsed - 3000) / 500) * 15);
+          setRunProgress({ phase: "Completing...", pct });
+        } else {
+          // Done — let the API callback handle final state
+          cleanupProgress();
+        }
+      }, 50);
+    },
+    [cleanupProgress, qc]
+  );
 
   // ─── Query ────────────────────────────────────────────────────────────────
 
@@ -90,6 +236,28 @@ export default function RoutingRulesPage() {
   });
 
   const rules = rulesQuery.data?.rules ?? [];
+
+  // ─── Derived counts & filtered list ────────────────────────────────────
+
+  const counts = useMemo(() => {
+    const realtime = rules.filter((r) => (r.routeType ?? "REALTIME") === "REALTIME").length;
+    const scheduled = rules.filter((r) => r.routeType === "SCHEDULED").length;
+    return { all: rules.length, realtime, scheduled };
+  }, [rules]);
+
+  const filteredRules = useMemo(() => {
+    let list = rules;
+    if (filterType === "REALTIME") {
+      list = list.filter((r) => (r.routeType ?? "REALTIME") === "REALTIME");
+    } else if (filterType === "SCHEDULED") {
+      list = list.filter((r) => r.routeType === "SCHEDULED");
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter((r) => r.name.toLowerCase().includes(q));
+    }
+    return list;
+  }, [rules, filterType, searchQuery]);
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -148,6 +316,20 @@ export default function RoutingRulesPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const runMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/rules/${id}/run`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to run route");
+      return data;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Route executed successfully");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -155,7 +337,7 @@ export default function RoutingRulesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Routing Rules</h1>
+          <h1 className="text-2xl font-semibold font-display">Routing Rules</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Define which records get routed and who receives them.
           </p>
@@ -172,17 +354,12 @@ export default function RoutingRulesPage() {
             />
             Sync Fields
           </Button>
-          <Button size="sm" onClick={() => router.push("/routing-rules/new")}>
-            <Plus className="h-4 w-4 mr-1" />
-            New Route
-          </Button>
+          <NewRouteDropdown />
         </div>
       </div>
 
       {/* Loading / Error */}
-      {rulesQuery.isLoading && (
-        <TableSkeleton rows={4} columns={4} />
-      )}
+      {rulesQuery.isLoading && <TableSkeleton rows={4} columns={4} />}
       {rulesQuery.isError && (
         <div className="text-center py-16 text-destructive text-sm">
           Failed to load rules. Try refreshing.
@@ -195,109 +372,254 @@ export default function RoutingRulesPage() {
           <div className="h-20 w-20 rounded-full bg-muted/50 flex items-center justify-center">
             <ArrowRightLeft className="h-10 w-10 text-muted-foreground/30" />
           </div>
-          <p className="text-muted-foreground text-sm">
-            No routing rules yet.
+          <p className="text-muted-foreground text-sm">No routing rules yet.</p>
+          <p className="text-xs text-muted-foreground">
+            Create your first route to start automatically assigning records.
           </p>
-          <p className="text-xs text-muted-foreground">Create your first route to start automatically assigning records.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/routing-rules/new")}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Create your first rule
-          </Button>
+          <NewRouteDropdown />
         </div>
       )}
 
-      {/* Rules table */}
+      {/* Filter bar + Card list */}
       {rules.length > 0 && (
-        <div className="rounded-xl border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Route Name</TableHead>
-                <TableHead className="w-[100px]">Object</TableHead>
-                <TableHead className="w-[80px]">Status</TableHead>
-                <TableHead className="w-[120px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rules.map((rule) => (
-                <TableRow key={rule.id} className={rule.status === "INACTIVE" ? "opacity-60" : ""}>
-                  {/* Route Name */}
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{rule.name}</span>
+        <>
+          {/* Filter Bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  { key: "ALL", label: "All", count: counts.all },
+                  { key: "REALTIME", label: "Real-Time", count: counts.realtime },
+                  { key: "SCHEDULED", label: "Scheduled", count: counts.scheduled },
+                ] as const
+              ).map(({ key, label, count }) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={filterType === key ? "default" : "ghost"}
+                  className="text-xs"
+                  onClick={() => setFilterType(key)}
+                >
+                  {label} ({count})
+                </Button>
+              ))}
+            </div>
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search routes..."
+                className="text-sm pl-8 h-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Card List */}
+          <div className="space-y-2">
+            {filteredRules.map((rule) => {
+              const type = rule.routeType ?? "REALTIME";
+              const isRealtime = type === "REALTIME";
+              const branchCount = rule.branches?.length ?? 0;
+
+              const isRunning = runningRuleId === rule.id;
+              const isCompleted = completedRuleId === rule.id;
+
+              return (
+                <div
+                  key={rule.id}
+                  className={cn(
+                    "border rounded-xl p-4",
+                    rule.status === "INACTIVE" && "opacity-50",
+                    isRunning && "border-l-2 border-l-teal-400 dark:border-l-teal-500",
+                    isCompleted && "border-l-2 border-l-green-400 dark:border-l-green-500"
+                  )}
+                >
+                <div className="flex items-center gap-4">
+                  {/* Type indicator icon */}
+                  <div
+                    className={cn(
+                      "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                      isRealtime
+                        ? "bg-violet-100 dark:bg-violet-900 text-violet-600 dark:text-violet-400"
+                        : "bg-teal-100 dark:bg-teal-900 text-teal-600 dark:text-teal-400"
+                    )}
+                  >
+                    {isRealtime ? (
+                      <Zap className="h-5 w-5" />
+                    ) : (
+                      <Search className="h-5 w-5" />
+                    )}
+                  </div>
+
+                  {/* Info section */}
+                  <div className="flex-1 min-w-0">
+                    {/* Top row: name + badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm truncate">{rule.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] shrink-0",
+                          isRealtime
+                            ? "border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400"
+                            : "border-teal-300 dark:border-teal-700 text-teal-600 dark:text-teal-400"
+                        )}
+                      >
+                        {isRealtime ? "Real-Time" : "Scheduled"}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {objectLabel(rule.objectType)}
+                      </Badge>
+                      {!isRealtime && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] shrink-0 border-teal-300 dark:border-teal-700 text-teal-600 dark:text-teal-400"
+                        >
+                          {formatSchedule(rule)}
+                        </Badge>
+                      )}
                       {rule.isDryRun && (
-                        <Badge variant="outline" className="text-[10px] shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] shrink-0 border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400"
+                        >
                           Dry run
                         </Badge>
                       )}
                     </div>
-                  </TableCell>
+                    {/* Bottom row: contextual info */}
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      {isRealtime ? (
+                        <>
+                          {rule.triggerEvent && (
+                            <span>Trigger: {rule.triggerEvent}</span>
+                          )}
+                          {branchCount > 0 && (
+                            <span>
+                              {rule.triggerEvent ? " \u00b7 " : ""}
+                              {branchCount} path{branchCount !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span>{isRunning ? "Running now..." : formatLastRun(rule)}</span>
+                      )}
+                    </p>
+                  </div>
 
-                  {/* Object */}
-                  <TableCell>
-                    <Badge variant="outline">{objectLabel(rule.objectType)}</Badge>
-                  </TableCell>
+                  {/* Stats section */}
+                  <div className="flex-shrink-0 flex gap-6">
+                    {/* Stat: Total Routed */}
+                    <div className="text-center">
+                      <div className="text-sm font-semibold">
+                        {rule.totalRecordsRouted ?? 0}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground uppercase">
+                        Total Routed
+                      </div>
+                    </div>
+                    {/* Stat: Paths or Runs */}
+                    <div className="text-center">
+                      <div className="text-sm font-semibold">
+                        {isRealtime ? branchCount : (rule.totalRuns ?? 0)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground uppercase">
+                        {isRealtime ? "Paths" : "Runs"}
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* Status */}
-                  <TableCell>
+                  {/* Status + Actions */}
+                  <div className="flex-shrink-0 flex items-center gap-2">
                     <Switch
                       checked={rule.status === "ACTIVE"}
                       onCheckedChange={() => statusMutation.mutate(rule.id)}
                       disabled={statusMutation.isPending}
                       aria-label={`Toggle ${rule.name}`}
                     />
-                  </TableCell>
+                    {!isRealtime && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950"
+                        onClick={() => startRunProgress(rule.id, rule.name)}
+                        disabled={!!runningRuleId}
+                        aria-label="Run route"
+                      >
+                        {isRunning ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground"
+                      onClick={() => router.push(`/routing-rules/${rule.id}/flow`)}
+                      aria-label="Edit rule"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground"
+                      onClick={() => cloneMutation.mutate(rule.id)}
+                      disabled={cloneMutation.isPending}
+                      aria-label="Clone rule"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteRule(rule)}
+                      aria-label="Delete rule"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
 
-                  {/* Actions */}
-                  <TableCell className="text-right">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground"
-                        onClick={() => {
-                          router.push(`/routing-rules/${rule.id}/flow`);
-                        }}
-                        aria-label="Edit rule"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground"
-                        onClick={() => cloneMutation.mutate(rule.id)}
-                        disabled={cloneMutation.isPending}
-                        aria-label="Clone rule"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteRule(rule)}
-                        aria-label="Delete rule"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                  {/* Inline run progress */}
+                  {isRunning && runProgress && (
+                    <div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3">
+                        <div
+                          className="h-full bg-gradient-to-r from-teal-500 to-teal-400 dark:from-teal-600 dark:to-teal-500 rounded-full transition-all duration-300"
+                          style={{ width: `${runProgress.pct}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>{runProgress.phase}</span>
+                        <span>{runProgress.pct}%</span>
+                      </div>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* No results for current filter */}
+            {filteredRules.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground text-sm">
+                No routes match your filters.
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Delete Confirm Dialog */}
       <Dialog
         open={!!deleteRule}
-        onOpenChange={(open) => { if (!open) setDeleteRule(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteRule(null);
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -320,7 +642,6 @@ export default function RoutingRulesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

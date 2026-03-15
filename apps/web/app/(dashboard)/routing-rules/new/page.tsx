@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { RouteBuilder } from "@/components/route-builder/RouteBuilder";
 import { builderToApiBody } from "@/lib/builder-to-rule";
-import type { RouteBuilderState, ObjectType } from "@/components/route-builder/types";
+import type { RouteBuilderState, ObjectType, RouteType } from "@/components/route-builder/types";
 
 function NewRouteContent() {
   const searchParams = useSearchParams();
@@ -15,6 +15,9 @@ function NewRouteContent() {
   const validObject: ObjectType = ["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)
     ? objectParam
     : "LEAD";
+
+  const typeParam = searchParams.get("type")?.toUpperCase() ?? "REALTIME";
+  const routeType: RouteType = typeParam === "SCHEDULED" ? "SCHEDULED" : "REALTIME";
 
   const createMutation = useMutation({
     mutationFn: async (state: RouteBuilderState) => {
@@ -39,13 +42,29 @@ function NewRouteContent() {
 
   const defaultState: Partial<RouteBuilderState> = {
     name: "Untitled Route",
-    trigger: {
-      triggerName: "",
-      objectType: validObject,
-      triggerEvent: "INSERT",
-      isDryRun: false,
-      triggerConditions: [],
-    },
+    routeType,
+    trigger: routeType === "REALTIME"
+      ? {
+          triggerName: "",
+          objectType: validObject,
+          triggerEvent: "INSERT",
+          isDryRun: false,
+          triggerConditions: [],
+        }
+      : null,
+    searchTrigger: routeType === "SCHEDULED"
+      ? {
+          triggerName: "",
+          objectType: validObject,
+          searchCriteria: [],
+          frequency: "DAILY",
+          scheduleTime: "06:00",
+          scheduleTimezone: "UTC",
+          batchSize: 100,
+          skipRecentlyRouted: true,
+          isDryRun: false,
+        }
+      : undefined,
     matchConfig: null,
     paths: [],
     defaultOwner: null,

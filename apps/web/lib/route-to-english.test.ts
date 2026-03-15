@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { routeToEnglish, conditionToText } from "./route-to-english"
-import type { RouteBuilderState } from "@/components/route-builder/types"
-import { defaultBuilderState } from "@/components/route-builder/types"
+import type { RouteBuilderState, SearchTriggerConfig } from "@/components/route-builder/types"
+import { defaultBuilderState, defaultTriggerConfig } from "@/components/route-builder/types"
 import type { Condition, ConditionGroup } from "@/components/condition-builder/types"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ describe("conditionToText", () => {
 
 describe("trigger section", () => {
   it("renders INSERT event", () => {
-    const review = routeToEnglish(makeState())
+    const review = routeToEnglish(makeState({ trigger: defaultTriggerConfig() }))
     const trigger = review.sections.find((s) => s.type === "trigger")!
     expect(trigger.lines[0]).toContain("When a Lead is created")
     expect(trigger.lines[0]).toContain("all Leads will be processed")
@@ -63,7 +63,7 @@ describe("trigger section", () => {
     const review = routeToEnglish(
       makeState({
         trigger: {
-          ...defaultBuilderState().trigger,
+          ...defaultTriggerConfig(),
           triggerEvent: "UPDATE",
         },
       })
@@ -76,7 +76,7 @@ describe("trigger section", () => {
     const review = routeToEnglish(
       makeState({
         trigger: {
-          ...defaultBuilderState().trigger,
+          ...defaultTriggerConfig(),
           triggerEvent: "BOTH",
         },
       })
@@ -89,7 +89,7 @@ describe("trigger section", () => {
     const review = routeToEnglish(
       makeState({
         trigger: {
-          ...defaultBuilderState().trigger,
+          ...defaultTriggerConfig(),
           objectType: "CONTACT",
         },
       })
@@ -102,7 +102,7 @@ describe("trigger section", () => {
     const review = routeToEnglish(
       makeState({
         trigger: {
-          ...defaultBuilderState().trigger,
+          ...defaultTriggerConfig(),
           triggerConditions: [makeGroup([makeCond({ fieldApiName: "LeadSource", operator: "equals", value: "Web" })])],
         },
       })
@@ -115,7 +115,7 @@ describe("trigger section", () => {
   it("includes dry run line", () => {
     const review = routeToEnglish(
       makeState({
-        trigger: { ...defaultBuilderState().trigger, isDryRun: true },
+        trigger: { ...defaultTriggerConfig(), isDryRun: true },
       })
     )
     const trigger = review.sections.find((s) => s.type === "trigger")!
@@ -380,7 +380,7 @@ describe("warnings", () => {
   })
 
   it("detects no trigger criteria (info)", () => {
-    const review = routeToEnglish(makeState())
+    const review = routeToEnglish(makeState({ trigger: defaultTriggerConfig() }))
     const w = review.warnings.find((w) => w.severity === "info" && w.message.includes("trigger criteria"))
     expect(w).toBeDefined()
   })
@@ -388,7 +388,7 @@ describe("warnings", () => {
   it("detects dry run active (info)", () => {
     const review = routeToEnglish(
       makeState({
-        trigger: { ...defaultBuilderState().trigger, isDryRun: true },
+        trigger: { ...defaultTriggerConfig(), isDryRun: true },
       })
     )
     const w = review.warnings.find((w) => w.severity === "info" && w.message.includes("Dry run"))
@@ -406,7 +406,149 @@ describe("edge cases", () => {
 
   it("handles default state", () => {
     const review = routeToEnglish(defaultBuilderState())
-    expect(review.sections).toHaveLength(1) // trigger only
-    expect(review.sections[0].type).toBe("trigger")
+    // Default state has no trigger — empty sections
+    expect(review.sections).toHaveLength(0)
+  })
+})
+
+// ── Search trigger helpers ──────────────────────────────────────────────────
+
+function makeSearchTrigger(overrides: Partial<SearchTriggerConfig> = {}): SearchTriggerConfig {
+  return {
+    triggerName: "",
+    objectType: "LEAD",
+    searchCriteria: [],
+    frequency: "DAILY",
+    scheduleTime: "06:00",
+    scheduleTimezone: "UTC",
+    batchSize: 200,
+    skipRecentlyRouted: false,
+    isDryRun: false,
+    ...overrides,
+  }
+}
+
+// ── Search trigger section ──────────────────────────────────────────────────
+
+describe("search trigger section", () => {
+  it("renders daily schedule with criteria", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({
+          searchCriteria: [makeGroup([makeCond({ fieldApiName: "Industry", operator: "equals", value: "Tech" })])],
+        }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section).toBeDefined()
+    expect(section.type).toBe("trigger")
+    expect(section.lines.some((l) => l.includes("daily") && l.includes("06:00") && l.includes("UTC"))).toBe(true)
+    expect(section.lines.some((l) => l.includes("Where"))).toBe(true)
+  })
+
+  it("renders one-time (null frequency)", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ frequency: null }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.toLowerCase().includes("one-time") || l.toLowerCase().includes("manual run"))).toBe(true)
+  })
+
+  it("renders Contact object type", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ objectType: "CONTACT" }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.includes("Contacts") || l.includes("Contact"))).toBe(true)
+  })
+
+  it("includes dry run line", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ isDryRun: true }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.includes("Dry run") || l.includes("dry run"))).toBe(true)
+  })
+
+  it("includes skip recently routed", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ skipRecentlyRouted: true }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.toLowerCase().includes("skipping records") || l.toLowerCase().includes("skip"))).toBe(true)
+  })
+
+  it("includes non-default batch size", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ batchSize: 50 }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.includes("Batch size: 50") || l.includes("batch size") && l.includes("50"))).toBe(true)
+  })
+
+  it("omits batch size when default (200)", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ batchSize: 200 }),
+      })
+    )
+    const section = review.sections.find((s) => s.id === "search-trigger")!
+    expect(section.lines.some((l) => l.toLowerCase().includes("batch size"))).toBe(false)
+  })
+
+  it("not present when searchTrigger is null", () => {
+    const review = routeToEnglish(makeState({ searchTrigger: null }))
+    expect(review.sections.find((s) => s.id === "search-trigger")).toBeUndefined()
+  })
+
+  it("coexists with real-time trigger", () => {
+    const review = routeToEnglish(
+      makeState({
+        trigger: defaultTriggerConfig(),
+        searchTrigger: makeSearchTrigger(),
+      })
+    )
+    const realTimeTrigger = review.sections.find((s) => s.type === "trigger" && s.id !== "search-trigger")
+    const searchTrigger = review.sections.find((s) => s.id === "search-trigger")
+    expect(realTimeTrigger).toBeDefined()
+    expect(searchTrigger).toBeDefined()
+  })
+})
+
+// ── Search trigger warnings ─────────────────────────────────────────────────
+
+describe("search trigger warnings", () => {
+  it("warns when no search criteria", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ searchCriteria: [] }),
+      })
+    )
+    const w = review.warnings.find(
+      (w) => w.severity === "warning" && w.message.toLowerCase().includes("search criteria")
+    )
+    expect(w).toBeDefined()
+  })
+
+  it("warns when search trigger dry run active", () => {
+    const review = routeToEnglish(
+      makeState({
+        searchTrigger: makeSearchTrigger({ isDryRun: true }),
+      })
+    )
+    const w = review.warnings.find(
+      (w) => w.severity === "info" && w.message.toLowerCase().includes("dry run")
+    )
+    expect(w).toBeDefined()
   })
 })

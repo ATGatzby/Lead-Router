@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
+import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 
 // POST /api/rules/:id/clone — duplicate rule (appends " (Copy)" to name, sets INACTIVE, lowest priority)
 export async function POST(
@@ -126,6 +127,7 @@ export async function POST(
     });
 
     await invalidateRulesCache(orgId, cloned.objectType);
+    syncRoutingFlags(orgId).catch(() => {});
 
     return NextResponse.json({ rule: cloned }, { status: 201 });
   } catch (err) {

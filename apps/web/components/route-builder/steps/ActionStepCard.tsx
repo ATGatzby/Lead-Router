@@ -45,8 +45,8 @@ export function ActionStepCard({ action, onEdit }: Props) {
         "rounded-lg border-2 px-4 py-3",
         "flex items-center justify-between gap-3",
         isConfigured
-          ? "border-green-200 bg-green-50"
-          : "border-green-100 bg-green-50/40"
+          ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950"
+          : "border-green-100 dark:border-green-900 bg-green-50/40 dark:bg-green-950/40"
       )}
     >
       <div className="flex items-center gap-2.5 min-w-0">
@@ -54,24 +54,24 @@ export function ActionStepCard({ action, onEdit }: Props) {
           className={cn(
             "flex-shrink-0 flex items-center justify-center size-7 rounded-md",
             isConfigured
-              ? "bg-green-100 text-green-600"
-              : "bg-green-50 text-green-400"
+              ? "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400"
+              : "bg-green-50 dark:bg-green-950 text-green-400 dark:text-green-500"
           )}
         >
           <UserCheck className="size-3.5" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-green-900">Assign To</p>
+          <p className="text-xs font-semibold text-green-900 dark:text-green-100">Assign To</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             {typeLabel && (
-              <span className="text-[10px] font-medium text-green-600 bg-green-100 px-1 py-0.5 rounded">
+              <span className="text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900 px-1 py-0.5 rounded">
                 {typeLabel}
               </span>
             )}
             <span
               className={cn(
                 "text-xs truncate",
-                isConfigured ? "text-green-700" : "text-green-400 italic"
+                isConfigured ? "text-green-700 dark:text-green-300" : "text-green-400 dark:text-green-500 italic"
               )}
             >
               {assignmentLabel(action)}
@@ -84,7 +84,7 @@ export function ActionStepCard({ action, onEdit }: Props) {
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="flex-shrink-0 text-green-400 hover:text-green-700 hover:bg-green-100"
+        className="flex-shrink-0 text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900"
         onClick={onEdit}
         aria-label="Edit assignment"
       >
