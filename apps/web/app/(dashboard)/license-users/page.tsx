@@ -1,50 +1,30 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw, Search, Users, Check, Trash2, Shield, UserCog, Plug } from "lucide-react";
+import {
+  Search, Users, Trash2, Plug, X, Check, ChevronDown,
+  User, Star, CreditCard, Inbox, CheckSquare,
+  Zap, BarChart3, Clock, RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
-import Link from "next/link";
-
-// ─── Org / CRM connection check ──────────────────────────────────────────────
-
-interface MeResponse {
-  org: { sfdcOrgId: string | null } | null;
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface User {
+interface UserRecord {
   id: string;
   sfdcUserId: string;
   name: string;
@@ -53,1094 +33,1429 @@ interface User {
   profile: string | null;
   department: string | null;
   isLicensed: boolean;
+  licensedVia: string | null;
   lastRoutedAt: string | null;
   teamMemberships?: Array<{ team: { id: string; name: string } }>;
 }
 
 interface UsersResponse {
-  users: User[];
+  users: UserRecord[];
   total: number;
   page: number;
   pages: number;
 }
 
-interface SyncResult {
-  upserted: number;
-  deactivated: number;
-  syncedAt: string;
-  users: User[];
+interface StatsResponse {
+  seatsPurchased: number;
+  seatsUsed: number;
+  breakdown: {
+    individual: number;
+    byRole: number;
+    byProfile: number;
+    byCustomField: number;
+    licensedQueues: number;
+  };
 }
+
+interface FiltersResponse {
+  roles: string[];
+  profiles: string[];
+  departments: string[];
+}
+
+interface QueueRecord {
+  id: string;
+  name: string;
+  sfdcQueueId: string;
+  memberCount?: number;
+  isLicensed?: boolean;
+}
+
+type LicensingMethod = "individual" | "role" | "profile" | "queue" | "custom";
+type ActiveTab = "users" | "overview";
+
+// ─── Method Card Config ───────────────────────────────────────────────────────
+
+const METHOD_CARDS: {
+  key: LicensingMethod;
+  label: string;
+  description: string;
+  icon: typeof User;
+  iconBg: string;
+  iconColor: string;
+  tagColor: string;
+}[] = [
+  {
+    key: "individual",
+    label: "Individual Users",
+    description: "Pick specific people",
+    icon: User,
+    iconBg: "bg-purple-50 dark:bg-purple-950",
+    iconColor: "text-purple-500 dark:text-purple-400",
+    tagColor: "bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  },
+  {
+    key: "role",
+    label: "By Role",
+    description: "License entire roles",
+    icon: Star,
+    iconBg: "bg-blue-50 dark:bg-blue-950",
+    iconColor: "text-blue-600 dark:text-blue-400",
+    tagColor: "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  },
+  {
+    key: "profile",
+    label: "By Profile",
+    description: "License by SF profile",
+    icon: CreditCard,
+    iconBg: "bg-teal-50 dark:bg-teal-950",
+    iconColor: "text-teal-500 dark:text-teal-400",
+    tagColor: "bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+  },
+  {
+    key: "queue",
+    label: "By Queue",
+    description: "License queues directly",
+    icon: Inbox,
+    iconBg: "bg-orange-50 dark:bg-orange-950",
+    iconColor: "text-orange-500 dark:text-orange-400",
+    tagColor: "bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800",
+  },
+  {
+    key: "custom",
+    label: "By Custom Field",
+    description: "User field = true",
+    icon: CheckSquare,
+    iconBg: "bg-green-50 dark:bg-green-950",
+    iconColor: "text-green-500 dark:text-green-400",
+    tagColor: "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800",
+  },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatLastRouted(date: string | null) {
-  if (!date) return "—";
-  const d = new Date(date);
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
   const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffHours < 1) return "Just now";
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return "Yesterday";
-  return `${diffDays}d ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Page Component ───────────────────────────────────────────────────────────
 
 export default function LicenseUsersPage() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  // ─── CRM connection check ──────────────────────────────────────────────────
-  const meQuery = useQuery<MeResponse>({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const res = await fetch("/api/auth/me");
-      if (!res.ok) throw new Error("Failed to load org");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
+  // ── Tab state ──
+  const [activeTab, setActiveTab] = useState<ActiveTab>("users");
 
-  const crmConnected = !!meQuery.data?.org?.sfdcOrgId;
+  // ── Selection panel state ──
+  const [activeMethod, setActiveMethod] = useState<LicensingMethod | null>(null);
+  const [selectedValues, setSelectedValues] = useState<Set<string>>(new Set());
+  const [panelSearchQuery, setPanelSearchQuery] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelSearchRef = useRef<HTMLInputElement>(null);
 
-  // Filter state
+  // ── Custom field 2-step state ──
+  const [selectedCustomField, setSelectedCustomField] = useState<string | null>(null);
+  const [customFieldValue, setCustomFieldValue] = useState("");
+
+  // ── Table state ──
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [licensed, setLicensed] = useState<"all" | "licensed" | "unlicensed">("all");
   const [page, setPage] = useState(1);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [profileFilter, setProfileFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
-  // Selection state
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  // De-license feedback dialog (shows team cascade info)
-  const [cascadeOpen, setCascadeOpen] = useState(false);
-  const [cascadeInfo, setCascadeInfo] = useState<{ userName: string; teams: string[] } | null>(null);
-
-  // Delete confirmation dialog (single user)
-  const [deleteUser, setDeleteUser] = useState<User | null>(null);
-
-  // Bulk delete confirmation dialog
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-
-  // ─── Sync Dialog State ──────────────────────────────────────────────────────
-  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [syncMode, setSyncMode] = useState<"all" | "select" | "role" | "profile" | null>(null);
-  const [syncStep, setSyncStep] = useState<1 | 2>(1);
-  const [syncedUsers, setSyncedUsers] = useState<User[]>([]);
-  const [syncDialogSelected, setSyncDialogSelected] = useState<Set<string>>(new Set());
-  const [syncDialogSearch, setSyncDialogSearch] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(new Set());
-  const [selectedProfiles, setSelectedProfiles] = useState<Set<string>>(new Set());
-
-  // Search debounce
-  const handleSearchChange = useCallback((val: string) => {
-    setSearch(val);
-    setPage(1);
-    const t = setTimeout(() => setDebouncedSearch(val), 300);
-    return () => clearTimeout(t);
-  }, []);
-
-  // ─── Queries ───────────────────────────────────────────────────────────────
-
-  const usersQuery = useQuery<UsersResponse>({
-    queryKey: ["users", debouncedSearch, licensed, page],
+  // ── Data queries ──
+  const { data: usersData, isLoading: usersLoading } = useQuery<UsersResponse>({
+    queryKey: ["license-users", search, page, statusFilter, roleFilter, profileFilter, departmentFilter],
     queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page), limit: "50" });
-      if (debouncedSearch) params.set("q", debouncedSearch);
-      if (licensed === "licensed") params.set("licensed", "true");
-      if (licensed === "unlicensed") params.set("licensed", "false");
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      params.set("page", String(page));
+      if (statusFilter === "licensed") params.set("licensed", "true");
+      else if (statusFilter === "unlicensed") params.set("licensed", "false");
+      if (roleFilter !== "all") params.set("role", roleFilter);
+      if (profileFilter !== "all") params.set("profile", profileFilter);
+      if (departmentFilter !== "all") params.set("department", departmentFilter);
       const res = await fetch(`/api/users?${params}`);
-      if (!res.ok) throw new Error("Failed to load users");
+      if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
     },
   });
 
-  // ─── Mutations ─────────────────────────────────────────────────────────────
+  const { data: stats, isLoading: statsLoading } = useQuery<StatsResponse>({
+    queryKey: ["license-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/stats");
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+  });
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["users"] });
-  };
+  const { data: filters } = useQuery<FiltersResponse>({
+    queryKey: ["license-filters"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/filters");
+      if (!res.ok) throw new Error("Failed to fetch filters");
+      return res.json();
+    },
+  });
 
-  // Sync mutation — used inside the dialog
-  const syncMutation = useMutation({
-    mutationFn: async (): Promise<SyncResult> => {
+  const { data: queues } = useQuery<QueueRecord[]>({
+    queryKey: ["queues-list"],
+    queryFn: async () => {
+      const res = await fetch("/api/queues");
+      if (!res.ok) throw new Error("Failed to fetch queues");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.queues ?? [];
+    },
+    enabled: activeMethod === "queue",
+  });
+
+  // ── Panel options for the active method ──
+  const panelAllUsers = useQuery<UsersResponse>({
+    queryKey: ["license-users-all-for-panel"],
+    queryFn: async () => {
+      const res = await fetch("/api/users?page=1&limit=500");
+      if (!res.ok) throw new Error("Failed to fetch users");
+      return res.json();
+    },
+    enabled: activeMethod === "individual" || activeMethod === "role" || activeMethod === "profile",
+  });
+
+  // Fetch custom fields on the User object from FieldSchema
+  const { data: customFields } = useQuery<{ id: string; fieldApiName: string; fieldLabel: string; fieldType: string; picklistValues: string[] | null }[]>({
+    queryKey: ["user-custom-fields"],
+    queryFn: async () => {
+      const res = await fetch("/api/fields?objectType=User&customOnly=true");
+      if (!res.ok) throw new Error("Failed to fetch custom fields");
+      const data = await res.json();
+      return Array.isArray(data) ? data : data.fields ?? [];
+    },
+    enabled: activeMethod === "custom",
+  });
+
+  // ── Sync mutations ──
+  const syncUsers = useMutation({
+    mutationFn: async () => {
       const res = await fetch("/api/users", { method: "POST" });
-      if (!res.ok) throw new Error("Sync failed");
+      if (!res.ok) throw new Error("Failed to sync users");
       return res.json();
-    },
-    onSuccess: (data) => {
-      invalidate();
-      // Store synced users and advance to step 2
-      setSyncedUsers(data.users ?? []);
-      setSyncStep(2);
-    },
-    onError: () => toast.error("Sync failed"),
-  });
-
-  const licenseMutation = useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: "license" | "de-license" }) => {
-      const res = await fetch(`/api/users/${id}/${action}`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) return { error: data.error ?? "unknown", ...data };
-      return data;
-    },
-    onSuccess: (data, variables) => {
-      if (variables.action === "de-license" && data.removedFromTeams?.length > 0) {
-        const user = usersQuery.data?.users.find((u) => u.id === variables.id);
-        setCascadeInfo({ userName: user?.name ?? "User", teams: data.removedFromTeams });
-        setCascadeOpen(true);
-      }
-      invalidate();
-    },
-    onError: () => toast.error("Action failed"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to delete user");
-      return data;
     },
     onSuccess: () => {
-      invalidate();
-      setDeleteUser(null);
-      toast.success("User deleted");
+      invalidateAll();
+      toast.success("Users synced from Salesforce");
     },
-    onError: () => toast.error("Failed to delete user"),
+    onError: () => toast.error("Failed to sync users from Salesforce"),
   });
 
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (userIds: string[]) => {
-      const res = await fetch("/api/users/bulk-delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to delete users");
-      return data;
+  const syncQueuesM = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/queues/sync", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to sync queues");
+      return res.json();
     },
-    onSuccess: (data) => {
-      setSelected(new Set());
-      setBulkDeleteOpen(false);
-      invalidate();
-      toast.success(`${data.deleted} user${data.deleted === 1 ? "" : "s"} deleted`);
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Queues synced from Salesforce");
     },
-    onError: () => toast.error("Bulk delete failed"),
+    onError: () => toast.error("Failed to sync queues from Salesforce"),
   });
 
-  const bulkMutation = useMutation({
+  // Auto-sync on first load if no users exist
+  const hasSynced = useRef(false);
+  useEffect(() => {
+    if (!usersLoading && usersData && usersData.total === 0 && !hasSynced.current && !syncUsers.isPending) {
+      hasSynced.current = true;
+      syncUsers.mutate();
+      syncQueuesM.mutate();
+    }
+  }, [usersLoading, usersData]);
+
+  // ── Mutations ──
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["license-users"] });
+    queryClient.invalidateQueries({ queryKey: ["license-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["license-filters"] });
+    queryClient.invalidateQueries({ queryKey: ["license-users-all-for-panel"] });
+    queryClient.invalidateQueries({ queryKey: ["queues-list"] });
+  };
+
+  const licenseSingle = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/users/${userId}/license`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to license user");
+    },
+    onSuccess: () => { invalidateAll(); toast.success("User licensed"); },
+    onError: () => toast.error("Failed to license user"),
+  });
+
+  const deLicenseSingle = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/users/${userId}/de-license`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to de-license user");
+    },
+    onSuccess: () => { invalidateAll(); toast.success("User de-licensed"); },
+    onError: () => toast.error("Failed to de-license user"),
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete user");
+    },
+    onSuccess: () => { invalidateAll(); toast.success("User removed"); },
+    onError: () => toast.error("Failed to remove user"),
+  });
+
+  const bulkLicense = useMutation({
     mutationFn: async ({ userIds, action }: { userIds: string[]; action: "license" | "de-license" }) => {
       const res = await fetch("/api/users/bulk-license", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIds, action }),
       });
-      const data = await res.json();
-      if (!res.ok) return { error: data.error ?? "unknown", ...data };
-      return data;
+      if (!res.ok) throw new Error("Bulk operation failed");
     },
-    onSuccess: (data, variables) => {
-      setSelected(new Set());
-      invalidate();
-      const action = variables.action === "license" ? "licensed" : "de-licensed";
-      toast.success(`${data.affected} user${data.affected === 1 ? "" : "s"} ${action}`);
+    onSuccess: (_, vars) => {
+      invalidateAll();
+      setSelectedRows(new Set());
+      toast.success(`${vars.userIds.length} user${vars.userIds.length > 1 ? "s" : ""} ${vars.action === "license" ? "licensed" : "de-licensed"}`);
     },
-    onError: () => toast.error("Bulk action failed"),
+    onError: () => toast.error("Bulk operation failed"),
   });
 
-  // ─── Sync Dialog handlers ──────────────────────────────────────────────────
+  const bulkDelete = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      const res = await fetch("/api/users/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds }),
+      });
+      if (!res.ok) throw new Error("Bulk delete failed");
+    },
+    onSuccess: (_, userIds) => {
+      invalidateAll();
+      setSelectedRows(new Set());
+      toast.success(`${userIds.length} user${userIds.length > 1 ? "s" : ""} removed`);
+    },
+    onError: () => toast.error("Bulk delete failed"),
+  });
 
-  const openSyncDialog = () => {
-    setSyncMode(null);
-    setSyncStep(1);
-    setSyncedUsers([]);
-    setSyncDialogSelected(new Set());
-    setSyncDialogSearch("");
-    setSelectedRoles(new Set());
-    setSelectedProfiles(new Set());
-    setSyncDialogOpen(true);
-  };
+  const licenseByRole = useMutation({
+    mutationFn: async (roles: string[]) => {
+      const res = await fetch("/api/users/license-by-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roles }),
+      });
+      if (!res.ok) throw new Error("Failed to license by role");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      invalidateAll();
+      closePanel();
+      toast.success(data?.count != null ? `${data.count} users licensed by role` : "Users licensed by role");
+    },
+    onError: () => toast.error("Failed to license by role"),
+  });
 
-  const closeSyncDialog = () => {
-    setSyncDialogOpen(false);
-    setSyncMode(null);
-    setSyncStep(1);
-    setSyncedUsers([]);
-    setSyncDialogSelected(new Set());
-    setSyncDialogSearch("");
-    setSelectedRoles(new Set());
-    setSelectedProfiles(new Set());
-  };
+  const licenseByProfile = useMutation({
+    mutationFn: async (profiles: string[]) => {
+      const res = await fetch("/api/users/license-by-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiles }),
+      });
+      if (!res.ok) throw new Error("Failed to license by profile");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      invalidateAll();
+      closePanel();
+      toast.success(data?.count != null ? `${data.count} users licensed by profile` : "Users licensed by profile");
+    },
+    onError: () => toast.error("Failed to license by profile"),
+  });
 
-  const handleSyncAndContinue = () => {
-    syncMutation.mutate();
-  };
+  const licenseByCustomField = useMutation({
+    mutationFn: async ({ fieldName, fieldValue }: { fieldName: string; fieldValue: string }) => {
+      const res = await fetch("/api/users/license-by-custom-field", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fieldName, fieldValue }),
+      });
+      if (!res.ok) throw new Error("Failed to license by custom field");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      invalidateAll();
+      closePanel();
+      toast.success(data?.count != null ? `${data.count} users licensed by custom field` : "Users licensed by custom field");
+    },
+    onError: () => toast.error("Failed to license by custom field"),
+  });
 
-  const handleLicenseFromDialog = () => {
-    let userIds: string[] = [];
+  const licenseQueues = useMutation({
+    mutationFn: async (queueIds: string[]) => {
+      const res = await fetch("/api/queues/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueIds }),
+      });
+      if (!res.ok) throw new Error("Failed to license queues");
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateAll();
+      closePanel();
+      toast.success("Queues licensed");
+    },
+    onError: () => toast.error("Failed to license queues"),
+  });
 
-    if (syncMode === "all") {
-      userIds = syncedUsers.filter((u) => !u.isLicensed).map((u) => u.id);
-    } else if (syncMode === "role") {
-      userIds = syncedUsers
-        .filter((u) => !u.isLicensed && u.role && selectedRoles.has(u.role))
-        .map((u) => u.id);
-    } else if (syncMode === "profile") {
-      userIds = syncedUsers
-        .filter((u) => !u.isLicensed && u.profile && selectedProfiles.has(u.profile))
-        .map((u) => u.id);
-    } else {
-      userIds = Array.from(syncDialogSelected);
-    }
+  const licenseIndividualUsers = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      const res = await fetch("/api/users/bulk-license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds, action: "license" }),
+      });
+      if (!res.ok) throw new Error("Failed to license users");
+    },
+    onSuccess: (_, userIds) => {
+      invalidateAll();
+      closePanel();
+      toast.success(`${userIds.length} user${userIds.length > 1 ? "s" : ""} licensed`);
+    },
+    onError: () => toast.error("Failed to license users"),
+  });
 
-    bulkMutation.mutate(
-      { userIds, action: "license" },
-      {
-        onSuccess: (data) => {
-          if (!data.error) {
-            closeSyncDialog();
-            toast.success(`${data.affected} user${data.affected === 1 ? "" : "s"} licensed`);
-          }
-        },
+  // ── Panel options computation ──
+  const panelOptions = useMemo(() => {
+    if (!activeMethod) return [];
+
+    switch (activeMethod) {
+      case "individual": {
+        const allUsers = panelAllUsers.data?.users ?? [];
+        return allUsers.map((u) => ({
+          value: u.id,
+          label: u.name,
+          sub: u.email,
+          count: null as number | null,
+          countLabel: null as string | null,
+          disabled: u.isLicensed,
+          disabledLabel: "Already licensed",
+        }));
       }
-    );
-  };
-
-  // ─── Selection helpers ─────────────────────────────────────────────────────
-
-  const users = usersQuery.data?.users ?? [];
-  const allSelected = users.length > 0 && users.every((u) => selected.has(u.id));
-  const someSelected = users.some((u) => selected.has(u.id));
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        users.forEach((u) => next.delete(u.id));
-        return next;
-      });
-    } else {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        users.forEach((u) => next.add(u.id));
-        return next;
-      });
+      case "role": {
+        const roles = filters?.roles ?? [];
+        const allUsers = panelAllUsers.data?.users ?? usersData?.users ?? [];
+        return roles.map((r) => {
+          const total = allUsers.filter((u) => u.role === r).length;
+          return { value: r, label: r, sub: null, count: total, countLabel: total !== 1 ? "users" : "user", disabled: false, disabledLabel: null };
+        });
+      }
+      case "profile": {
+        const profiles = filters?.profiles ?? [];
+        const allUsers = panelAllUsers.data?.users ?? usersData?.users ?? [];
+        return profiles.map((p) => {
+          const total = allUsers.filter((u) => u.profile === p).length;
+          return { value: p, label: p, sub: null, count: total, countLabel: total !== 1 ? "users" : "user", disabled: false, disabledLabel: null };
+        });
+      }
+      case "queue": {
+        const qList = queues ?? [];
+        return qList.map((q) => ({
+          value: q.id,
+          label: q.name,
+          sub: null,
+          count: q.memberCount ?? null,
+          countLabel: "members",
+          disabled: q.isLicensed ?? false,
+          disabledLabel: "Already licensed",
+        }));
+      }
+      case "custom": {
+        // If no field selected yet, show available custom fields as options (step 1)
+        if (!selectedCustomField) {
+          const fields = customFields ?? [];
+          return fields.map((f) => ({
+            value: f.fieldApiName,
+            label: f.fieldLabel || f.fieldApiName,
+            sub: f.fieldType,
+            count: null as number | null,
+            countLabel: null as string | null,
+            disabled: false,
+            disabledLabel: null as string | null,
+          }));
+        }
+        // Field is selected — show values for that field (step 2)
+        const field = customFields?.find((f) => f.fieldApiName === selectedCustomField);
+        if (field?.fieldType === "BOOLEAN") {
+          return [
+            { value: "true", label: "True", sub: null, count: null, countLabel: null, disabled: false, disabledLabel: null },
+            { value: "false", label: "False", sub: null, count: null, countLabel: null, disabled: false, disabledLabel: null },
+          ];
+        }
+        if (field?.fieldType === "PICKLIST" && field.picklistValues) {
+          const vals = Array.isArray(field.picklistValues) ? field.picklistValues : [];
+          return vals.map((v: string) => ({
+            value: v, label: v, sub: null, count: null, countLabel: null, disabled: false, disabledLabel: null,
+          }));
+        }
+        // For text/other fields, show empty — user types value in search input
+        return [];
+      }
+      default:
+        return [];
     }
-  };
+  }, [activeMethod, panelAllUsers.data, filters, usersData, queues, customFields, selectedCustomField]);
 
-  const toggleOne = (id: string) => {
-    setSelected((prev) => {
+  const filteredPanelOptions = useMemo(() => {
+    if (!panelSearchQuery) return panelOptions;
+    const q = panelSearchQuery.toLowerCase();
+    return panelOptions.filter(
+      (o) => o.label.toLowerCase().includes(q) || (o.sub && o.sub.toLowerCase().includes(q))
+    );
+  }, [panelOptions, panelSearchQuery]);
+
+  // ── Match count for the selection panel preview ──
+  const matchCount = useMemo(() => {
+    if (!activeMethod || selectedValues.size === 0) return { newCount: 0, alreadyCount: 0 };
+    const vals = [...selectedValues];
+
+    if (activeMethod === "individual") {
+      const allUsers = panelAllUsers.data?.users ?? [];
+      const newCount = allUsers.filter((u) => vals.includes(u.id) && !u.isLicensed).length;
+      return { newCount, alreadyCount: 0 };
+    }
+    if (activeMethod === "role") {
+      const allUsers = panelAllUsers.data?.users ?? usersData?.users ?? [];
+      const matched = allUsers.filter((u) => u.role && vals.includes(u.role));
+      return {
+        newCount: matched.filter((u) => !u.isLicensed).length,
+        alreadyCount: matched.filter((u) => u.isLicensed).length,
+      };
+    }
+    if (activeMethod === "profile") {
+      const allUsers = panelAllUsers.data?.users ?? usersData?.users ?? [];
+      const matched = allUsers.filter((u) => u.profile && vals.includes(u.profile));
+      return {
+        newCount: matched.filter((u) => !u.isLicensed).length,
+        alreadyCount: matched.filter((u) => u.isLicensed).length,
+      };
+    }
+    if (activeMethod === "queue") {
+      return { newCount: vals.length, alreadyCount: 0 };
+    }
+    if (activeMethod === "custom") {
+      // Custom field: need both a field selected and a value
+      if (!selectedCustomField) return { newCount: 0, alreadyCount: 0 };
+      const hasValue = vals.length > 0 || customFieldValue.length > 0;
+      return { newCount: hasValue ? 1 : 0, alreadyCount: 0 };
+    }
+    return { newCount: 0, alreadyCount: 0 };
+  }, [activeMethod, selectedValues, panelAllUsers.data, usersData]);
+
+  // ── Method badge counts ──
+  const methodBadgeCounts = useMemo(() => {
+    const b = stats?.breakdown;
+    return {
+      individual: b?.individual ?? 0,
+      role: b?.byRole ?? 0,
+      profile: b?.byProfile ?? 0,
+      queue: b?.licensedQueues ?? 0,
+      custom: b?.byCustomField ?? 0,
+    };
+  }, [stats]);
+
+  // ── Panel actions ──
+  const closePanel = useCallback(() => {
+    setActiveMethod(null);
+    setSelectedValues(new Set());
+    setPanelSearchQuery("");
+    setDropdownOpen(false);
+    setSelectedCustomField(null);
+    setCustomFieldValue("");
+  }, []);
+
+  const selectMethod = useCallback((method: LicensingMethod) => {
+    if (activeMethod === method) {
+      closePanel();
+      return;
+    }
+    setActiveMethod(method);
+    setSelectedValues(new Set());
+    setPanelSearchQuery("");
+    setDropdownOpen(false);
+    setSelectedCustomField(null);
+    setCustomFieldValue("");
+    // Focus search after panel opens
+    setTimeout(() => panelSearchRef.current?.focus(), 200);
+  }, [activeMethod, closePanel]);
+
+  const togglePanelValue = useCallback((value: string) => {
+    // Custom field step 1: selecting a field transitions to step 2
+    if (activeMethod === "custom" && !selectedCustomField) {
+      setSelectedCustomField(value);
+      setSelectedValues(new Set());
+      setPanelSearchQuery("");
+      setDropdownOpen(false);
+      setTimeout(() => {
+        panelSearchRef.current?.focus();
+        setDropdownOpen(true);
+      }, 100);
+      return;
+    }
+
+    setSelectedValues((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
       return next;
     });
-  };
+    setPanelSearchQuery("");
+    panelSearchRef.current?.focus();
+  }, [activeMethod, selectedCustomField]);
 
-  // ─── Sync dialog user list helpers ────────────────────────────────────────
-
-  const filteredSyncUsers = syncedUsers.filter((u) => {
-    if (!syncDialogSearch) return true;
-    const q = syncDialogSearch.toLowerCase();
-    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-  });
-
-  const unlicensedSyncUsers = filteredSyncUsers.filter((u) => !u.isLicensed);
-  const allSyncSelected =
-    unlicensedSyncUsers.length > 0 &&
-    unlicensedSyncUsers.every((u) => syncDialogSelected.has(u.id));
-
-  const toggleAllSyncUsers = () => {
-    if (allSyncSelected) {
-      setSyncDialogSelected(new Set());
-    } else {
-      setSyncDialogSelected(new Set(unlicensedSyncUsers.map((u) => u.id)));
-    }
-  };
-
-  const toggleSyncUser = (id: string) => {
-    setSyncDialogSelected((prev) => {
+  const removePanelTag = useCallback((value: string) => {
+    setSelectedValues((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.delete(value);
       return next;
     });
-  };
+  }, []);
 
-  // ─── Role / Profile aggregation for sync dialog ──────────────────────────
+  const applySelection = useCallback(() => {
+    if (selectedValues.size === 0) return;
+    const vals = [...selectedValues];
 
-  const uniqueRoles = useMemo(() => {
-    const roles = [...new Set(syncedUsers.filter((u) => u.role).map((u) => u.role!))].sort();
-    return roles.map((role) => ({
-      name: role,
-      total: syncedUsers.filter((u) => u.role === role).length,
-      unlicensed: syncedUsers.filter((u) => u.role === role && !u.isLicensed).length,
-    }));
-  }, [syncedUsers]);
+    switch (activeMethod) {
+      case "individual":
+        licenseIndividualUsers.mutate(vals);
+        break;
+      case "role":
+        licenseByRole.mutate(vals);
+        break;
+      case "profile":
+        licenseByProfile.mutate(vals);
+        break;
+      case "queue":
+        licenseQueues.mutate(vals);
+        break;
+      case "custom":
+        if (selectedCustomField) {
+          const fieldValue = vals.length > 0 ? vals[0] : customFieldValue || "true";
+          licenseByCustomField.mutate({ fieldName: selectedCustomField, fieldValue });
+        }
+        break;
+    }
+  }, [activeMethod, selectedValues, licenseIndividualUsers, licenseByRole, licenseByProfile, licenseQueues, licenseByCustomField]);
 
-  const uniqueProfiles = useMemo(() => {
-    const profiles = [...new Set(syncedUsers.filter((u) => u.profile).map((u) => u.profile!))].sort();
-    return profiles.map((profile) => ({
-      name: profile,
-      total: syncedUsers.filter((u) => u.profile === profile).length,
-      unlicensed: syncedUsers.filter((u) => u.profile === profile && !u.isLicensed).length,
-    }));
-  }, [syncedUsers]);
+  // ── Close dropdown on click outside ──
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  const roleLicenseCount = useMemo(() => {
-    return syncedUsers.filter((u) => !u.isLicensed && u.role && selectedRoles.has(u.role)).length;
-  }, [syncedUsers, selectedRoles]);
+  // ── Table row selection ──
+  const users = usersData?.users ?? [];
+  const totalUsers = usersData?.total ?? 0;
+  const totalPages = usersData?.pages ?? 1;
 
-  const profileLicenseCount = useMemo(() => {
-    return syncedUsers.filter((u) => !u.isLicensed && u.profile && selectedProfiles.has(u.profile)).length;
-  }, [syncedUsers, selectedProfiles]);
+  const allRowsSelected = users.length > 0 && users.every((u) => selectedRows.has(u.id));
+  const someRowsSelected = users.some((u) => selectedRows.has(u.id));
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  const toggleAllRows = useCallback(() => {
+    if (allRowsSelected) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(users.map((u) => u.id)));
+    }
+  }, [allRowsSelected, users]);
 
-  // CRM not connected — show empty state gate
-  if (meQuery.isSuccess && !crmConnected) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center text-center max-w-md rounded-xl border-2 border-dashed border-muted-foreground/25 p-10">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
-            <Plug className="h-7 w-7 text-muted-foreground" />
-          </div>
-          <h2 className="text-lg font-semibold">Connect a CRM to manage license users</h2>
-          <p className="text-sm text-muted-foreground mt-2">
-            License users are synced from your connected CRM. Connect an integration to get started.
-          </p>
-          <Button className="mt-6" asChild>
-            <Link href="/integrations">
-              Go to Integrations
-              <span className="ml-1">&rarr;</span>
-            </Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const toggleRow = useCallback((id: string) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleUserLicense = useCallback((user: UserRecord) => {
+    if (user.isLicensed) {
+      deLicenseSingle.mutate(user.id);
+    } else {
+      licenseSingle.mutate(user.id);
+    }
+  }, [licenseSingle, deLicenseSingle]);
+
+  // ── Seat gauge SVG helpers ──
+  const seatsPurchased = stats?.seatsPurchased ?? 50;
+  const seatsUsed = stats?.seatsUsed ?? 0;
+  const seatPct = seatsPurchased > 0 ? seatsUsed / seatsPurchased : 0;
+  const circumference = 2 * Math.PI * 54;
+  const gaugeOffset = circumference * (1 - seatPct);
+  const seatWarning = seatPct >= 0.9;
+
+  // ── Panel title/subtitle based on active method ──
+  const panelConfig = useMemo(() => {
+    switch (activeMethod) {
+      case "individual":
+        return { title: "Select Individual Users", subtitle: "Search for specific users to license", placeholder: "Search users by name or email..." };
+      case "role":
+        return { title: "Select Roles", subtitle: "All users with the selected roles will be licensed", placeholder: "Search roles..." };
+      case "profile":
+        return { title: "Select Profiles", subtitle: "All users with the selected profiles will be licensed", placeholder: "Search profiles..." };
+      case "queue":
+        return { title: "Select Queues", subtitle: "Selected queues will be licensed as routing targets", placeholder: "Search queues..." };
+      case "custom":
+        if (!selectedCustomField) {
+          return { title: "Step 1: Select Custom Field", subtitle: "Choose a custom field on the User record", placeholder: "Search custom fields..." };
+        }
+        return { title: `Step 2: Select Value for ${selectedCustomField}`, subtitle: "Choose the value to match against", placeholder: "Search or enter a value..." };
+      default:
+        return { title: "", subtitle: "", placeholder: "" };
+    }
+  }, [activeMethod]);
+
+  // ── Tag color for active method ──
+  const activeTagColor = METHOD_CARDS.find((m) => m.key === activeMethod)?.tagColor ?? "";
+
+  // ── Action button text ──
+  const isQueue = activeMethod === "queue";
+  const actionUnit = isQueue ? (matchCount.newCount !== 1 ? "Queues" : "Queue") : (matchCount.newCount !== 1 ? "Users" : "User");
+  const applyBtnText = matchCount.newCount > 0
+    ? `License ${matchCount.newCount} ${actionUnit}`
+    : "License Matched";
+  const applyDisabled = activeMethod === "custom"
+    ? !selectedCustomField || (selectedValues.size === 0 && !customFieldValue)
+    : matchCount.newCount === 0;
+
+  // Helper to get label for a selected value
+  const getLabelForValue = useCallback((value: string) => {
+    const opt = panelOptions.find((o) => o.value === value);
+    return opt?.label ?? value;
+  }, [panelOptions]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">License Users</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Manage which Salesforce users can receive routed records.
+          <h1 className="text-2xl font-semibold tracking-tight font-display">License Users</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Choose how to license Salesforce users for routing.
           </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* Source indicator */}
-          <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none">
-              <path
-                d="M10.01 4.18c.9-.96 2.15-1.56 3.54-1.56 1.72 0 3.23.9 4.09 2.25a5.46 5.46 0 0 1 2.16-.45C22.16 4.42 24 6.29 24 8.6c0 .34-.04.68-.12 1a3.75 3.75 0 0 1 .12.94c0 2.28-1.85 4.13-4.13 4.13-.37 0-.72-.05-1.06-.14a4.52 4.52 0 0 1-3.96 2.35c-.6 0-1.17-.12-1.69-.33a4.84 4.84 0 0 1-4.34 2.7 4.84 4.84 0 0 1-4.56-3.23A4.16 4.16 0 0 1 0 12.04c0-1.56.86-2.92 2.14-3.63a4.24 4.24 0 0 1-.18-1.23c0-2.33 1.89-4.22 4.22-4.22 1.33 0 2.52.62 3.29 1.58l.54-.36z"
-                fill="#00A1E0"
-              />
-            </svg>
-            <span>Salesforce</span>
-          </div>
+        <div className="flex items-center gap-3 shrink-0">
           <Button
             variant="outline"
             size="sm"
-            onClick={openSyncDialog}
+            disabled={syncUsers.isPending || syncQueuesM.isPending}
+            onMouseDown={() => { syncUsers.mutate(); syncQueuesM.mutate(); }}
           >
-            <RefreshCw />
-            Sync Users
+            {syncUsers.isPending ? (
+              <><Plug className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Syncing...</>
+            ) : (
+              <><Plug className="h-3.5 w-3.5 mr-1.5" /> Sync from Salesforce</>
+            )}
           </Button>
+          <Badge variant="outline" className="gap-1.5 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-800">
+            <Zap className="h-3 w-3" />
+            Salesforce Connected
+          </Badge>
+          <div
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium",
+              seatWarning
+                ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"
+                : "border-border bg-background text-foreground"
+            )}
+          >
+            <span className={cn("w-2 h-2 rounded-full shrink-0", seatWarning ? "bg-red-500 dark:bg-red-500" : "bg-green-500 dark:bg-green-500")} />
+            {seatsUsed} / {seatsPurchased} seats
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, role..."
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9"
-          />
+      {/* ── Tabs ── */}
+      <div className="border-b">
+        <div className="flex gap-0">
+          <button
+            onMouseDown={() => setActiveTab("users")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              activeTab === "users"
+                ? "text-primary border-primary"
+                : "text-muted-foreground border-transparent hover:text-foreground"
+            )}
+          >
+            Users
+          </button>
+          <button
+            onMouseDown={() => setActiveTab("overview")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              activeTab === "overview"
+                ? "text-primary border-primary"
+                : "text-muted-foreground border-transparent hover:text-foreground"
+            )}
+          >
+            Overview
+          </button>
         </div>
-
-        <Select
-          value={licensed}
-          onValueChange={(v) => {
-            setLicensed(v as typeof licensed);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All users</SelectItem>
-            <SelectItem value="licensed">Licensed</SelectItem>
-            <SelectItem value="unlicensed">Unlicensed</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-10">
-                <Checkbox
-                  checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                  onCheckedChange={toggleAll}
-                  aria-label="Select all"
-                />
-              </TableHead>
-              <TableHead>User</TableHead>
-              <TableHead className="hidden md:table-cell">Role / Profile</TableHead>
-              <TableHead className="hidden lg:table-cell">Team</TableHead>
-              <TableHead className="hidden lg:table-cell">Last Routed</TableHead>
-              <TableHead className="text-right w-32">Licensed</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {usersQuery.isLoading && (
-              <TableRow>
-                <TableCell colSpan={7} className="p-0">
-                  <TableSkeleton rows={8} columns={5} />
-                </TableCell>
-              </TableRow>
-            )}
-
-            {usersQuery.isError && (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-destructive">
-                  Failed to load users. Try refreshing.
-                </TableCell>
-              </TableRow>
-            )}
-
-            {usersQuery.isSuccess && users.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  <Users className="mx-auto mb-2 size-8 opacity-30" />
-                  {debouncedSearch
-                    ? `No users match "${debouncedSearch}"`
-                    : "No users synced yet. Click Sync Users to import from Salesforce."}
-                </TableCell>
-              </TableRow>
-            )}
-
-            {users.map((user) => {
-              const isPending =
-                licenseMutation.isPending &&
-                (licenseMutation.variables as { id: string })?.id === user.id;
-
+      {/* ═══════════════════════════════════════════════════ */}
+      {/* TAB 1: Users                                       */}
+      {/* ═══════════════════════════════════════════════════ */}
+      {activeTab === "users" && (
+        <div className="space-y-5">
+          {/* ── Method selector cards ── */}
+          <div className="grid grid-cols-5 gap-3">
+            {METHOD_CARDS.map((card) => {
+              const Icon = card.icon;
+              const isSelected = activeMethod === card.key;
+              const count = methodBadgeCounts[card.key];
               return (
-                <TableRow
-                  key={user.id}
-                  data-state={selected.has(user.id) ? "selected" : undefined}
+                <button
+                  key={card.key}
+                  onMouseDown={() => selectMethod(card.key)}
+                  className={cn(
+                    "relative border-2 rounded-xl bg-background p-4 text-center transition-all duration-200 cursor-pointer",
+                    isSelected
+                      ? "border-primary bg-primary/5 shadow-[0_0_0_3px_rgba(37,99,235,0.12)]"
+                      : "border-border hover:border-muted-foreground/30 hover:shadow-md hover:-translate-y-0.5"
+                  )}
                 >
-                  <TableCell>
-                    <Checkbox
-                      checked={selected.has(user.id)}
-                      onCheckedChange={() => toggleOne(user.id)}
-                      aria-label={`Select ${user.name}`}
-                    />
-                  </TableCell>
-
-                  <TableCell>
-                    <div className="font-medium">{user.name}</div>
-                    <div className="text-muted-foreground text-xs">{user.email}</div>
-                  </TableCell>
-
-                  <TableCell className="hidden md:table-cell">
-                    <div className="flex flex-col gap-0.5">
-                      {user.role && <span className="text-sm">{user.role}</span>}
-                      {user.profile && (
-                        <span className="text-xs text-muted-foreground">{user.profile}</span>
-                      )}
-                      {!user.role && !user.profile && (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="hidden lg:table-cell">
-                    {user.teamMemberships?.length ? (
-                      <div className="flex flex-wrap gap-1">
-                        {user.teamMemberships.map((tm: any) => (
-                          <Badge key={tm.team.id} variant="outline" className="text-xs">
-                            {tm.team.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-
-                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                    {formatLastRouted(user.lastRoutedAt)}
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Badge
-                        variant={user.isLicensed ? "default" : "outline"}
-                        className="text-xs min-w-[72px] justify-center"
-                      >
-                        {user.isLicensed ? "Licensed" : "Unlicensed"}
-                      </Badge>
-                      <Switch
-                        checked={user.isLicensed}
-                        disabled={isPending}
-                        onCheckedChange={(checked) => {
-                          licenseMutation.mutate({
-                            id: user.id,
-                            action: checked ? "license" : "de-license",
-                          });
-                        }}
-                        aria-label={`${user.isLicensed ? "De-license" : "License"} ${user.name}`}
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                      aria-label={`Delete ${user.name}`}
-                      onClick={() => setDeleteUser(user)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                  {/* Badge count */}
+                  {count > 0 && (
+                    <span className="absolute top-2 right-2 min-w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold flex items-center justify-center px-1.5">
+                      {count}
+                    </span>
+                  )}
+                  <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-2.5", card.iconBg)}>
+                    <Icon className={cn("h-5 w-5", card.iconColor)} />
+                  </div>
+                  <div className="text-[13px] font-semibold">{card.label}</div>
+                  <div className="text-[11.5px] text-muted-foreground mt-0.5">{card.description}</div>
+                </button>
               );
             })}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
 
-      {/* Pagination */}
-      {usersQuery.isSuccess && (usersQuery.data?.pages ?? 1) > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Showing {((page - 1) * 50) + 1}–{Math.min(page * 50, usersQuery.data.total)} of{" "}
-            {usersQuery.data.total} users
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= (usersQuery.data?.pages ?? 1)}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
+          {/* ── Selection panel ── */}
+          <div
+            className={cn(
+              "grid transition-all duration-300",
+              activeMethod
+                ? "grid-rows-[1fr] opacity-100"
+                : "grid-rows-[0fr] opacity-0"
+            )}
+          >
+            <div className={cn(
+              "overflow-hidden",
+              activeMethod && "overflow-visible"
+            )}>
+            {activeMethod && (
+              <div className="border rounded-xl bg-background p-5 mb-1">
+              <>
+                {/* Panel header */}
+                <div className="flex items-center justify-between mb-3.5">
+                  <div className="flex items-center gap-2">
+                    {activeMethod === "custom" && selectedCustomField && (
+                      <button
+                        onMouseDown={() => { setSelectedCustomField(null); setSelectedValues(new Set()); setCustomFieldValue(""); setPanelSearchQuery(""); }}
+                        className="text-xs text-primary hover:underline mr-2"
+                      >
+                        ← Back to fields
+                      </button>
+                    )}
+                    <div>
+                      <div className="text-sm font-semibold">{panelConfig.title}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{panelConfig.subtitle}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Custom field text input for non-picklist/non-boolean fields (step 2) */}
+                {activeMethod === "custom" && selectedCustomField && panelOptions.length === 0 && (
+                  <div className="mb-3">
+                    <Input
+                      placeholder={`Enter value for ${selectedCustomField}...`}
+                      value={customFieldValue}
+                      onChange={(e) => setCustomFieldValue(e.target.value)}
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Users where {selectedCustomField} matches this value will be licensed.</p>
+                  </div>
+                )}
+
+                {/* Searchable dropdown */}
+                <div ref={dropdownRef} className="relative mb-1">
+                  {/* Input wrap with tags */}
+                  <div
+                    onMouseDown={() => panelSearchRef.current?.focus()}
+                    className={cn(
+                      "flex items-center flex-wrap gap-1.5 min-h-[40px] px-2.5 py-1.5 border rounded-lg bg-background cursor-text transition-all shadow-sm",
+                      dropdownOpen && "border-primary ring-[3px] ring-primary/10"
+                    )}
+                  >
+                    {/* Selected tags */}
+                    {[...selectedValues].map((val) => (
+                      <span
+                        key={val}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium border animate-in fade-in zoom-in-95 duration-150",
+                          activeTagColor
+                        )}
+                      >
+                        {getLabelForValue(val)}
+                        <button
+                          onMouseDown={(e) => { e.stopPropagation(); removePanelTag(val); }}
+                          className="inline-flex items-center justify-center w-4 h-4 rounded opacity-60 hover:opacity-100 hover:bg-black/5"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      ref={panelSearchRef}
+                      type="text"
+                      className="flex-1 min-w-[120px] h-7 border-0 outline-none bg-transparent text-sm placeholder:text-muted-foreground"
+                      placeholder={selectedValues.size === 0 ? panelConfig.placeholder : "Search..."}
+                      value={panelSearchQuery}
+                      onChange={(e) => setPanelSearchQuery(e.target.value)}
+                      onFocus={() => setDropdownOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") { setDropdownOpen(false); e.preventDefault(); }
+                        if (e.key === "Backspace" && !panelSearchQuery && selectedValues.size > 0) {
+                          const last = [...selectedValues].pop();
+                          if (last) removePanelTag(last);
+                        }
+                      }}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  {/* Dropdown list */}
+                  {dropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto z-20 border rounded-lg bg-background shadow-md animate-in fade-in slide-in-from-top-1 duration-100">
+                      {filteredPanelOptions.length === 0 ? (
+                        <div className="py-4 text-center text-sm text-muted-foreground">
+                          No matches found
+                        </div>
+                      ) : (
+                        filteredPanelOptions.map((opt) => {
+                          const isOpted = selectedValues.has(opt.value);
+                          const isDisabled = opt.disabled && !isOpted;
+                          return (
+                            <div
+                              key={opt.value}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                if (!isDisabled) togglePanelValue(opt.value);
+                              }}
+                              className={cn(
+                                "flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer transition-colors text-sm",
+                                isOpted && "bg-primary/5",
+                                isDisabled && "opacity-50 cursor-default",
+                                !isOpted && !isDisabled && "hover:bg-muted"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-4 h-4 rounded border-[1.5px] flex items-center justify-center shrink-0 transition-all",
+                                isOpted ? "bg-primary border-primary" : "border-muted-foreground/30 bg-background"
+                              )}>
+                                {isOpted && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                              </div>
+                              <span className="flex-1 min-w-0">
+                                <span className="font-medium">{highlightMatch(opt.label, panelSearchQuery)}</span>
+                                {opt.sub && (
+                                  <span className="ml-1.5 text-xs text-muted-foreground font-mono">
+                                    {highlightMatch(opt.sub, panelSearchQuery)}
+                                  </span>
+                                )}
+                              </span>
+                              {isDisabled && opt.disabledLabel && (
+                                <span className="text-[11px] text-muted-foreground italic">{opt.disabledLabel}</span>
+                              )}
+                              {opt.count != null && (
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  {opt.count} {opt.countLabel ?? "users"}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Match preview + actions */}
+                <div className="flex items-center gap-2 mt-3.5 pt-3.5 border-t">
+                  <div className="text-sm text-muted-foreground flex-1">
+                    {selectedValues.size === 0 ? (
+                      "Select values above to see how many will be licensed"
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold mr-1">
+                          {matchCount.newCount}
+                        </span>
+                        {isQueue ? (matchCount.newCount !== 1 ? " queues" : " queue") : (matchCount.newCount !== 1 ? " users" : " user")} will be licensed
+                        {matchCount.alreadyCount > 0 && (
+                          <span className="ml-2 text-muted-foreground/70">
+                            · {matchCount.alreadyCount} already licensed
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    onMouseDown={applySelection}
+                    disabled={applyDisabled || licenseByRole.isPending || licenseByProfile.isPending || licenseQueues.isPending || licenseIndividualUsers.isPending || licenseByCustomField.isPending}
+                  >
+                    {applyBtnText}
+                  </Button>
+                  <Button variant="ghost" size="sm" onMouseDown={closePanel}>
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            </div>
+            )}
+            </div>
+          </div>
+
+          {/* ── Filter bar ── */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by name, email, role..."
+                className="pl-8 h-9"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {(filters?.roles ?? []).map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={profileFilter} onValueChange={(v) => { setProfileFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="All Profiles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Profiles</SelectItem>
+                {(filters?.profiles ?? []).map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={departmentFilter} onValueChange={(v) => { setDepartmentFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {(filters?.departments ?? []).map((d) => (
+                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[140px] h-9">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="licensed">Licensed</SelectItem>
+                <SelectItem value="unlicensed">Unlicensed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* ── User table ── */}
+          {usersLoading ? (
+            <TableSkeleton />
+          ) : (
+            <div className="border rounded-xl overflow-hidden bg-background shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead className="w-[42px] pr-0">
+                      <Checkbox
+                        checked={allRowsSelected ? true : someRowsSelected ? "indeterminate" : false}
+                        onCheckedChange={toggleAllRows}
+                      />
+                    </TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Role / Profile</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Teams</TableHead>
+                    <TableHead>Last Routed</TableHead>
+                    <TableHead className="text-right">Licensed</TableHead>
+                    <TableHead className="w-12 text-center" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                        <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+                        No users match your filters
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((user) => (
+                      <TableRow
+                        key={user.id}
+                        className={cn(selectedRows.has(user.id) && "bg-primary/5")}
+                      >
+                        <TableCell className="pr-0">
+                          <Checkbox
+                            checked={selectedRows.has(user.id)}
+                            onCheckedChange={() => toggleRow(user.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm">{user.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono mt-0.5">{user.email}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{user.role ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{user.profile ?? ""}</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{user.department ?? "—"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {user.teamMemberships && user.teamMemberships.length > 0 ? (
+                              user.teamMemberships.map((tm) => (
+                                <span
+                                  key={tm.team.id}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted border text-[11.5px] font-medium text-muted-foreground"
+                                >
+                                  {tm.team.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={cn("text-sm", !user.lastRoutedAt && "text-muted-foreground/50")}>
+                            {formatRelativeTime(user.lastRoutedAt)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <Badge
+                              variant={user.isLicensed ? "default" : "outline"}
+                              className={cn(
+                                "min-w-[76px] justify-center",
+                                user.isLicensed && "bg-primary"
+                              )}
+                            >
+                              {user.isLicensed ? "Licensed" : "Unlicensed"}
+                            </Badge>
+                            <Switch
+                              checked={user.isLicensed}
+                              onCheckedChange={() => toggleUserLicense(user)}
+                              disabled={licenseSingle.isPending || deLicenseSingle.isPending}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <button
+                            onMouseDown={() => {
+                              if (confirm(`Remove ${user.name}? This cannot be undone.`)) {
+                                deleteUser.mutate(user.id);
+                              }
+                            }}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
+                  <span>
+                    Showing {users.length} of {totalUsers} users · Page {page} of {totalPages}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1}
+                      onMouseDown={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                      onMouseDown={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════ */}
+      {/* TAB 2: Overview                                     */}
+      {/* ═══════════════════════════════════════════════════ */}
+      {activeTab === "overview" && (
+        <div className="space-y-5">
+          {/* ── Seat usage gauge ── */}
+          <div className="border rounded-xl bg-background p-6 shadow-sm">
+            <h3 className="text-[15px] font-semibold mb-4">Seat Usage</h3>
+            <div className="flex items-center gap-8">
+              <svg width="130" height="130" viewBox="0 0 130 130">
+                <circle cx="65" cy="65" r="54" fill="none" stroke="currentColor" strokeWidth="10" className="text-muted/30" />
+                <circle
+                  cx="65" cy="65" r="54"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={gaugeOffset}
+                  transform="rotate(-90 65 65)"
+                  className="text-primary transition-[stroke-dashoffset] duration-1000 ease-out"
+                />
+                <text x="65" y="58" textAnchor="middle" className="fill-foreground text-[28px] font-bold font-display" fontFamily="inherit">
+                  {seatsUsed}
+                </text>
+                <text x="65" y="74" textAnchor="middle" className="fill-muted-foreground text-[13px] font-medium" fontFamily="inherit">
+                  /{seatsPurchased}
+                </text>
+                <text x="65" y="92" textAnchor="middle" className="fill-muted-foreground text-[11px] font-medium" fontFamily="inherit">
+                  {Math.round(seatPct * 100)}% used
+                </text>
+              </svg>
+              <div className="flex-1">
+                <p className="text-[15px] text-muted-foreground leading-relaxed">
+                  You have <strong className="text-foreground">{seatsPurchased - seatsUsed}</strong> seats remaining on the <strong className="text-foreground">Paid</strong> plan.
+                </p>
+                <a href="#" className="text-primary font-medium text-sm hover:underline">
+                  Upgrade plan &rarr;
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Breakdown by method ── */}
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { key: "individual" as const, label: "Individual Users", color: "border-l-blue-600" },
+              { key: "role" as const, label: "By Role", color: "border-l-purple-500" },
+              { key: "profile" as const, label: "By Profile", color: "border-l-teal-500" },
+              { key: "queue" as const, label: "Queues Licensed", color: "border-l-orange-500" },
+              { key: "custom" as const, label: "By Custom Field", color: "border-l-green-500" },
+            ].map((stat, i) => (
+              <div
+                key={stat.key}
+                className={cn(
+                  "border border-l-[3px] rounded-xl bg-background p-4 shadow-sm",
+                  stat.color
+                )}
+                style={{ animationDelay: `${i * 0.08}s` }}
+              >
+                <div className="text-[22px] font-bold tracking-tight font-display">{methodBadgeCounts[stat.key]}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Active licensing methods table ── */}
+          <div className="border rounded-xl bg-background p-6 shadow-sm">
+            <h3 className="text-[15px] font-semibold mb-4">Active Licensing Methods</h3>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="pb-2 text-xs font-medium text-muted-foreground">Method</th>
+                  <th className="pb-2 text-xs font-medium text-muted-foreground">Count</th>
+                  <th className="pb-2 text-xs font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { key: "individual" as const, label: "Individual Users", pillClass: "bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300" },
+                  { key: "role" as const, label: "By Role", pillClass: "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300" },
+                  { key: "profile" as const, label: "By Profile", pillClass: "bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300" },
+                  { key: "queue" as const, label: "By Queue", pillClass: "bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300" },
+                  { key: "custom" as const, label: "By Custom Field", pillClass: "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300" },
+                ].filter((m) => methodBadgeCounts[m.key] > 0).length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="text-center text-muted-foreground py-6 text-sm">
+                      No active licensing methods
+                    </td>
+                  </tr>
+                ) : (
+                  [
+                    { key: "individual" as const, label: "Individual Users", pillClass: "bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300" },
+                    { key: "role" as const, label: "By Role", pillClass: "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300" },
+                    { key: "profile" as const, label: "By Profile", pillClass: "bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300" },
+                    { key: "queue" as const, label: "By Queue", pillClass: "bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300" },
+                    { key: "custom" as const, label: "By Custom Field", pillClass: "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300" },
+                  ]
+                    .filter((m) => methodBadgeCounts[m.key] > 0)
+                    .map((m) => (
+                      <tr key={m.key} className="border-b last:border-0">
+                        <td className="py-2.5">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium", m.pillClass)}>
+                            {m.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-sm">
+                          <strong>{methodBadgeCounts[m.key]}</strong>
+                        </td>
+                        <td className="py-2.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 text-[11.5px] font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-500" />
+                            Active
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Recent activity timeline ── */}
+          <div className="border rounded-xl bg-background p-6 shadow-sm">
+            <h3 className="text-[15px] font-semibold mb-4">Recent Activity</h3>
+            <div className="relative pl-6">
+              {/* Vertical line */}
+              <div className="absolute left-[6px] top-1 bottom-1 w-0.5 bg-border rounded-full" />
+
+              {[
+                { color: "border-blue-500 dark:border-blue-400 after:bg-blue-500 dark:after:bg-blue-400", text: "Licensing rules updated", time: "Recently" },
+                { color: "border-green-500 dark:border-green-400 after:bg-green-500 dark:after:bg-green-400", text: "Users synced from Salesforce", time: "Earlier today" },
+                { color: "border-amber-500 dark:border-amber-400 after:bg-amber-500 dark:after:bg-amber-400", text: "Seat allocation reviewed", time: "This week" },
+              ].map((item, i) => (
+                <div key={i} className="relative pb-5 last:pb-0">
+                  <div
+                    className={cn(
+                      "absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-background border-2",
+                      item.color.split(" ")[0]
+                    )}
+                  >
+                    <div className={cn("absolute top-[2px] left-[2px] w-1.5 h-1.5 rounded-full", item.color.split(" ")[1]?.replace("after:", ""))} />
+                  </div>
+                  <div className="text-sm">{item.text}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{item.time}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-xl border bg-background px-4 py-3 shadow-lg">
-          <span className="text-sm font-medium">{selected.size} selected</span>
+      {/* ── Bulk action bar ── */}
+      {selectedRows.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background border rounded-xl px-3.5 py-2.5 shadow-lg z-50 animate-in slide-in-from-bottom-2 fade-in duration-200">
+          <span className="text-sm font-medium pr-1">{selectedRows.size} selected</span>
+          <div className="w-px h-5 bg-border mx-0.5" />
           <Button
             size="sm"
-            onClick={() => bulkMutation.mutate({ userIds: Array.from(selected), action: "license" })}
-            disabled={bulkMutation.isPending}
+            onMouseDown={() => bulkLicense.mutate({ userIds: [...selectedRows], action: "license" })}
+            disabled={bulkLicense.isPending}
           >
             License Selected
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            onClick={() => bulkMutation.mutate({ userIds: Array.from(selected), action: "de-license" })}
-            disabled={bulkMutation.isPending}
+            size="sm"
+            onMouseDown={() => bulkLicense.mutate({ userIds: [...selectedRows], action: "de-license" })}
+            disabled={bulkLicense.isPending}
           >
             De-License Selected
           </Button>
           <Button
-            size="sm"
             variant="ghost"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setBulkDeleteOpen(true)}
-            disabled={bulkDeleteMutation.isPending}
+            size="sm"
+            className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+            onMouseDown={() => {
+              if (confirm(`Delete ${selectedRows.size} selected users? This cannot be undone.`)) {
+                bulkDelete.mutate([...selectedRows]);
+              }
+            }}
+            disabled={bulkDelete.isPending}
           >
-            <Trash2 className="h-4 w-4" />
             Delete Selected
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setSelected(new Set())}
-          >
+          <div className="w-px h-5 bg-border mx-0.5" />
+          <Button variant="ghost" size="sm" onMouseDown={() => setSelectedRows(new Set())}>
             Clear
           </Button>
         </div>
       )}
-
-      {/* ── Sync & License Dialog ────────────────────────────────────────────── */}
-      <Dialog open={syncDialogOpen} onOpenChange={(open) => { if (!open) closeSyncDialog(); }}>
-        <DialogContent className="max-w-lg">
-          {syncStep === 1 && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Sync &amp; License Users</DialogTitle>
-                <DialogDescription>
-                  Sync users from Salesforce, then choose how to license them.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3 py-2">
-                <p className="text-sm font-medium text-foreground">Who do you want to license?</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* All Users */}
-                  <button
-                    onClick={() => setSyncMode("all")}
-                    className={cn(
-                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
-                      syncMode === "all" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Users className="h-5 w-5 text-primary" />
-                      {syncMode === "all" && <Check className="h-4 w-4 text-primary" />}
-                    </div>
-                    <p className="text-sm font-medium">All Users</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      License everyone synced from Salesforce
-                    </p>
-                  </button>
-
-                  {/* Individual Users */}
-                  <button
-                    onClick={() => setSyncMode("select")}
-                    className={cn(
-                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
-                      syncMode === "select" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Search className="h-5 w-5 text-primary" />
-                      {syncMode === "select" && <Check className="h-4 w-4 text-primary" />}
-                    </div>
-                    <p className="text-sm font-medium">Individual Users</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Pick specific users to license
-                    </p>
-                  </button>
-
-                  {/* By Role */}
-                  <button
-                    onClick={() => setSyncMode("role")}
-                    className={cn(
-                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
-                      syncMode === "role" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Shield className="h-5 w-5 text-primary" />
-                      {syncMode === "role" && <Check className="h-4 w-4 text-primary" />}
-                    </div>
-                    <p className="text-sm font-medium">By Role</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      License users by their Salesforce role
-                    </p>
-                  </button>
-
-                  {/* By Profile */}
-                  <button
-                    onClick={() => setSyncMode("profile")}
-                    className={cn(
-                      "rounded-lg border p-4 text-left transition-colors hover:bg-accent",
-                      syncMode === "profile" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <UserCog className="h-5 w-5 text-primary" />
-                      {syncMode === "profile" && <Check className="h-4 w-4 text-primary" />}
-                    </div>
-                    <p className="text-sm font-medium">By Profile</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      License users by their Salesforce profile
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeSyncDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={!syncMode || syncMutation.isPending}
-                  onClick={handleSyncAndContinue}
-                >
-                  {syncMutation.isPending ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    "Sync & Continue"
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {syncStep === 2 && syncMode === "all" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>License All Users</DialogTitle>
-                <DialogDescription>
-                  Sync complete. {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} found
-                  from Salesforce.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Total users synced</span>
-                  <span className="font-medium">{syncedUsers.length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Already licensed</span>
-                  <span className="font-medium">{syncedUsers.filter((u) => u.isLicensed).length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Will be licensed</span>
-                  <span className="font-semibold text-primary">
-                    {syncedUsers.filter((u) => !u.isLicensed).length}
-                  </span>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeSyncDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={bulkMutation.isPending || syncedUsers.filter((u) => !u.isLicensed).length === 0}
-                  onClick={handleLicenseFromDialog}
-                >
-                  {bulkMutation.isPending ? "Licensing..." : `License ${syncedUsers.filter((u) => !u.isLicensed).length} Users`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {syncStep === 2 && syncMode === "select" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Select Users to License</DialogTitle>
-                <DialogDescription>
-                  {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} synced from Salesforce.
-                  Select who to license.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name or email..."
-                    value={syncDialogSearch}
-                    onChange={(e) => setSyncDialogSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-
-                <div className="rounded-md border overflow-hidden">
-                  {/* Select all row */}
-                  {unlicensedSyncUsers.length > 0 && (
-                    <label className="flex items-center gap-3 px-3 py-2 bg-muted/30 border-b cursor-pointer hover:bg-accent">
-                      <Checkbox
-                        checked={allSyncSelected}
-                        onCheckedChange={toggleAllSyncUsers}
-                        aria-label="Select all unlicensed"
-                      />
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Select all unlicensed ({unlicensedSyncUsers.length})
-                      </span>
-                    </label>
-                  )}
-
-                  <div className="max-h-64 overflow-y-auto">
-                    {filteredSyncUsers.length === 0 && (
-                      <p className="text-center py-8 text-sm text-muted-foreground">
-                        {syncDialogSearch ? `No users match "${syncDialogSearch}"` : "No users found."}
-                      </p>
-                    )}
-                    {filteredSyncUsers.map((user) => (
-                      <label
-                        key={user.id}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0",
-                          user.isLicensed
-                            ? "opacity-50 cursor-not-allowed"
-                            : "cursor-pointer hover:bg-accent"
-                        )}
-                      >
-                        <Checkbox
-                          checked={user.isLicensed || syncDialogSelected.has(user.id)}
-                          disabled={user.isLicensed}
-                          onCheckedChange={() => !user.isLicensed && toggleSyncUser(user.id)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{user.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                        </div>
-                        {user.isLicensed ? (
-                          <Badge variant="default" className="text-xs shrink-0">Licensed</Badge>
-                        ) : user.role ? (
-                          <span className="text-xs text-muted-foreground shrink-0">{user.role}</span>
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {syncDialogSelected.size > 0 && (
-                  <p className="text-xs text-muted-foreground text-right">
-                    {syncDialogSelected.size} user{syncDialogSelected.size !== 1 ? "s" : ""} selected
-                  </p>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeSyncDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={syncDialogSelected.size === 0 || bulkMutation.isPending}
-                  onClick={handleLicenseFromDialog}
-                >
-                  {bulkMutation.isPending
-                    ? "Licensing..."
-                    : `License ${syncDialogSelected.size > 0 ? syncDialogSelected.size : ""} User${syncDialogSelected.size !== 1 ? "s" : ""}`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {syncStep === 2 && syncMode === "role" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>License by Role</DialogTitle>
-                <DialogDescription>
-                  {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} synced.
-                  Select which roles to license.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3">
-                <div className="rounded-md border overflow-hidden">
-                  <div className="max-h-64 overflow-y-auto">
-                    {uniqueRoles.length === 0 && (
-                      <p className="text-center py-8 text-sm text-muted-foreground">
-                        No roles found among synced users.
-                      </p>
-                    )}
-                    {uniqueRoles.map((role) => (
-                      <label
-                        key={role.name}
-                        className="flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 cursor-pointer hover:bg-accent"
-                      >
-                        <Checkbox
-                          checked={selectedRoles.has(role.name)}
-                          onCheckedChange={() => {
-                            setSelectedRoles((prev) => {
-                              const next = new Set(prev);
-                              next.has(role.name) ? next.delete(role.name) : next.add(role.name);
-                              return next;
-                            });
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{role.name}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {role.total} user{role.total !== 1 ? "s" : ""}
-                          {role.unlicensed > 0 && ` (${role.unlicensed} unlicensed)`}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {selectedRoles.size > 0 && (
-                  <p className="text-xs text-muted-foreground text-right">
-                    {roleLicenseCount} user{roleLicenseCount !== 1 ? "s" : ""} will be licensed
-                  </p>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeSyncDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={roleLicenseCount === 0 || bulkMutation.isPending}
-                  onClick={handleLicenseFromDialog}
-                >
-                  {bulkMutation.isPending
-                    ? "Licensing..."
-                    : `License ${roleLicenseCount > 0 ? roleLicenseCount : ""} User${roleLicenseCount !== 1 ? "s" : ""}`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {syncStep === 2 && syncMode === "profile" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>License by Profile</DialogTitle>
-                <DialogDescription>
-                  {syncedUsers.length} user{syncedUsers.length !== 1 ? "s" : ""} synced.
-                  Select which profiles to license.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3">
-                <div className="rounded-md border overflow-hidden">
-                  <div className="max-h-64 overflow-y-auto">
-                    {uniqueProfiles.length === 0 && (
-                      <p className="text-center py-8 text-sm text-muted-foreground">
-                        No profiles found among synced users.
-                      </p>
-                    )}
-                    {uniqueProfiles.map((profile) => (
-                      <label
-                        key={profile.name}
-                        className="flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 cursor-pointer hover:bg-accent"
-                      >
-                        <Checkbox
-                          checked={selectedProfiles.has(profile.name)}
-                          onCheckedChange={() => {
-                            setSelectedProfiles((prev) => {
-                              const next = new Set(prev);
-                              next.has(profile.name) ? next.delete(profile.name) : next.add(profile.name);
-                              return next;
-                            });
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{profile.name}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {profile.total} user{profile.total !== 1 ? "s" : ""}
-                          {profile.unlicensed > 0 && ` (${profile.unlicensed} unlicensed)`}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {selectedProfiles.size > 0 && (
-                  <p className="text-xs text-muted-foreground text-right">
-                    {profileLicenseCount} user{profileLicenseCount !== 1 ? "s" : ""} will be licensed
-                  </p>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={closeSyncDialog}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={profileLicenseCount === 0 || bulkMutation.isPending}
-                  onClick={handleLicenseFromDialog}
-                >
-                  {bulkMutation.isPending
-                    ? "Licensing..."
-                    : `License ${profileLicenseCount > 0 ? profileLicenseCount : ""} User${profileLicenseCount !== 1 ? "s" : ""}`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteUser} onOpenChange={(open) => { if (!open) setDeleteUser(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete &quot;{deleteUser?.name}&quot;?</DialogTitle>
-            <DialogDescription>
-              This will permanently remove the user from the system and all teams.
-              {deleteUser?.isLicensed && " Their licensed seat will be freed."}
-              {" "}This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteUser(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate(deleteUser!.id)}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete User"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk delete confirmation dialog */}
-      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selected.size} user{selected.size !== 1 ? "s" : ""}?</DialogTitle>
-            <DialogDescription>
-              This will permanently remove {selected.size === 1 ? "this user" : `all ${selected.size} selected users`} from
-              the system and any teams they belong to. Licensed seats will be freed.
-              This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={bulkDeleteMutation.isPending}
-              onClick={() => bulkDeleteMutation.mutate(Array.from(selected))}
-            >
-              {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selected.size} User${selected.size !== 1 ? "s" : ""}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Round Robin cascade info */}
-      <Dialog open={cascadeOpen} onOpenChange={setCascadeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>User de-licensed</DialogTitle>
-            <DialogDescription>
-              {cascadeInfo?.userName} was removed from the following team
-              {(cascadeInfo?.teams.length ?? 0) > 1 ? "s" : ""}:
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="rounded-md border bg-muted/50 px-4 py-3 text-sm space-y-1">
-            {cascadeInfo?.teams.map((t) => <li key={t}>• {t}</li>)}
-          </ul>
-          <DialogFooter>
-            <Button onClick={() => setCascadeOpen(false)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
     </div>
+  );
+}
+
+// ─── Highlight helper (outside component to avoid re-creation) ────────────────
+
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 text-inherit rounded-sm px-px">{part}</mark>
+    ) : (
+      part
+    )
   );
 }

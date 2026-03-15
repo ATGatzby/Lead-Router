@@ -17,9 +17,25 @@ export async function GET() {
       where: { orgId, isLicensed: true, isActive: true },
     });
 
+    // Breakdown by licensing method
+    const [byRole, byProfile, byCustomField, byIndividual, licensedQueues] = await Promise.all([
+      prisma.user.count({ where: { orgId, isLicensed: true, isActive: true, licensedVia: "role" } }),
+      prisma.user.count({ where: { orgId, isLicensed: true, isActive: true, licensedVia: "profile" } }),
+      prisma.user.count({ where: { orgId, isLicensed: true, isActive: true, licensedVia: "custom_field" } }),
+      prisma.user.count({ where: { orgId, isLicensed: true, isActive: true, OR: [{ licensedVia: "individual" }, { licensedVia: null }] } }),
+      prisma.sfdcQueue.count({ where: { orgId, isLicensed: true } }),
+    ]);
+
     return NextResponse.json({
       seatsPurchased: org.seatsPurchased,
       seatsUsed,
+      breakdown: {
+        individual: byIndividual,
+        byRole,
+        byProfile,
+        byCustomField,
+        licensedQueues,
+      },
     });
   } catch (err) {
     console.error("GET /api/users/stats error:", err);

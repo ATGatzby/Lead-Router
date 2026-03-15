@@ -10,7 +10,7 @@ export async function GET() {
     const queues = await prisma.sfdcQueue.findMany({
       where: { orgId },
       orderBy: { name: "asc" },
-      select: { id: true, sfdcQueueId: true, name: true, syncedAt: true },
+      select: { id: true, sfdcQueueId: true, name: true, isLicensed: true, syncedAt: true },
     });
 
     return NextResponse.json({ queues });

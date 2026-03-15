@@ -95,28 +95,28 @@ describe("LicenseUsersPage", () => {
     });
 
     const matches = await findAllByText(
-      /manage which salesforce users can receive routed records/i
+      /choose how to license salesforce users for routing/i
     );
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the Salesforce source badge", async () => {
+  it("renders the Salesforce Connected badge", async () => {
     mockFetchResponses();
     const { findAllByText } = render(<LicenseUsersPage />, {
       wrapper: createWrapper(),
     });
 
-    const matches = await findAllByText("Salesforce");
+    const matches = await findAllByText("Salesforce Connected");
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the Sync Users button", async () => {
+  it("renders the Sync from Salesforce button", async () => {
     mockFetchResponses();
     const { findAllByText } = render(<LicenseUsersPage />, {
       wrapper: createWrapper(),
     });
 
-    const matches = await findAllByText("Sync Users");
+    const matches = await findAllByText("Sync from Salesforce");
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -131,13 +131,13 @@ describe("LicenseUsersPage", () => {
     expect(inputs[0].tagName).toBe("INPUT");
   });
 
-  it("renders the license filter dropdown with all options", async () => {
+  it("renders the licensing method cards", async () => {
     mockFetchResponses();
     const { findAllByText } = render(<LicenseUsersPage />, {
       wrapper: createWrapper(),
     });
 
-    const matches = await findAllByText("All users");
+    const matches = await findAllByText("Individual Users");
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
