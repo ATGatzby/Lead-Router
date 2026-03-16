@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { updateOwner, bulkUpdateOwners } from "./update-owner.js";
-import type { BulkUpdateRecord } from "./update-owner.js";
+import { updateOwner, bulkUpdateOwners } from "@lead-routing/sfdc";
+import type { BulkUpdateRecord } from "@lead-routing/sfdc";
 
 describe("updateOwner", () => {
   function makeMockConnection() {
