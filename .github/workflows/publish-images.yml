@@ -51,10 +51,9 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
+          no-cache: true
           tags: ${{ steps.meta-web.outputs.tags }}
           labels: ${{ steps.meta-web.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       # ── Engine image ───────────────────────────────────────────────────────
 
@@ -75,7 +74,6 @@ jobs:
           context: .
           file: apps/engine/Dockerfile
           push: true
+          no-cache: true
           tags: ${{ steps.meta-engine.outputs.tags }}
           labels: ${{ steps.meta-engine.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
