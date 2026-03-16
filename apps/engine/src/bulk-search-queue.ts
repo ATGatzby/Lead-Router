@@ -12,6 +12,7 @@ export interface BulkSearchJobData {
   ruleId: string;
   runId: string; // BulkSearchRun.id for tracking
   objectType: string; // "LEAD" | "CONTACT" | "ACCOUNT"
+  simulate?: boolean; // Skip routing + SFDC write, just count records
   records: Array<{
     recordId: string;
     fields: Record<string, unknown>;
@@ -93,7 +94,18 @@ export function initBulkSearchQueue(redisUrl: string): void {
   _worker = new Worker<BulkSearchJobData>(
     QUEUE_NAME,
     async (job: Job<BulkSearchJobData>) => {
-      const { orgId, ruleId, runId, objectType, records } = job.data;
+      const { orgId, ruleId, runId, objectType, records, simulate } = job.data;
+
+      // ── Simulation mode: skip routing + SFDC, just count records ──────
+      if (simulate) {
+        const count = records.length;
+        // Simulate ~50μs per record processing time
+        await new Promise((resolve) => setTimeout(resolve, count * 0.05));
+        if (_redis) {
+          await _redis.hincrby(`bulk-run:${runId}`, "routed", count);
+        }
+        return { routed: count, failed: 0 };
+      }
 
       // ── Phase A: Collect routing decisions ────────────────────────────
       const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];

@@ -4,6 +4,7 @@ import { loadAllRules, startCacheInvalidationListener } from "./cache.js";
 import { routePlugin } from "./routes/route.js";
 import { analyticsPlugin } from "./routes/analytics.js";
 import { scheduledPlugin } from "./routes/scheduled.js";
+import { devSimulatePlugin } from "./routes/dev-simulate.js";
 import { initScheduler, syncScheduledJobs } from "./scheduler.js";
 import { initLicenseHeartbeat, scheduleLicenseHeartbeat } from "./license-heartbeat.js";
 import { initBulkSearchQueue } from "./bulk-search-queue.js";
@@ -45,6 +46,7 @@ const start = async () => {
     await app.register(routePlugin);
     await app.register(analyticsPlugin);
     await app.register(scheduledPlugin);
+    await app.register(devSimulatePlugin);
 
     // Pre-warm rule cache from DB
     await loadAllRules();
