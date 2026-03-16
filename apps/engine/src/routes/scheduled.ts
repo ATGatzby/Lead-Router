@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { prisma } from "@lead-routing/db";
 import { runScheduledRoute, type RunResult } from "../search-runner.js";
 import { buildCountSOQL } from "../soql-builder.js";
 import { getOrgConnection } from "../sfdc.js";
+import { getRedis } from "../redis.js";
 import { validateInternalToken } from "../middleware/validate-internal.js";
 
 interface RunScheduledBody {
@@ -54,5 +56,55 @@ export async function scheduledPlugin(app: FastifyInstance): Promise<void> {
       request.log.error(err, "Failed to run scheduled route");
       return reply.status(500).send({ error: "Internal error", detail: err.message });
     }
+  });
+
+  // ── Bulk run progress ────────────────────────────────────────────────
+  app.get<{ Params: { runId: string } }>("/bulk-run/:runId/status", async (request, reply) => {
+    const { runId } = request.params;
+
+    // Try Redis first (live progress while job is running)
+    const redis = getRedis();
+    const liveData = await redis.hgetall(`bulk-run:${runId}`);
+
+    if (liveData && liveData.status === "RUNNING") {
+      return reply.send({
+        status: "RUNNING",
+        recordsProcessed: parseInt(liveData.processed || "0"),
+        recordsRouted: parseInt(liveData.routed || "0"),
+        recordsFailed: parseInt(liveData.failed || "0"),
+      });
+    }
+
+    // Fallback to DB (completed/cancelled runs)
+    const run = await prisma.bulkSearchRun.findUnique({ where: { id: runId } });
+    if (!run) return reply.status(404).send({ error: "Run not found" });
+
+    return reply.send({
+      status: run.status,
+      recordsFound: run.recordsFound,
+      recordsProcessed: run.recordsProcessed,
+      recordsRouted: run.recordsRouted,
+      recordsFailed: run.recordsFailed,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      durationMs: run.durationMs,
+    });
+  });
+
+  // ── Bulk run cancellation ────────────────────────────────────────────
+  app.post<{ Params: { runId: string } }>("/bulk-run/:runId/cancel", async (request, reply) => {
+    const { runId } = request.params;
+
+    // Set cancel flag in Redis (bulk-search workers check this between batches)
+    const redis = getRedis();
+    await redis.set(`bulk-run:${runId}:cancel`, "1", "EX", 3600);
+
+    // Update DB status
+    await prisma.bulkSearchRun.update({
+      where: { id: runId },
+      data: { status: "CANCELLED", completedAt: new Date() },
+    });
+
+    return reply.send({ cancelled: true });
   });
 }

@@ -18,6 +18,7 @@ import {
   Loader2,
   Lock,
   ExternalLink,
+  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,22 @@ interface Rule {
   lastRunRecords: number | null;
   totalRuns: number;
   totalRecordsRouted: number;
+  activeBulkRun: {
+    id: string;
+    status: string;
+    recordsFound: number;
+    recordsProcessed: number;
+    recordsRouted: number;
+    recordsFailed: number;
+  } | null;
+}
+
+interface BulkRunStatus {
+  status: string;
+  recordsFound?: number;
+  recordsProcessed: number;
+  recordsRouted: number;
+  recordsFailed: number;
 }
 
 interface RulesResponse {
@@ -193,12 +210,32 @@ export default function RoutingRulesPage() {
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressStartRef = useRef<number>(0);
 
+  // Bulk run polling state
+  const [activeBulkRunId, setActiveBulkRunId] = useState<string | null>(null);
+  const [bulkRunRuleId, setBulkRunRuleId] = useState<string | null>(null);
+
   const cleanupProgress = useCallback(() => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
   }, []);
+
+  // Poll bulk run status when active
+  const bulkStatusQuery = useQuery<BulkRunStatus>({
+    queryKey: ["bulk-run", activeBulkRunId],
+    queryFn: async () => {
+      const res = await fetch(`/api/bulk-run/${activeBulkRunId}/status`);
+      if (!res.ok) throw new Error("Failed to fetch bulk run status");
+      return res.json();
+    },
+    refetchInterval: 2000,
+    enabled: !!activeBulkRunId,
+  });
+
+  // When bulk run completes, update UI (needs rules, so completion check is below query)
+  const bulkStatus = bulkStatusQuery.data;
+  const prevBulkStatusRef = useRef<string | null>(null);
 
   const startRunProgress = useCallback(
     (ruleId: string, ruleName: string) => {
@@ -211,7 +248,16 @@ export default function RoutingRulesPage() {
       fetch(`/api/rules/${ruleId}/run`, { method: "POST" })
         .then((res) => res.json())
         .then((data) => {
-          // API returned — fast-forward to 100% if not there yet
+          // If the run returned a bulkRunId, switch to polling mode
+          if (data.bulkRunId) {
+            cleanupProgress();
+            setActiveBulkRunId(data.bulkRunId);
+            setBulkRunRuleId(ruleId);
+            setRunProgress({ phase: "Processing records...", pct: 5 });
+            return;
+          }
+
+          // Non-bulk run — fast-forward to 100%
           cleanupProgress();
           setRunProgress({ phase: "Complete!", pct: 100 });
 
@@ -235,36 +281,44 @@ export default function RoutingRulesPage() {
           toast.error(err.message ?? "Failed to run route");
         });
 
-      // Simulate progress client-side
+      // Simulate progress client-side (until bulk run polling takes over)
       progressIntervalRef.current = setInterval(() => {
         const elapsed = Date.now() - progressStartRef.current;
 
         if (elapsed < 800) {
-          // Phase 1: 0→15%
           const pct = Math.round((elapsed / 800) * 15);
           setRunProgress({ phase: "Querying Salesforce...", pct });
         } else if (elapsed < 1300) {
-          // Phase 2: 15→35%
           const pct = Math.round(15 + ((elapsed - 800) / 500) * 20);
           setRunProgress({ phase: "Matching records...", pct });
         } else if (elapsed < 3000) {
-          // Phase 3: 35→85%
           const progress3 = (elapsed - 1300) / 1700;
           const pct = Math.round(35 + progress3 * 50);
           const counter = Math.round(progress3 * 247);
           setRunProgress({ phase: `Routing records... ${counter}/247`, pct });
         } else if (elapsed < 3500) {
-          // Phase 4: 85→100%
           const pct = Math.round(85 + ((elapsed - 3000) / 500) * 15);
           setRunProgress({ phase: "Completing...", pct });
         } else {
-          // Done — let the API callback handle final state
           cleanupProgress();
         }
       }, 50);
     },
     [cleanupProgress, qc]
   );
+
+  const cancelBulkRun = useCallback(async () => {
+    if (!activeBulkRunId) return;
+    try {
+      const res = await fetch(`/api/bulk-run/${activeBulkRunId}/cancel`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Cancel failed");
+      toast.info("Cancellation requested...");
+    } catch {
+      toast.error("Failed to cancel run");
+    }
+  }, [activeBulkRunId]);
 
   // ─── Query ────────────────────────────────────────────────────────────────
 
@@ -287,6 +341,49 @@ export default function RoutingRulesPage() {
   });
 
   const rules = rulesQuery.data?.rules ?? [];
+
+  // Auto-detect active bulk runs from rules data (e.g., on page load)
+  const detectedBulkRunRef = useRef(false);
+  if (!detectedBulkRunRef.current && rules.length > 0 && !activeBulkRunId && !runningRuleId) {
+    const ruleWithActiveBulk = rules.find((r) => r.activeBulkRun?.status === "RUNNING");
+    if (ruleWithActiveBulk && ruleWithActiveBulk.activeBulkRun) {
+      detectedBulkRunRef.current = true;
+      setActiveBulkRunId(ruleWithActiveBulk.activeBulkRun.id);
+      setBulkRunRuleId(ruleWithActiveBulk.id);
+      setRunningRuleId(ruleWithActiveBulk.id);
+      setRunProgress({ phase: "Processing records...", pct: 0 });
+    }
+  }
+
+  // Bulk run completion detection (must be after rules query)
+  if (bulkStatus && activeBulkRunId) {
+    const isTerminal = bulkStatus.status !== "RUNNING";
+    if (isTerminal && prevBulkStatusRef.current === "RUNNING") {
+      const rId = bulkRunRuleId;
+      const rule = rules.find((r) => r.id === rId);
+      const ruleName = rule?.name ?? "Route";
+
+      setTimeout(() => {
+        setActiveBulkRunId(null);
+        setBulkRunRuleId(null);
+        setRunningRuleId(null);
+        setRunProgress(null);
+        setCompletedRuleId(rId);
+        qc.invalidateQueries({ queryKey: ["rules"] });
+
+        if (bulkStatus.status === "CANCELLED") {
+          toast.info(`${ruleName} cancelled`);
+        } else {
+          toast.success(
+            `${ruleName} completed -- ${bulkStatus.recordsRouted} records routed`
+          );
+        }
+
+        setTimeout(() => setCompletedRuleId(null), 2000);
+      }, 300);
+    }
+    prevBulkStatusRef.current = bulkStatus.status;
+  }
 
   // License gating: maxRules of -1 means unlimited (Pro)
   const maxRules = licenseQuery.data?.limits.maxRules ?? -1;
@@ -686,20 +783,48 @@ export default function RoutingRulesPage() {
                 </div>
 
                   {/* Inline run progress */}
-                  {isRunning && runProgress && (
-                    <div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3">
-                        <div
-                          className="h-full bg-gradient-to-r from-teal-500 to-teal-400 dark:from-teal-600 dark:to-teal-500 rounded-full transition-all duration-300"
-                          style={{ width: `${runProgress.pct}%` }}
-                        />
+                  {isRunning && runProgress && (() => {
+                    const isBulk = activeBulkRunId && bulkRunRuleId === rule.id;
+                    const bs = isBulk ? bulkStatus : null;
+                    const found = bs?.recordsFound ?? 0;
+                    const processed = bs?.recordsProcessed ?? 0;
+                    const routed = bs?.recordsRouted ?? 0;
+                    const failed = bs?.recordsFailed ?? 0;
+                    const pct = isBulk && bs
+                      ? (found > 0 ? Math.round((processed / found) * 100) : runProgress.pct)
+                      : runProgress.pct;
+                    const phase = isBulk && bs
+                      ? `Processing ${processed.toLocaleString()} of ${found.toLocaleString()} records (${routed.toLocaleString()} routed${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""})`
+                      : runProgress.phase;
+
+                    return (
+                      <div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-3">
+                          <div
+                            className="h-full bg-gradient-to-r from-teal-500 to-teal-400 dark:from-teal-600 dark:to-teal-500 rounded-full transition-all duration-300"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                          <span>{phase}</span>
+                          <div className="flex items-center gap-2">
+                            <span>{pct}%</span>
+                            {isBulk && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
+                                onClick={cancelBulkRun}
+                              >
+                                <Square className="h-2.5 w-2.5 mr-0.5" />
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                        <span>{runProgress.phase}</span>
-                        <span>{runProgress.pct}%</span>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}

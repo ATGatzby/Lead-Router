@@ -786,7 +786,8 @@ export function RouteBuilder({
           frequency: "DAILY",
           scheduleTime: "06:00",
           scheduleTimezone: "UTC",
-          batchSize: 200,
+          batchSize: 500,
+          searchMaxRecords: null,
           skipRecentlyRouted: false,
           isDryRun: false,
         }

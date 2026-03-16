@@ -114,6 +114,29 @@ describe("soql-builder", () => {
       const sql = buildSearchSOQL("LEAD", null, 200);
       expect(sql).toContain("LIMIT 200");
     });
+
+    it("omits LIMIT and adds ORDER BY Id ASC when omitLimit is true (no criteria)", () => {
+      const sql = buildSearchSOQL("LEAD", null, 50000, true);
+      expect(sql).not.toContain("LIMIT");
+      expect(sql).toMatch(/ORDER BY Id ASC$/);
+    });
+
+    it("omits LIMIT and adds ORDER BY Id ASC when omitLimit is true (with criteria)", () => {
+      const sql = buildSearchSOQL("LEAD", [
+        { id: "g1", conditions: [{ fieldApiName: "Status", operator: "equals", value: "Open", fieldType: "PICKLIST" }] },
+      ], 50000, true);
+      expect(sql).toContain("WHERE Status = 'Open'");
+      expect(sql).not.toContain("LIMIT");
+      expect(sql).toMatch(/ORDER BY Id ASC$/);
+    });
+
+    it("default omitLimit (false) still appends LIMIT", () => {
+      const sql = buildSearchSOQL("LEAD", [
+        { id: "g1", conditions: [{ fieldApiName: "Status", operator: "equals", value: "Open" }] },
+      ]);
+      expect(sql).toContain("LIMIT 50000");
+      expect(sql).not.toContain("ORDER BY");
+    });
   });
 
   describe("buildCountSOQL", () => {

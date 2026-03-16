@@ -32,13 +32,15 @@ function objectName(objectType: string): string {
 export function buildSearchSOQL(
   objectType: string,
   criteria: SOQLConditionGroup[] | null,
-  limit: number = 50000
+  limit: number = 50000,
+  omitLimit: boolean = false
 ): string {
   const obj = objectName(objectType);
   const fields = STANDARD_FIELDS[objectType] ?? STANDARD_FIELDS.LEAD;
+  const suffix = omitLimit ? " ORDER BY Id ASC" : ` LIMIT ${limit}`;
 
   if (!criteria || criteria.length === 0) {
-    return `SELECT ${fields} FROM ${obj} LIMIT ${limit}`;
+    return `SELECT ${fields} FROM ${obj}${suffix}`;
   }
 
   const groupClauses = criteria.map((group) => {
@@ -48,7 +50,7 @@ export function buildSearchSOQL(
 
   const where = groupClauses.length === 1 ? groupClauses[0] : groupClauses.join(" OR ");
 
-  return `SELECT ${fields} FROM ${obj} WHERE ${where} LIMIT ${limit}`;
+  return `SELECT ${fields} FROM ${obj} WHERE ${where}${suffix}`;
 }
 
 /**

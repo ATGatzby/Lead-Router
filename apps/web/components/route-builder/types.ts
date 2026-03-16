@@ -60,7 +60,8 @@ export interface SearchTriggerConfig {
   frequency: ScheduleFrequency | null  // null = one-time
   scheduleTime: string                 // "06:00"
   scheduleTimezone: string             // "UTC"
-  batchSize: number                    // 50 | 100 | 200 | 400
+  batchSize: number                    // 200 | 500 | 1000
+  searchMaxRecords: number | null      // null = no limit
   skipRecentlyRouted: boolean
   isDryRun: boolean
 }

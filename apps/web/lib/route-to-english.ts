@@ -238,8 +238,11 @@ function buildSearchTriggerSection(config: SearchTriggerConfig): EnglishSection 
   if (config.isDryRun) {
     lines.push("Dry run mode — records will be logged but not assigned");
   }
-  if (config.batchSize !== 200) {
+  if (config.batchSize !== 500) {
     lines.push(`Batch size: ${config.batchSize} records`);
+  }
+  if (config.searchMaxRecords != null) {
+    lines.push(`Max records per run: ${config.searchMaxRecords.toLocaleString()}`);
   }
 
   return {

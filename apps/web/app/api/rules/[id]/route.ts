@@ -104,6 +104,8 @@ export async function PUT(
       scheduleTimezone,
       scheduleCron,
       searchCriteria,
+      searchMaxRecords,
+      searchBatchSize,
       // New Route Builder fields
       branches = [],
       matchConfig = null,
@@ -148,6 +150,8 @@ export async function PUT(
         scheduleTimezone: scheduleTimezone ?? null,
         scheduleCron: scheduleCron ?? null,
         searchCriteria: searchCriteria ?? undefined,
+        searchMaxRecords: searchMaxRecords !== undefined ? (searchMaxRecords ?? null) : undefined,
+        searchBatchSize: searchBatchSize !== undefined ? (searchBatchSize ?? null) : undefined,
         triggerName: triggerName || "",
         triggerConditions: {
           create: triggerConditions.map(

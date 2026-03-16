@@ -103,6 +103,8 @@ export function builderToApiBody(
     body.scheduleTime = state.searchTrigger.scheduleTime
     body.scheduleTimezone = state.searchTrigger.scheduleTimezone
     body.triggerEvent = "SEARCH"
+    body.searchMaxRecords = state.searchTrigger.searchMaxRecords ?? null
+    body.searchBatchSize = state.searchTrigger.batchSize ?? 500
   }
 
   return body
@@ -266,7 +268,8 @@ export function apiRuleToBuilderState(rule: any): RouteBuilderState {
       frequency: rule.scheduleFrequency ?? null,
       scheduleTime: rule.scheduleTime ?? "06:00",
       scheduleTimezone: rule.scheduleTimezone ?? "UTC",
-      batchSize: rule.batchSize ?? 100,
+      batchSize: rule.searchBatchSize ?? rule.batchSize ?? 500,
+      searchMaxRecords: rule.searchMaxRecords ?? null,
       skipRecentlyRouted: rule.skipRecentlyRouted ?? true,
       isDryRun: rule.isDryRun ?? false,
     }
