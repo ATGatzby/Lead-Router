@@ -40,7 +40,7 @@ interface Props {
   onSave: (trigger: TriggerConfig) => void
 }
 
-const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true"
+const aiEnabled = true
 
 export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Props) {
   const [triggerName, setTriggerName] = useState(trigger.triggerName)

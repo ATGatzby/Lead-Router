@@ -56,7 +56,7 @@ export default function RoundRobinsPage() {
 
   // AI team generator
   const [showAITeamGen, setShowAITeamGen] = useState(false);
-  const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true";
+  const aiEnabled = true;
 
   const handleAITeamCreated = (teamId: string) => {
     qc.invalidateQueries({ queryKey: ["teams"] });
