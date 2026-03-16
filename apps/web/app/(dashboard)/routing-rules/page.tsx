@@ -19,6 +19,7 @@ import {
   Lock,
   ExternalLink,
   Square,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -500,6 +501,36 @@ export default function RoutingRulesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {!activeBulkRunId && !runningRuleId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/dev/simulate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ recordCount: 1_000_000, batchSize: 10_000 }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    toast.error(data.error ?? "Simulation failed");
+                    return;
+                  }
+                  toast.success(`Simulation started: ${(1_000_000).toLocaleString()} records`);
+                  setActiveBulkRunId(data.runId);
+                  setBulkRunRuleId(data.ruleId);
+                  setRunningRuleId(data.ruleId);
+                  setRunProgress({ phase: "Simulating...", pct: 0 });
+                } catch (err: any) {
+                  toast.error(err.message ?? "Failed to start simulation");
+                }
+              }}
+            >
+              <FlaskConical className="h-3.5 w-3.5 mr-1" />
+              Simulate 1M
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
