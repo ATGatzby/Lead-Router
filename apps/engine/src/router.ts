@@ -487,7 +487,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
       eventType,
       status: "UNMATCHED",
       routingDurationMs: startMs ? Date.now() - startMs : null,
-      recordSnapshot: stripPii(fields),
+      recordSnapshot: stripPii(fields) as any,
       decisionTrace: trace as any,
     },
   });
@@ -561,7 +561,7 @@ async function routeNewStyle(
                     ruleId: rule.id, ruleName: rule.name,
                     status: "FAILED", errorMessage: String(err),
                     routingDurationMs: startMs ? Date.now() - startMs : null,
-                    isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                    isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
                   },
                 });
                 updateAggregates({
@@ -577,7 +577,7 @@ async function routeNewStyle(
                 orgId, sfdcRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 status: "MERGED", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
               },
             });
             updateAggregates({
@@ -599,7 +599,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
               },
             });
             updateAggregates({
@@ -634,7 +634,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
                 },
               });
               updateAggregates({
@@ -667,7 +667,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
               },
             });
             updateAggregates({
@@ -702,7 +702,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
                 },
               });
               updateAggregates({
@@ -736,7 +736,7 @@ async function routeNewStyle(
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
                 status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
               },
             });
             updateAggregates({
@@ -771,7 +771,7 @@ async function routeNewStyle(
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
                   teamId: assignee.teamId, teamName: assignee.teamName,
                   status: "SUCCESS", routingDurationMs: startMs ? Date.now() - startMs : null,
-                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+                  isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
                 },
               });
               updateAggregates({
@@ -827,7 +827,7 @@ async function routeNewStyle(
           teamId: assignee.teamId, teamName: assignee.teamName,
           isDryRun: rule.isDryRun, status: "RETRY",
           routingDurationMs: startMs ? Date.now() - startMs : null,
-          recordSnapshot: stripPii(fields),
+          recordSnapshot: stripPii(fields) as any,
         },
       });
 
@@ -910,7 +910,7 @@ async function routeNewStyle(
           teamId: assignee.teamId, teamName: assignee.teamName,
           isDryRun: rule.isDryRun, status: "RETRY",
           routingDurationMs: startMs ? Date.now() - startMs : null,
-          recordSnapshot: stripPii(fields),
+          recordSnapshot: stripPii(fields) as any,
         },
       });
 
@@ -967,7 +967,7 @@ async function routeNewStyle(
       orgId, sfdcRecordId: recordId, objectType, eventType,
       ruleId: rule.id, ruleName: rule.name,
       status: "UNMATCHED", routingDurationMs: startMs ? Date.now() - startMs : null,
-      isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+      isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
     },
   });
   updateAggregates({
@@ -1007,7 +1007,7 @@ async function routeLegacy(
         ruleId: rule.id, ruleName: rule.name,
         status: "FAILED", errorMessage: "No eligible assignee found",
         routingDurationMs: startMs ? Date.now() - startMs : null,
-        isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields),
+        isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
       },
     });
     updateAggregates({
@@ -1027,7 +1027,7 @@ async function routeLegacy(
       teamId: assignee.teamId, teamName: assignee.teamName,
       isDryRun: rule.isDryRun, status: "RETRY",
       routingDurationMs: startMs ? Date.now() - startMs : null,
-      recordSnapshot: stripPii(fields),
+      recordSnapshot: stripPii(fields) as any,
     },
   });
 

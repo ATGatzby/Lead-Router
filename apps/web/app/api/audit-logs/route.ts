@@ -28,8 +28,14 @@ export async function GET(req: NextRequest) {
 
     if (from || to) {
       where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(to);
+      if (from) {
+        const d = new Date(from);
+        if (!isNaN(d.getTime())) where.createdAt.gte = d;
+      }
+      if (to) {
+        const d = new Date(to);
+        if (!isNaN(d.getTime())) where.createdAt.lte = d;
+      }
     }
     if (actorId) where.actorId = actorId;
     if (action) where.action = { contains: action, mode: "insensitive" };

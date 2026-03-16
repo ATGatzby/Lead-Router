@@ -20,6 +20,6 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export * from "@prisma/client";
-export { PLAN_LIMITS, getPlanLimits, startOfNextMonth } from "./plan-limits";
-export type { PlanType, PlanLimits } from "./plan-limits";
-export { RULES_INVALIDATE_CHANNEL } from "./constants";
+export { PLAN_LIMITS, getPlanLimits, startOfNextMonth } from "./plan-limits.js";
+export type { PlanType, PlanLimits } from "./plan-limits.js";
+export { RULES_INVALIDATE_CHANNEL } from "./constants.js";

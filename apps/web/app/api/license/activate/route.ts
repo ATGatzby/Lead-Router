@@ -47,19 +47,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const tier = data.tier === "pro" ? "pro" : "free";
+
     await prisma.organization.update({
       where: { id: orgId },
       data: {
         licenseKey: key,
-        licenseTier: data.tier,
+        licenseTier: tier,
         licenseValidUntil: data.validUntil ? new Date(data.validUntil) : null,
         licenseActivatedAt: new Date(),
-        plan: data.tier === "pro" ? "PAID" : "FREE",
-        seatsPurchased: data.tier === "pro" ? 9999 : 3,
+        plan: tier === "pro" ? "PAID" : "FREE",
+        seatsPurchased: tier === "pro" ? 9999 : 3,
       },
     });
 
-    setLicenseTierOverride(data.tier);
+    setLicenseTierOverride(tier);
 
     const redis = getRedis();
     await redis.set("license:key", key);
@@ -72,13 +74,13 @@ export async function POST(req: NextRequest) {
         action: "LICENSE_ACTIVATED",
         entityType: "Organization",
         entityId: orgId,
-        afterState: { tier: data.tier, validUntil: data.validUntil },
+        afterState: { tier, validUntil: data.validUntil },
       },
     });
 
     return NextResponse.json({
       success: true,
-      tier: data.tier,
+      tier,
       validUntil: data.validUntil,
     });
   } catch (error: any) {
