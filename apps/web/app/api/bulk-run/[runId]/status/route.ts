@@ -63,7 +63,7 @@ export async function GET(
     }
 
     // Return DB data for completed/failed/cancelled runs
-    return NextResponse.json(run);
+    return NextResponse.json({ ...run, phase: "complete", writePending: 0 });
   } catch (err: any) {
     console.error("GET /api/bulk-run/:runId/status error:", err);
     return NextResponse.json(
