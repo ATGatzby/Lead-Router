@@ -24,8 +24,12 @@ if [ -n "$LICENSE_KEY" ]; then
     if node apps/web/verify-license.js "$LICENSE_KEY" 2>/dev/null; then
       echo "[entrypoint] Offline verification passed"
     else
-      echo "[entrypoint] WARNING: Could not verify license offline. Running in FREE tier."
-      export LICENSE_TIER="free"
+      if [ "$LICENSE_TIER" != "pro" ]; then
+        echo "[entrypoint] WARNING: Could not verify license offline. Running in FREE tier."
+        export LICENSE_TIER="free"
+      else
+        echo "[entrypoint] WARNING: Could not verify license offline, but LICENSE_TIER=pro set via environment. Keeping pro."
+      fi
     fi
   else
     echo "[entrypoint] License invalid or expired. Running in FREE tier."
@@ -33,8 +37,13 @@ if [ -n "$LICENSE_KEY" ]; then
     export LICENSE_TIER="free"
   fi
 else
-  echo "[entrypoint] No license key provided. Running in FREE tier."
-  export LICENSE_TIER="free"
+  # Only downgrade to free if LICENSE_TIER wasn't already set to pro via env
+  if [ "$LICENSE_TIER" != "pro" ]; then
+    echo "[entrypoint] No license key provided. Running in FREE tier."
+    export LICENSE_TIER="free"
+  else
+    echo "[entrypoint] No license key, but LICENSE_TIER=pro set via environment. Keeping pro."
+  fi
 fi
 # === End License Validation ===
 
