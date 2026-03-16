@@ -1,6 +1,9 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
+import { prisma } from "@lead-routing/db";
+import { bulkUpdateOwners, type BulkUpdateRecord } from "@lead-routing/sfdc";
 import { routeRecord, type RoutingPayload } from "./router.js";
+import { getOrgConnection } from "./sfdc.js";
 
 // ─── Job type ─────────────────────────────────────────────────────────────
 
@@ -39,6 +42,26 @@ export function getBulkSearchQueue(): Queue<BulkSearchJobData> {
 // For convenience (lazy access pattern used by enqueue callers)
 export { _queue as bulkSearchQueue };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+/** Capitalise first letter only: LEAD → Lead */
+function toSfdcObjectName(objectType: string): string {
+  return objectType.charAt(0) + objectType.slice(1).toLowerCase();
+}
+
+function parseRedisUrl(url: string): { host: string; port: number; password?: string } {
+  try {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname || "localhost",
+      port: Number(parsed.port) || 6379,
+      password: parsed.password || undefined,
+    };
+  } catch {
+    return { host: "localhost", port: 6379 };
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 export function initBulkSearchQueue(redisUrl: string): void {
@@ -71,6 +94,9 @@ export function initBulkSearchQueue(redisUrl: string): void {
     QUEUE_NAME,
     async (job: Job<BulkSearchJobData>) => {
       const { orgId, ruleId, runId, objectType, records } = job.data;
+
+      // ── Phase A: Collect routing decisions ────────────────────────────
+      const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];
       let routed = 0;
       let failed = 0;
 
@@ -91,24 +117,92 @@ export function initBulkSearchQueue(redisUrl: string): void {
                   recordId: rec.matchResult.matchedRecordId,
                 }
               : null,
+            skipSfdcWrite: true,
+            _assignments: assignments,
           };
 
-          const result = await routeRecord(payload, Date.now());
-          if (result === "routed" || result === "merged") {
-            routed++;
-          } else {
-            failed++;
-          }
+          await routeRecord(payload, Date.now());
         } catch (err) {
-          failed++;
           console.error(
-            `[bulk-search-queue] Failed to route record ${rec.recordId}:`,
+            `[bulk-search-queue] Route error for ${rec.recordId}:`,
             err instanceof Error ? err.message : err
           );
+          failed++;
         }
       }
 
-      // Increment Redis counters for the run
+      // ── Phase B: Bulk write all assignments ───────────────────────────
+      if (assignments.length > 0) {
+        // Set phase in Redis
+        if (_redis) {
+          await _redis.hset(`bulk-run:${runId}`, "phase", "writing");
+        }
+
+        try {
+          const conn = await getOrgConnection(orgId);
+          const timestamp = new Date().toISOString();
+          const sfdcObjectName = toSfdcObjectName(objectType);
+          const updateRecords: BulkUpdateRecord[] = assignments.map((a) => ({
+            Id: a.recordId,
+            OwnerId: a.ownerId,
+          }));
+
+          const result = await bulkUpdateOwners(
+            conn,
+            sfdcObjectName,
+            updateRecords,
+            "lrt__Routing_Action__c"
+          );
+
+          // Reconcile: update routing logs based on write results
+          if (result.successful.length > 0) {
+            const successLogIds = assignments
+              .filter((a) => result.successful.includes(a.recordId))
+              .map((a) => a.logId);
+            if (successLogIds.length > 0) {
+              await prisma.routingLog.updateMany({
+                where: { id: { in: successLogIds } },
+                data: { status: "SUCCESS" },
+              });
+            }
+            routed += result.successful.length;
+          }
+
+          if (result.failed.length > 0) {
+            const failLogIds = assignments
+              .filter((a) => result.failed.some((f) => f.id === a.recordId))
+              .map((a) => a.logId);
+            if (failLogIds.length > 0) {
+              await prisma.routingLog.updateMany({
+                where: { id: { in: failLogIds } },
+                data: { status: "FAILED", errorMessage: "Bulk API write failed" },
+              });
+            }
+            failed += result.failed.length;
+          }
+
+          // Count unprocessed as failed
+          if (result.unprocessed > 0) {
+            failed += result.unprocessed;
+          }
+        } catch (err: any) {
+          console.error(
+            `[bulk-search-queue] Bulk write failed for batch:`,
+            err.message
+          );
+          // Mark ALL assignments as failed
+          const allLogIds = assignments.map((a) => a.logId);
+          if (allLogIds.length > 0) {
+            await prisma.routingLog.updateMany({
+              where: { id: { in: allLogIds } },
+              data: { status: "FAILED", errorMessage: `Bulk write error: ${err.message}` },
+            });
+          }
+          failed += assignments.length;
+        }
+      }
+
+      // ── Phase C: Update Redis counters ────────────────────────────────
       if (_redis) {
         const key = `bulk-run:${runId}`;
         if (routed > 0) await _redis.hincrby(key, "routed", routed);
@@ -138,19 +232,4 @@ export function initBulkSearchQueue(redisUrl: string): void {
   });
 
   console.log("[bulk-search-queue] Queue and worker initialized");
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-function parseRedisUrl(url: string): { host: string; port: number; password?: string } {
-  try {
-    const parsed = new URL(url);
-    return {
-      host: parsed.hostname || "localhost",
-      port: Number(parsed.port) || 6379,
-      password: parsed.password || undefined,
-    };
-  } catch {
-    return { host: "localhost", port: 6379 };
-  }
 }

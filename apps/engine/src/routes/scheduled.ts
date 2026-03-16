@@ -69,6 +69,8 @@ export async function scheduledPlugin(app: FastifyInstance): Promise<void> {
     if (liveData && liveData.status === "RUNNING") {
       return reply.send({
         status: "RUNNING",
+        phase: liveData.phase || "routing",
+        writePending: parseInt(liveData.writePending || "0"),
         recordsProcessed: parseInt(liveData.processed || "0"),
         recordsRouted: parseInt(liveData.routed || "0"),
         recordsFailed: parseInt(liveData.failed || "0"),
@@ -81,6 +83,8 @@ export async function scheduledPlugin(app: FastifyInstance): Promise<void> {
 
     return reply.send({
       status: run.status,
+      phase: "complete",
+      writePending: 0,
       recordsFound: run.recordsFound,
       recordsProcessed: run.recordsProcessed,
       recordsRouted: run.recordsRouted,

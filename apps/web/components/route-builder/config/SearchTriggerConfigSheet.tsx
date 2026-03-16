@@ -59,7 +59,7 @@ const TIMEZONES = [
   "Australia/Sydney",
 ]
 
-const BATCH_SIZES = [200, 500, 1000]
+const BATCH_SIZES = [200, 500, 1000, 5000, 10000]
 
 export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, onSave }: Props) {
   const [triggerName, setTriggerName] = useState(searchTrigger.triggerName)
@@ -351,7 +351,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
                   <SelectContent>
                     {BATCH_SIZES.map((size) => (
                       <SelectItem key={size} value={String(size)}>
-                        {size} records per batch
+                        {size.toLocaleString()} records per batch{size >= 10000 ? " (recommended for large datasets)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

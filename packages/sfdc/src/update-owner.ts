@@ -1,5 +1,17 @@
 import type { Connection } from "jsforce";
 
+export interface BulkUpdateRecord {
+  Id: string;
+  OwnerId: string;
+  [key: string]: string | undefined; // allows routing action field
+}
+
+export interface BulkUpdateResult {
+  successful: string[]; // record IDs that were updated
+  failed: Array<{ id: string; error: string }>;
+  unprocessed: number;
+}
+
 /**
  * Update the OwnerId of a Salesforce record.
  * Also stamps Routing_Action__c to prevent recursive trigger firing.
@@ -30,4 +42,90 @@ export async function updateOwner(
     }
     throw err;
   }
+}
+
+/**
+ * Bulk-update OwnerId for multiple Salesforce records using the Bulk API 2.0.
+ * Stamps the routing action field on each record to prevent recursive triggers.
+ *
+ * If ALL records fail with INVALID_FIELD (routing action field doesn't exist),
+ * retries the entire batch without the field.
+ */
+export async function bulkUpdateOwners(
+  conn: Connection,
+  objectType: string,
+  records: BulkUpdateRecord[],
+  routingActionField?: string
+): Promise<BulkUpdateResult> {
+  if (records.length === 0) {
+    return { successful: [], failed: [], unprocessed: 0 };
+  }
+
+  // Stamp routing action field on each record
+  if (routingActionField) {
+    const stamp = `assigned:${new Date().toISOString()}`;
+    for (const rec of records) {
+      if (!rec[routingActionField]) {
+        rec[routingActionField] = stamp;
+      }
+    }
+  }
+
+  const result = await executeBulkUpdate(conn, objectType, records);
+
+  // If ALL records failed with INVALID_FIELD, retry without the routing action field
+  if (
+    routingActionField &&
+    result.successful.length === 0 &&
+    result.failed.length > 0 &&
+    result.failed.every((f) => f.error.includes("INVALID_FIELD"))
+  ) {
+    // Strip the routing action field from all records
+    for (const rec of records) {
+      delete rec[routingActionField];
+    }
+    const retryResult = await executeBulkUpdate(conn, objectType, records);
+    console.log(
+      `[bulk-update] ${objectType}: ${retryResult.successful.length} succeeded, ${retryResult.failed.length} failed, ${retryResult.unprocessed} unprocessed (retried without ${routingActionField})`
+    );
+    return retryResult;
+  }
+
+  console.log(
+    `[bulk-update] ${objectType}: ${result.successful.length} succeeded, ${result.failed.length} failed, ${result.unprocessed} unprocessed`
+  );
+  return result;
+}
+
+async function executeBulkUpdate(
+  conn: Connection,
+  objectType: string,
+  records: BulkUpdateRecord[]
+): Promise<BulkUpdateResult> {
+  const res = await (conn as any).bulk2.loadAndWaitForResults({
+    object: objectType,
+    operation: "update",
+    input: records,
+    pollTimeout: 300_000,
+    pollInterval: 5_000,
+  });
+
+  const successful: string[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+
+  if (res.successfulResults) {
+    for (const r of res.successfulResults) {
+      successful.push(r.sf__Id);
+    }
+  }
+
+  if (res.failedResults) {
+    for (const r of res.failedResults) {
+      failed.push({ id: r.sf__Id, error: r.sf__Error });
+    }
+  }
+
+  const unprocessed = res.unprocessedRecords?.length ?? 0;
+
+  return { successful, failed, unprocessed };
 }

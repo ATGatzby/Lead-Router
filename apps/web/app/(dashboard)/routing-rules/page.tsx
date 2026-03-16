@@ -102,6 +102,8 @@ interface Rule {
 
 interface BulkRunStatus {
   status: string;
+  phase?: string;
+  writePending?: number;
   recordsFound?: number;
   recordsProcessed: number;
   recordsRouted: number;
@@ -793,8 +795,11 @@ export default function RoutingRulesPage() {
                     const pct = isBulk && bs
                       ? (found > 0 ? Math.round((processed / found) * 100) : runProgress.pct)
                       : runProgress.pct;
+                    const bulkPhase = bs?.phase || "routing";
                     const phase = isBulk && bs
-                      ? `Processing ${processed.toLocaleString()} of ${found.toLocaleString()} records (${routed.toLocaleString()} routed${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""})`
+                      ? bulkPhase === "writing"
+                        ? `Writing to Salesforce... ${routed.toLocaleString()} routed${bs.writePending ? `, ${bs.writePending.toLocaleString()} pending` : ""}${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""}`
+                        : `Processing ${processed.toLocaleString()} of ${found.toLocaleString()} records (${routed.toLocaleString()} routed${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""})`
                       : runProgress.phase;
 
                     return (
