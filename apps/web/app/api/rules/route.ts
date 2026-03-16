@@ -3,6 +3,7 @@ import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 import { syncRoutingFlags } from "@/lib/sync-routing-flags";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,18 @@ export async function POST(req: NextRequest) {
     }
     if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
       return NextResponse.json({ error: "Invalid objectType" }, { status: 400 });
+    }
+
+    // ── License tier gating ──────────────────────────────────────────────
+    const limits = getTierLimits();
+    if (limits.maxRules !== Infinity) {
+      const ruleCount = await prisma.routingRule.count({ where: { orgId } });
+      if (ruleCount >= limits.maxRules) {
+        return upgradeRequiredResponse(`Creating more than ${limits.maxRules} routing rules`);
+      }
+    }
+    if (!limits.allowedTriggers.includes(objectType)) {
+      return upgradeRequiredResponse(`${objectType} triggers`);
     }
     if (!["INSERT", "UPDATE", "BOTH", "SEARCH"].includes(triggerEvent)) {
       return NextResponse.json({ error: "Invalid triggerEvent" }, { status: 400 });

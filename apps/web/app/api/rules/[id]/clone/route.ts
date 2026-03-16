@@ -3,6 +3,7 @@ import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 import { syncRoutingFlags } from "@/lib/sync-routing-flags";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // POST /api/rules/:id/clone — duplicate rule (appends " (Copy)" to name, sets INACTIVE, lowest priority)
 export async function POST(
@@ -13,6 +14,15 @@ export async function POST(
     const { id } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorId, userName: actorName } = actor;
+
+    // ── License tier gating ──────────────────────────────────────────────
+    const limits = getTierLimits();
+    if (limits.maxRules !== Infinity) {
+      const ruleCount = await prisma.routingRule.count({ where: { orgId } });
+      if (ruleCount >= limits.maxRules) {
+        return upgradeRequiredResponse(`Creating more than ${limits.maxRules} routing rules`);
+      }
+    }
 
     const source = await prisma.routingRule.findFirst({
       where: { id, orgId },
@@ -27,6 +37,9 @@ export async function POST(
     });
     if (!source) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+    }
+    if (!limits.allowedTriggers.includes(source.objectType)) {
+      return upgradeRequiredResponse(`${source.objectType} triggers`);
     }
 
     // Get max priority for this object type

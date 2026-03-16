@@ -70,13 +70,11 @@ export function runConfigShow(): void {
   const envWeb = join(dir, '.env.web')
   const cfg = parseEnv(envWeb)
 
-  const adminSecret = cfg.get('ADMIN_SECRET') ?? '(not found)'
   const appUrl = cfg.get('APP_URL') ?? '(not found)'
 
   console.log()
   console.log(chalk.bold('Lead Routing — Installation Config'))
   console.log()
-  console.log(`  Admin panel:   ${chalk.cyan(appUrl + '/admin')}`)
-  console.log(`  Admin secret:  ${chalk.yellow(adminSecret)}`)
+  console.log(`  Dashboard:  ${chalk.cyan(appUrl)}`)
   console.log()
 }

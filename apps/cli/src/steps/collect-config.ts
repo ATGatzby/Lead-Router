@@ -18,7 +18,6 @@ export interface CollectedConfig {
   feedbackToEmail: string
   sessionSecret: string
   engineWebhookSecret: string
-  adminSecret: string
   internalApiKey: string
 }
 
@@ -114,7 +113,6 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   // ── Auto-generated secrets ─────────────────────────────────────────────────
   const sessionSecret = generateSecret(32)
   const engineWebhookSecret = generateSecret(32)
-  const adminSecret = generateSecret(16)
   const internalApiKey = generateSecret(32)
 
   return {
@@ -132,7 +130,6 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     feedbackToEmail: '',
     sessionSecret,
     engineWebhookSecret,
-    adminSecret,
     internalApiKey,
   }
 }

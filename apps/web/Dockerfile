@@ -41,6 +41,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# curl needed for license validation in entrypoint
+RUN apk add --no-cache curl
+
 # 1) Standalone output FIRST (includes Next.js runtime + minimal node_modules)
 COPY --from=builder /app/apps/web/.next/standalone ./
 
@@ -63,6 +66,7 @@ COPY --from=builder /app/packages/db/prisma          ./packages/db/prisma
 # Entrypoint: run migrations + seed, then start Next.js
 COPY apps/web/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY apps/web/seed.js              ./apps/web/seed.js
+COPY apps/web/verify-license.js    ./apps/web/verify-license.js
 RUN chmod +x docker-entrypoint.sh
 
 RUN addgroup -S app && adduser -S app -G app

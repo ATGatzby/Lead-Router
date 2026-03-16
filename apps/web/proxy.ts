@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import type { SessionData } from "@/lib/session";
-import { validateAdminToken } from "@/lib/admin-auth";
 import { isOrgSuspended } from "@/lib/org-status";
 
 const SESSION_OPTIONS = {
@@ -32,22 +31,6 @@ export async function proxy(req: NextRequest) {
 
   // Allow static files and internals
   if (pathname.includes(".") || pathname.startsWith("/_next")) {
-    return NextResponse.next();
-  }
-
-  // ── Admin portal guard (checked before session auth) ──────────────────────
-  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin/")) {
-    // Login page and auth endpoints are always public
-    if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth/")) {
-      return NextResponse.next();
-    }
-    const adminToken = req.cookies.get("admin_token")?.value;
-    if (!validateAdminToken(adminToken)) {
-      if (pathname.startsWith("/api/admin/")) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-      return NextResponse.redirect(new URL("/admin/login", req.url));
-    }
     return NextResponse.next();
   }
 

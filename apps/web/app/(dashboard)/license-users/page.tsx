@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   Search, Users, Trash2, Plug, X, Check, ChevronDown,
   User, Star, CreditCard, Inbox, CheckSquare,
-  Zap, BarChart3, Clock, RefreshCw,
+  Zap, BarChart3, Clock, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,25 @@ interface QueueRecord {
   sfdcQueueId: string;
   memberCount?: number;
   isLicensed?: boolean;
+}
+
+interface LicenseResponse {
+  tier: "free" | "pro";
+  limits: {
+    maxSeats: number; // -1 means unlimited
+    maxRules: number;
+    maxOrgs: number;
+    allowedTriggers: string[];
+    weightedDistribution: boolean;
+    analytics: boolean;
+    auditLog: boolean;
+  };
+  usage: {
+    seats: number;
+    rules: number;
+    orgs: number;
+  };
+  licenseKey: string | null;
 }
 
 type LicensingMethod = "individual" | "role" | "profile" | "queue" | "custom";
@@ -165,6 +184,9 @@ export default function LicenseUsersPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const panelSearchRef = useRef<HTMLInputElement>(null);
 
+  // ── Method applied state (gate user table until a method is used) ──
+  const [hasAppliedMethod, setHasAppliedMethod] = useState(false);
+
   // ── Custom field 2-step state ──
   const [selectedCustomField, setSelectedCustomField] = useState<string | null>(null);
   const [customFieldValue, setCustomFieldValue] = useState("");
@@ -201,6 +223,15 @@ export default function LicenseUsersPage() {
     queryFn: async () => {
       const res = await fetch("/api/users/stats");
       if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+  });
+
+  const { data: licenseData } = useQuery<LicenseResponse>({
+    queryKey: ["license-info"],
+    queryFn: async () => {
+      const res = await fetch("/api/license");
+      if (!res.ok) throw new Error("Failed to fetch license info");
       return res.json();
     },
   });
@@ -292,15 +323,34 @@ export default function LicenseUsersPage() {
     queryClient.invalidateQueries({ queryKey: ["license-filters"] });
     queryClient.invalidateQueries({ queryKey: ["license-users-all-for-panel"] });
     queryClient.invalidateQueries({ queryKey: ["queues-list"] });
+    queryClient.invalidateQueries({ queryKey: ["license-info"] });
   };
 
   const licenseSingle = useMutation({
     mutationFn: async (userId: string) => {
       const res = await fetch(`/api/users/${userId}/license`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to license user");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
+          const maxSeats = licenseData?.limits?.maxSeats;
+          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 3;
+          throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
+        }
+        throw new Error("Failed to license user");
+      }
     },
-    onSuccess: () => { invalidateAll(); toast.success("User licensed"); },
-    onError: () => toast.error("Failed to license user"),
+    onSuccess: () => {
+      invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ["license-info"] });
+      toast.success("User licensed");
+    },
+    onError: (err: Error) => {
+      if (err.message.startsWith("upgrade_required:")) {
+        toast.error(err.message.replace("upgrade_required:", ""));
+      } else {
+        toast.error("Failed to license user");
+      }
+    },
   });
 
   const deLicenseSingle = useMutation({
@@ -308,7 +358,11 @@ export default function LicenseUsersPage() {
       const res = await fetch(`/api/users/${userId}/de-license`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to de-license user");
     },
-    onSuccess: () => { invalidateAll(); toast.success("User de-licensed"); },
+    onSuccess: () => {
+      invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ["license-info"] });
+      toast.success("User de-licensed");
+    },
     onError: () => toast.error("Failed to de-license user"),
   });
 
@@ -328,14 +382,29 @@ export default function LicenseUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIds, action }),
       });
-      if (!res.ok) throw new Error("Bulk operation failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
+          const maxSeats = licenseData?.limits?.maxSeats;
+          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 3;
+          throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
+        }
+        throw new Error("Bulk operation failed");
+      }
     },
     onSuccess: (_, vars) => {
       invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ["license-info"] });
       setSelectedRows(new Set());
       toast.success(`${vars.userIds.length} user${vars.userIds.length > 1 ? "s" : ""} ${vars.action === "license" ? "licensed" : "de-licensed"}`);
     },
-    onError: () => toast.error("Bulk operation failed"),
+    onError: (err: Error) => {
+      if (err.message.startsWith("upgrade_required:")) {
+        toast.error(err.message.replace("upgrade_required:", ""));
+      } else {
+        toast.error("Bulk operation failed");
+      }
+    },
   });
 
   const bulkDelete = useMutation({
@@ -594,6 +663,7 @@ export default function LicenseUsersPage() {
   }, []);
 
   const selectMethod = useCallback((method: LicensingMethod) => {
+    setHasAppliedMethod(true);
     if (activeMethod === method) {
       closePanel();
       return;
@@ -643,6 +713,7 @@ export default function LicenseUsersPage() {
   const applySelection = useCallback(() => {
     if (selectedValues.size === 0) return;
     const vals = [...selectedValues];
+    setHasAppliedMethod(true);
 
     switch (activeMethod) {
       case "individual":
@@ -718,6 +789,23 @@ export default function LicenseUsersPage() {
   const gaugeOffset = circumference * (1 - seatPct);
   const seatWarning = seatPct >= 0.9;
 
+  // Auto-set hasAppliedMethod if there are already licensed users
+  useEffect(() => {
+    if (stats && stats.seatsUsed > 0) {
+      setHasAppliedMethod(true);
+    }
+  }, [stats]);
+
+  // ── License gating ──
+  const isFreeTier = licenseData?.tier === "free";
+  const maxSeats = licenseData?.limits?.maxSeats ?? -1; // -1 = unlimited
+  const currentSeatsUsed = licenseData?.usage?.seats ?? 0;
+  const isAtSeatLimit = isFreeTier && maxSeats > 0 && currentSeatsUsed >= maxSeats;
+
+  // Determine whether to show the user table
+  const hasActiveFilters = search || roleFilter !== "all" || profileFilter !== "all" || departmentFilter !== "all" || statusFilter !== "all";
+  const showUserTable = hasAppliedMethod || hasActiveFilters;
+
   // ── Panel title/subtitle based on active method ──
   const panelConfig = useMemo(() => {
     switch (activeMethod) {
@@ -748,9 +836,9 @@ export default function LicenseUsersPage() {
   const applyBtnText = matchCount.newCount > 0
     ? `License ${matchCount.newCount} ${actionUnit}`
     : "License Matched";
-  const applyDisabled = activeMethod === "custom"
+  const applyDisabled = isAtSeatLimit || (activeMethod === "custom"
     ? !selectedCustomField || (selectedValues.size === 0 && !customFieldValue)
-    : matchCount.newCount === 0;
+    : matchCount.newCount === 0);
 
   // Helper to get label for a selected value
   const getLabelForValue = useCallback((value: string) => {
@@ -834,6 +922,47 @@ export default function LicenseUsersPage() {
       {/* ═══════════════════════════════════════════════════ */}
       {activeTab === "users" && (
         <div className="space-y-5">
+          {/* ── Upgrade banner (at or over seat limit on free tier) ── */}
+          {isAtSeatLimit && (
+            <div className={cn(
+              "flex items-center gap-3 px-4 py-3 rounded-xl border",
+              currentSeatsUsed > maxSeats
+                ? "border-red-300/40 dark:border-red-700/50 bg-red-50/80 dark:bg-red-950/40"
+                : "border-amber-300/40 dark:border-amber-700/50 bg-amber-50/80 dark:bg-amber-950/40"
+            )}>
+              <AlertTriangle className={cn(
+                "h-5 w-5 shrink-0",
+                currentSeatsUsed > maxSeats
+                  ? "text-red-500 dark:text-red-400"
+                  : "text-amber-500 dark:text-amber-400"
+              )} />
+              <p className={cn(
+                "text-sm flex-1",
+                currentSeatsUsed > maxSeats
+                  ? "text-red-800 dark:text-red-200"
+                  : "text-amber-800 dark:text-amber-200"
+              )}>
+                {currentSeatsUsed > maxSeats
+                  ? `You have ${currentSeatsUsed} licensed users but only ${maxSeats} seats on the Free plan. Please de-license ${currentSeatsUsed - maxSeats} user${currentSeatsUsed - maxSeats > 1 ? "s" : ""} or upgrade to Pro.`
+                  : `You\u2019ve used all ${maxSeats} free licenses. Upgrade to Pro for unlimited licenses.`
+                }
+              </p>
+              <a
+                href="https://openedgeai.tech/pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0",
+                  currentSeatsUsed > maxSeats
+                    ? "bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400 text-white dark:text-red-950"
+                    : "bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-amber-950"
+                )}
+              >
+                Upgrade to Pro
+              </a>
+            </div>
+          )}
+
           {/* ── Method selector cards ── */}
           <div className="grid grid-cols-5 gap-3">
             {METHOD_CARDS.map((card) => {
@@ -1060,7 +1189,7 @@ export default function LicenseUsersPage() {
                 placeholder="Search by name, email, role..."
                 className="pl-8 h-9"
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); setHasAppliedMethod(true); }}
               />
             </div>
             <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1); }}>
@@ -1109,7 +1238,14 @@ export default function LicenseUsersPage() {
           </div>
 
           {/* ── User table ── */}
-          {usersLoading ? (
+          {!showUserTable ? (
+            <div className="border rounded-xl bg-background p-12 text-center shadow-sm">
+              <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
+                Select a licensing method above to view and license users.
+              </p>
+            </div>
+          ) : usersLoading ? (
             <TableSkeleton />
           ) : (
             <div className="border rounded-xl overflow-hidden bg-background shadow-sm">
@@ -1197,7 +1333,7 @@ export default function LicenseUsersPage() {
                             <Switch
                               checked={user.isLicensed}
                               onCheckedChange={() => toggleUserLicense(user)}
-                              disabled={licenseSingle.isPending || deLicenseSingle.isPending}
+                              disabled={licenseSingle.isPending || deLicenseSingle.isPending || (!user.isLicensed && isAtSeatLimit)}
                             />
                           </div>
                         </TableCell>

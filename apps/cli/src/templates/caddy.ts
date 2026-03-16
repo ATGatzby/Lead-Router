@@ -47,6 +47,14 @@ export function renderCaddyfile(appUrl: string, engineUrl: string): string {
       `    health_interval 15s`,
       `  }`,
       `}`,
+      ``,
+      `# Marketing site — served independently`,
+      `openedgeai.tech {`,
+      `  import security_headers`,
+      `  root * /srv/marketing-site`,
+      `  file_server`,
+      `  try_files {path} /index.html`,
+      `}`,
     ].join('\n')
   }
 
@@ -80,6 +88,14 @@ export function renderCaddyfile(appUrl: string, engineUrl: string): string {
     `    health_uri /health`,
     `    health_interval 15s`,
     `  }`,
+    `}`,
+    ``,
+    `# Marketing site — served independently`,
+    `openedgeai.tech {`,
+    `  import security_headers`,
+    `  root * /srv/marketing-site`,
+    `  file_server`,
+    `  try_files {path} /index.html`,
     `}`,
   ].join('\n')
 }

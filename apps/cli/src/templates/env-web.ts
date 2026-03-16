@@ -6,12 +6,13 @@ export interface WebEnvConfig {
   redisUrl: string
   sessionSecret: string
   engineWebhookSecret: string
-  adminSecret: string
   adminEmail: string
   adminPassword: string
   internalApiKey: string
   resendApiKey?: string
   feedbackToEmail?: string
+  licenseKey?: string
+  licenseTier: string
 }
 
 export function renderEnvWeb(c: WebEnvConfig): string {
@@ -38,12 +39,16 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     `SESSION_SECRET=${c.sessionSecret}`,
     ``,
     `# Admin`,
-    `ADMIN_SECRET=${c.adminSecret}`,
     `ADMIN_EMAIL=${c.adminEmail}`,
     `ADMIN_PASSWORD=${c.adminPassword}`,
     ``,
     `# Internal API key (shared with engine for analytics)`,
     `INTERNAL_API_KEY=${c.internalApiKey}`,
+    ``,
+    `# License`,
+    `LICENSE_KEY=${c.licenseKey ?? ''}`,
+    `LICENSE_TIER=${c.licenseTier}`,
+    `LICENSE_API_URL=https://lead-routing-license.artyagi2011.workers.dev`,
     ``,
     `# Email (optional)`,
     `RESEND_API_KEY=${c.resendApiKey ?? ''}`,

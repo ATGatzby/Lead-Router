@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentation — OpenEdgeAI Lead Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  /* Docs-specific inline code */
+  .docs-content code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: rgba(255,255,255,0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent-cyan);
+  }
+  .docs-content .cli-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  /* Architecture cards */
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 28px 16px;
+    flex-wrap: wrap;
+  }
+  .arch-card {
+    padding: 16px 24px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid;
+    min-width: 140px;
+  }
+  .arch-card.sf { background: rgba(79,125,247,0.08); border-color: rgba(79,125,247,0.25); color: var(--accent-blue); }
+  .arch-card.engine { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.25); color: var(--accent-green); }
+  .arch-card.web { background: rgba(139,92,246,0.08); border-color: rgba(139,92,246,0.25); color: var(--accent-violet); }
+  .arch-card.db { background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.25); color: var(--accent-amber); }
+  .arch-card strong { display: block; font-size: 14px; }
+  .arch-card span { font-size: 11px; opacity: 0.7; }
+  .arch-arrow-icon {
+    padding: 0 12px;
+    color: var(--text-tertiary);
+    font-size: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .arch-arrow-icon .arrow-label { font-size: 10px; color: var(--text-tertiary); }
+  /* Prerequisites box */
+  .prereq-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .prereq-item {
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .prereq-item strong { color: var(--text-primary); display: block; font-size: 14px; margin-bottom: 4px; }
+  .prereq-item span { color: var(--text-secondary); font-size: 13px; }
+  /* Tables */
+  .docs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  .docs-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .docs-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+  }
+  .docs-table code {
+    font-size: 12px;
+  }
+  /* Sub-steps */
+  .docs-sub-steps {
+    counter-reset: substep;
+    list-style: none;
+    padding: 0;
+  }
+  .docs-sub-steps li {
+    counter-increment: substep;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
+  .docs-sub-steps li::before {
+    content: counter(substep);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(79,125,247,0.12);
+    border: 1px solid rgba(79,125,247,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent-blue);
+  }
+  /* Nav active link */
+  .nav-links a.active { color: var(--text-primary) !important; }
+  @media (max-width: 768px) {
+    .prereq-grid { grid-template-columns: 1fr; }
+    .arch-flow { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">O</div>
+      <div class="logo-text">OpenEdgeAI <span>Lead Router</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/docs.html" class="active">Documentation</a></li>
+      <li><a href="#">Support</a></li>
+      <li><a href="/dashboard.html" class="btn-nav-ghost">Dashboard</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Mobile hamburger -->
+<button class="docs-hamburger" id="docs-hamburger" onclick="toggleSidebar()">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+</button>
+<div class="docs-backdrop" id="docs-backdrop" onclick="toggleSidebar()"></div>
+
+<div class="docs-layout">
+
+<!-- ═══ Left Sidebar ═══ -->
+<aside class="docs-sidebar">
+  <div class="docs-search-wrap">
+    <input type="text" class="docs-search" placeholder="Search docs..." />
+  </div>
+
+  <div class="docs-sidebar-section">Getting Started</div>
+  <a href="#overview" class="active">
+    <span class="step-num">0</span> Overview
+  </a>
+
+  <div class="docs-sidebar-section">Setup Guide</div>
+  <a href="#vps"><span class="step-num">1</span> VPS &amp; DNS</a>
+  <a href="#connected-app"><span class="step-num">2</span> Connected App</a>
+  <a href="#cli-init"><span class="step-num">3</span> Run the CLI</a>
+  <a href="#onboarding"><span class="step-num">4</span> Onboarding Wizard</a>
+  <a href="#connect-sf"><span class="step-num">5</span> Connect Salesforce</a>
+  <a href="#sync-fields"><span class="step-num">6</span> Sync Fields</a>
+  <a href="#deploy-triggers"><span class="step-num">7</span> Deploy Triggers</a>
+  <a href="#complete-setup"><span class="step-num">8</span> Complete Setup</a>
+  <a href="#license-users"><span class="step-num">9</span> License Users</a>
+  <a href="#teams"><span class="step-num">10</span> Create Teams</a>
+  <a href="#first-route"><span class="step-num">11</span> Create Routes</a>
+  <a href="#route-builder"><span class="step-num">12</span> Route Builder</a>
+  <a href="#verify"><span class="step-num">13</span> Verify Routing</a>
+  <a href="#activity"><span class="step-num">14</span> Activity &amp; Analytics</a>
+  <a href="#ai-assistant"><span class="step-num">15</span> AI Assistant <span class="tier-badge tier-pro" style="font-size:9px;padding:2px 6px;margin-left:4px">PRO</span></a>
+
+  <div class="docs-sidebar-section">Resources</div>
+  <a href="#videos">How To Videos</a>
+  <a href="#faq">FAQ</a>
+  <a href="#troubleshooting">Troubleshooting</a>
+  <a href="#changelog">Changelog</a>
+</aside>
+
+<!-- ═══ Main Content ═══ -->
+<main class="docs-content">
+
+  <!-- Breadcrumb -->
+  <div class="docs-breadcrumb">
+    <a href="/dashboard.html">Dashboard</a>
+    <span>/</span>
+    <a href="/docs.html">Documentation</a>
+    <span>/</span>
+    <span id="breadcrumb-section">Overview</span>
+  </div>
+
+  <!-- ── Overview ── -->
+  <section class="docs-section" id="overview">
+    <h2>Welcome to Lead Router</h2>
+    <p>Lead Router is a self-hosted lead routing engine for Salesforce. Deploy it to your own VPS with a single CLI command and gain full control over how Leads, Contacts, and Accounts are assigned to your team -- all without your data leaving your infrastructure.</p>
+
+    <h3>Architecture</h3>
+    <p>Lead Router runs as a Docker Compose stack on your server. When Salesforce records are created or updated, Apex triggers fire and send the record to the routing engine, which evaluates your rules and updates the owner in real time.</p>
+
+    <div class="arch-flow">
+      <div class="arch-card sf">
+        <strong>Salesforce</strong>
+        <span>Apex Trigger fires</span>
+      </div>
+      <div class="arch-arrow-icon">
+        <span>---&gt;</span>
+        <span class="arrow-label">HTTPS POST</span>
+      </div>
+      <div class="arch-card engine">
+        <strong>Routing Engine</strong>
+        <span>Evaluates rules</span>
+      </div>
+      <div class="arch-arrow-icon">
+        <span>---&gt;</span>
+        <span class="arrow-label">REST API</span>
+      </div>
+      <div class="arch-card sf">
+        <strong>Salesforce</strong>
+        <span>Owner updated</span>
+      </div>
+    </div>
+    <div class="arch-flow" style="padding-top:0;margin-top:-16px">
+      <div class="arch-card web" style="border-style:dashed">
+        <strong>Web Dashboard</strong>
+        <span>Manage rules, view analytics</span>
+      </div>
+      <div class="arch-arrow-icon">
+        <span>&harr;</span>
+        <span class="arrow-label">Reads/writes</span>
+      </div>
+      <div class="arch-card db" style="border-style:dashed">
+        <strong>PostgreSQL + Redis</strong>
+        <span>Data &amp; queue</span>
+      </div>
+    </div>
+
+    <h3>What you'll need</h3>
+    <div class="prereq-grid">
+      <div class="prereq-item">
+        <strong>VPS with 2 GB RAM</strong>
+        <span>Any Linux server (Ubuntu 22+, Debian 12+, CentOS 8+). Root SSH access required. Docker is installed automatically.</span>
+      </div>
+      <div class="prereq-item">
+        <strong>Domain with 2 A records</strong>
+        <span>Point <code>app.yourdomain.com</code> and <code>api.yourdomain.com</code> at your VPS IP. SSL is provisioned automatically via Let's Encrypt.</span>
+      </div>
+      <div class="prereq-item">
+        <strong>Salesforce Org</strong>
+        <span>Enterprise, Developer, or Sandbox edition with admin access to create a Connected App.</span>
+      </div>
+      <div class="prereq-item">
+        <strong>Node.js 20+</strong>
+        <span>Installed on your local machine. The CLI runs locally and connects to the VPS via SSH.</span>
+      </div>
+    </div>
+
+    <div class="docs-callout tip">
+      <strong>Estimated time: ~25 minutes</strong>
+      Follow the 15 steps below to go from zero to a fully working Lead Router installation.
+    </div>
+  </section>
+
+  <!-- ── Step 1: VPS & DNS ── -->
+  <section class="docs-section" id="vps">
+    <h2>Step 1: VPS &amp; DNS Setup</h2>
+    <p>Provision a server and point two domain names at it.</p>
+
+    <h3>Provision a VPS</h3>
+    <p>Create a Linux server with any cloud provider. Recommended specs:</p>
+    <table class="docs-table">
+      <tr><th>Spec</th><th>Minimum</th><th>Recommended</th></tr>
+      <tr><td>CPU</td><td>1 vCPU</td><td>2 vCPU</td></tr>
+      <tr><td>RAM</td><td>2 GB</td><td>4 GB</td></tr>
+      <tr><td>Disk</td><td>20 GB</td><td>40 GB SSD</td></tr>
+      <tr><td>OS</td><td colspan="2">Ubuntu 22.04 / Debian 12 / CentOS 8+</td></tr>
+    </table>
+    <p>Popular options: DigitalOcean ($12/mo), Hetzner ($5/mo), Linode ($12/mo), AWS Lightsail ($10/mo).</p>
+
+    <h3>Create DNS A Records</h3>
+    <p>In your DNS provider, create two A records pointing to your VPS IP address:</p>
+    <table class="docs-table">
+      <tr><th>Type</th><th>Name</th><th>Value</th><th>TTL</th></tr>
+      <tr><td>A</td><td><code>app</code></td><td><code>your-vps-ip</code></td><td>300</td></tr>
+      <tr><td>A</td><td><code>api</code></td><td><code>your-vps-ip</code></td><td>300</td></tr>
+    </table>
+
+    <div class="docs-callout info">
+      <strong>What are these subdomains?</strong>
+      The <code>app</code> subdomain serves the web dashboard. The <code>api</code> subdomain serves the routing engine that Salesforce calls. Replace the IP with your actual VPS IP address.
+    </div>
+
+    <h3>New to DNS?</h3>
+    <p>An <strong>A record</strong> maps a domain name to an IP address. When someone visits <code>app.acme.com</code>, their browser looks up the A record to find the server's IP.</p>
+    <p>After adding the records, it can take <strong>5-30 minutes</strong> for DNS to propagate. You can check propagation with <code>dig app.acme.com</code> from your terminal.</p>
+    <p>The CLI will automatically provision SSL certificates via Let's Encrypt once DNS is pointing correctly, so you don't need to worry about HTTPS configuration.</p>
+  </section>
+
+  <!-- ── Step 2: Connected App ── -->
+  <section class="docs-section" id="connected-app">
+    <h2>Step 2: Salesforce Connected App</h2>
+    <p>Create an OAuth Connected App so Lead Router can securely access your org.</p>
+
+    <h3>Step-by-step</h3>
+    <ol class="docs-sub-steps">
+      <li><div>In Salesforce, go to <strong>Setup</strong> &rarr; search <strong>"App Manager"</strong> &rarr; click <strong>New Connected App</strong></div></li>
+      <li><div>Fill in the basic info:
+        <br>- Connected App Name: <code>Lead Router</code>
+        <br>- API Name: <code>Lead_Router</code> (auto-filled)
+        <br>- Contact Email: your email
+      </div></li>
+      <li><div>Under <strong>API (Enable OAuth Settings)</strong>, check <strong>"Enable OAuth Settings"</strong></div></li>
+      <li><div>Set the <strong>Callback URL</strong> to:<br>
+        <code>https://app.acme.com/api/auth/sfdc/callback</code>
+        <br>Replace <code>app.acme.com</code> with your actual app domain
+      </div></li>
+      <li><div>Add these <strong>OAuth Scopes</strong>:
+        <br>- Access your basic information (api)
+        <br>- Perform requests at any time (refresh_token, offline_access)
+      </div></li>
+      <li><div>Check <strong>"Require Secret for Web Server Flow"</strong></div></li>
+      <li><div>Click <strong>Save</strong>, then wait ~2 minutes for Salesforce to register the app</div></li>
+      <li><div>Click <strong>"Manage Consumer Details"</strong> &rarr; verify your identity &rarr; copy the <strong>Consumer Key</strong> and <strong>Consumer Secret</strong></div></li>
+    </ol>
+
+    <div class="docs-callout warning">
+      <strong>Callback URL must match exactly</strong>
+      Including <code>https://</code> and the path <code>/api/auth/sfdc/callback</code>. A mismatch will cause a <code>redirect_uri_mismatch</code> error during Salesforce login. Use <code>https://test.salesforce.com</code> as the login URL for sandbox orgs.
+    </div>
+
+    <h3>What is a Connected App?</h3>
+    <p>A <strong>Connected App</strong> is Salesforce's way of allowing external applications to authenticate via OAuth 2.0. It provides a <strong>Consumer Key</strong> (Client ID) and <strong>Consumer Secret</strong> that Lead Router uses to securely obtain access tokens for your org.</p>
+    <p>Your credentials are stored exclusively on your server -- Lead Router never sends them to any third party.</p>
+  </section>
+
+  <!-- ── Step 3: Run the CLI ── -->
+  <section class="docs-section" id="cli-init">
+    <h2>Step 3: Run the CLI</h2>
+    <p>One command deploys the entire stack to your server.</p>
+
+    <h3>Run the installer</h3>
+    <p>Open a terminal on your <strong>local machine</strong> (not the VPS) and run:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">Terminal</span></div>
+      <div class="cli-body">
+        <button class="cli-copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli init</span></div>
+      </div>
+    </div>
+    <p>Requires Node.js 20+. The CLI runs on your machine and connects to the VPS via SSH -- nothing is installed locally.</p>
+
+    <h3>CLI prompts</h3>
+    <p>The wizard will ask for the following information:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">lead-routing init</span></div>
+      <div class="cli-body">
+<pre><code><span style="color:var(--accent-blue);font-weight:600">lead-routing</span>
+
+<span style="color:var(--text-tertiary)">  The CLI will SSH into your server to deploy the full stack.
+  You will need:
+    - Server hostname or IP address
+    - SSH password for your server (root access)
+    - A fresh Linux VPS -- Docker installed automatically</span>
+
+<span style="color:var(--text-tertiary)">--</span> <span style="color:var(--text-primary);font-weight:600">Server connection</span> <span style="color:var(--text-tertiary)">-----------------------------</span>
+
+<span style="color:var(--accent-green)">?</span> Server hostname or IP address
+  <span style="color:var(--text-tertiary)">165.22.100.50  or  vps.acme.com</span>
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">165.22.100.50</span>
+
+<span style="color:var(--accent-green)">?</span> SSH password for root@165.22.100.50
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">************</span>
+
+<span style="color:var(--text-tertiary)">--</span> <span style="color:var(--text-primary);font-weight:600">App configuration</span> <span style="color:var(--text-tertiary)">-----------------------------</span>
+
+<span style="color:var(--accent-green)">?</span> App URL (public URL where the web app will be accessible)
+  <span style="color:var(--text-tertiary)">https://routing.acme.com</span>
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">https://app.acme.com</span>
+
+<span style="color:var(--accent-green)">?</span> Engine URL (public URL Salesforce will use to route leads)
+  <span style="color:var(--text-tertiary)">https://engine.acme.com  or  https://acme.com:3001</span>
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">https://api.acme.com</span>
+
+<span style="color:var(--text-tertiary)">--</span> <span style="color:var(--text-primary);font-weight:600">Salesforce Connected App setup</span> <span style="color:var(--text-tertiary)">-------------------</span>
+
+<span style="color:var(--accent-green)">?</span> Consumer Key (labelled "Client ID" in newer orgs)
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">3MVG9dAEux2v1sLt...</span>
+
+<span style="color:var(--accent-green)">?</span> Consumer Secret (labelled "Client Secret" in newer orgs)
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">****************</span>
+
+<span style="color:var(--text-tertiary)">--</span> <span style="color:var(--text-primary);font-weight:600">Admin Account</span> <span style="color:var(--text-tertiary)">---------------------------------</span>
+
+<span style="color:var(--accent-green)">?</span> Admin email address
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">admin@acme.com</span>
+
+<span style="color:var(--accent-green)">?</span> Admin password (min 8 characters)
+  <span style="color:var(--accent-amber)">&gt;</span> <span style="color:var(--text-primary)">**********</span></code></pre>
+      </div>
+    </div>
+
+    <h3>What happens next</h3>
+    <p>The CLI will automatically perform these steps on your VPS:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">lead-routing init (continued)</span></div>
+      <div class="cli-body">
+<pre><code><span style="color:var(--accent-green)">&#10004;</span> Node.js v20+ found
+<span style="color:var(--accent-green)">&#10004;</span> Connected to 165.22.100.50 via SSH
+<span style="color:var(--accent-green)">&#10004;</span> Docker detected on remote server
+<span style="color:var(--accent-green)">&#10004;</span> Config files uploaded to ~/lead-routing
+
+<span style="color:var(--accent-blue)">&#9671;</span> Pulling Docker images on server (this may take a few minutes)...
+<span style="color:var(--accent-green)">&#10004;</span> Docker images pulled
+
+<span style="color:var(--accent-blue)">&#9671;</span> Starting services...
+<span style="color:var(--accent-green)">&#10004;</span> Services started (5 containers)
+
+<span style="color:var(--accent-blue)">&#9671;</span> Running database migrations...
+<span style="color:var(--accent-green)">&#10004;</span> Database migrated and seeded
+
+<span style="color:var(--accent-blue)">&#9671;</span> Waiting for health checks...
+<span style="color:var(--accent-green)">&#10004;</span> Web app -- https://app.acme.com
+<span style="color:var(--accent-green)">&#10004;</span> Engine  -- https://api.acme.com
+
+<span style="color:var(--accent-blue)">&#9671;</span> Deploying Salesforce package (this may take ~2 min)...
+<span style="color:var(--accent-green)">&#10004;</span> Package deployed (14 components)
+<span style="color:var(--accent-green)">&#10004;</span> Permission set assigned
+
+<span style="color:var(--accent-green);font-weight:600">&#10004; Lead Router is live!</span>
+<span style="color:var(--text-tertiary)">  Dashboard: https://app.acme.com</span>
+<span style="color:var(--text-tertiary)">  Login with: admin@acme.com</span></code></pre>
+      </div>
+    </div>
+
+    <div class="docs-callout info">
+      <strong>About 5 minutes total</strong>
+      Docker will be installed automatically if not present. SSL certificates are provisioned via Let's Encrypt.
+    </div>
+
+    <h3>Services deployed</h3>
+    <table class="docs-table">
+      <tr><th>Service</th><th>Port</th><th>Purpose</th></tr>
+      <tr><td><code>caddy</code></td><td>80, 443</td><td>Reverse proxy + automatic HTTPS</td></tr>
+      <tr><td><code>web</code></td><td>3000</td><td>Management dashboard (Next.js)</td></tr>
+      <tr><td><code>engine</code></td><td>3001</td><td>Routing engine (Fastify + BullMQ)</td></tr>
+      <tr><td><code>postgres</code></td><td>5432</td><td>Database</td></tr>
+      <tr><td><code>redis</code></td><td>6379</td><td>Queue + caching</td></tr>
+    </table>
+  </section>
+
+  <!-- ── Step 4: Onboarding Wizard ── -->
+  <section class="docs-section" id="onboarding">
+    <h2>Step 4: Onboarding Wizard</h2>
+    <p>Connect your Salesforce org and activate triggers -- all from the Salesforce UI.</p>
+
+    <h3>Open the wizard</h3>
+    <ol class="docs-sub-steps">
+      <li><div>In Salesforce, click the <strong>App Launcher</strong> (grid icon, top-left)</div></li>
+      <li><div>Search for <strong>"Lead Router Setup"</strong> and click on it</div></li>
+      <li><div>The onboarding wizard will open inside Salesforce</div></li>
+    </ol>
+
+    <h3>Complete all 4 wizard steps</h3>
+    <ol class="docs-sub-steps">
+      <li><div><strong>Step 1 -- Connect:</strong> Click "Connect to Lead Router" &rarr; authorize the OAuth popup &rarr; wait for the green checkmark (~5 seconds)</div></li>
+      <li><div><strong>Step 2 -- Activate Triggers:</strong> Click <strong>Activate</strong> to enable Lead insert/update triggers. This tells Salesforce to send records to the engine whenever they change.</div></li>
+      <li><div><strong>Step 3 -- Sync Fields:</strong> Click <strong>Sync Fields</strong> to index your Lead field schema. This enables the rule builder to show your custom fields.</div></li>
+      <li><div><strong>Step 4 -- Test:</strong> Click <strong>Send Test</strong> to fire a test routing event. "Test successful" or "No matching rule" are both valid -- it confirms the connection works.</div></li>
+    </ol>
+
+    <div class="docs-callout tip">
+      <strong>Keep the CLI open</strong>
+      After completing the wizard, keep the CLI terminal open -- it will confirm the wizard is done and finish the setup process.
+    </div>
+  </section>
+
+  <!-- ── Step 5: Connect Salesforce ── -->
+  <section class="docs-section" id="connect-sf">
+    <h2>Step 5: Connect Salesforce</h2>
+    <p>Manage your Salesforce connection and package deployment from the web dashboard.</p>
+
+    <h3>Salesforce Integration Hub</h3>
+    <p>Navigate to <strong>Integrations</strong> in the sidebar. This page gives you full control over your Salesforce connection without needing the CLI.</p>
+
+    <h3>What you can do</h3>
+    <ul>
+      <li><strong>Deploy / Redeploy Package</strong> -- Push the latest Apex triggers, classes, and components to Salesforce. No CLI required.</li>
+      <li><strong>Sync Fields</strong> -- Refresh the field schema from Salesforce so the condition builder shows current fields and picklist values.</li>
+      <li><strong>Enable Objects</strong> -- Choose which objects (Lead, Contact, Account) are routable.</li>
+      <li><strong>View Status</strong> -- Check deployment status, last sync timestamp, and connection health at a glance.</li>
+      <li><strong>Disconnect</strong> -- Revoke the OAuth connection and remove stored credentials.</li>
+    </ul>
+
+    <div class="docs-callout info">
+      <strong>No CLI needed for Salesforce management</strong>
+      The Integrations page replaces the need to run <code>lead-routing sfdc deploy</code> from the CLI. All Salesforce package management can now be done directly in the web dashboard.
+    </div>
+  </section>
+
+  <!-- ── Step 6: Sync Fields ── -->
+  <section class="docs-section" id="sync-fields">
+    <h2>Step 6: Sync Fields</h2>
+    <p>Ensure the route builder has access to your Salesforce field schema.</p>
+
+    <h3>How field sync works</h3>
+    <p>When you click <strong>Sync Fields</strong> (either in the onboarding wizard or the Integrations page), Lead Router reads the metadata for all enabled objects (Lead, Contact, Account) and imports:</p>
+    <ul>
+      <li>Field API names, labels, and data types</li>
+      <li>Picklist values for dropdowns in the condition builder</li>
+      <li>Required/optional status and relationship references</li>
+    </ul>
+    <p>This is what powers the dropdowns in the route builder's condition editor. If you add new custom fields in Salesforce, re-sync to make them available.</p>
+
+    <div class="docs-callout tip">
+      <strong>Re-sync after adding custom fields</strong>
+      The sync is fast (typically under 5 seconds) and can be run as many times as needed from the Integrations page.
+    </div>
+  </section>
+
+  <!-- ── Step 7: Deploy Triggers ── -->
+  <section class="docs-section" id="deploy-triggers">
+    <h2>Step 7: Deploy Triggers</h2>
+    <p>Apex triggers are the bridge between Salesforce and the routing engine.</p>
+
+    <h3>What gets deployed</h3>
+    <p>The Salesforce package includes:</p>
+    <ul>
+      <li><strong>Apex Triggers</strong> -- <code>LeadTrigger</code>, <code>ContactTrigger</code>, <code>AccountTrigger</code> -- fire on insert/update and send record data to the engine.</li>
+      <li><strong>Apex Classes</strong> -- <code>RoutingEngineCallout</code> (HTTP callout), <code>RoutingPayloadBuilder</code> (JSON serialization), <code>CriteriaEvaluator</code> (pre-callout filtering).</li>
+      <li><strong>Custom Settings</strong> -- <code>Routing_Settings__c</code> stores the engine endpoint URL, webhook secret, and toggle flags for each object/event.</li>
+      <li><strong>Custom Objects</strong> -- <code>Route_Criteria__c</code> stores trigger criteria synced from the web app for pre-callout filtering.</li>
+      <li><strong>Permission Set</strong> -- <code>LeadRouterAdmin</code> grants access to the setup app, custom objects, and fields.</li>
+    </ul>
+
+    <h3>Deploying from the web dashboard</h3>
+    <p>Go to <strong>Integrations</strong> &rarr; click <strong>Deploy Package</strong>. The deployment uses the Salesforce Metadata API and typically completes in 1-2 minutes.</p>
+
+    <h3>Deploying from the CLI</h3>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">Terminal</span></div>
+      <div class="cli-body">
+        <button class="cli-copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli sfdc deploy</span></div>
+      </div>
+    </div>
+    <p>Run this from the same directory where you ran <code>init</code>. It reads the saved config from <code>lead-routing.json</code>.</p>
+  </section>
+
+  <!-- ── Step 8: Complete Setup ── -->
+  <section class="docs-section" id="complete-setup">
+    <h2>Step 8: Complete Setup</h2>
+    <p>Verify everything is working end-to-end before building your first route.</p>
+
+    <h3>Checklist</h3>
+    <ul>
+      <li>Web dashboard loads at your app URL with HTTPS</li>
+      <li>You can log in with the admin email and password from CLI init</li>
+      <li>Integrations page shows Salesforce as "Connected"</li>
+      <li>Package shows as "Deployed" with all components</li>
+      <li>Field sync shows your Lead fields</li>
+      <li>"Lead Router Setup" appears in Salesforce App Launcher</li>
+    </ul>
+
+    <div class="docs-callout tip">
+      <strong>All good?</strong>
+      If everything checks out, you're ready to license users, create teams, and build routing rules. If something is off, check the Troubleshooting section below.
+    </div>
+  </section>
+
+  <!-- ── Step 9: License Users ── -->
+  <section class="docs-section" id="license-users">
+    <h2>Step 9: License Users</h2>
+    <p>Control which Salesforce users can receive routed records.</p>
+
+    <h3>Why license users?</h3>
+    <p>Only <strong>licensed users</strong> are eligible to receive routed records. This lets you control exactly which reps participate in routing -- an unlicensed user will never be assigned a lead, even if they're in a team.</p>
+
+    <h3>Sync users from Salesforce</h3>
+    <ol class="docs-sub-steps">
+      <li><div>In the web dashboard, go to <strong>License Users</strong> in the sidebar</div></li>
+      <li><div>Click the <strong>"License Users"</strong> button in the top-right</div></li>
+      <li><div>Choose a licensing strategy:</div></li>
+    </ol>
+
+    <p>Four strategies are available:</p>
+    <ul>
+      <li><strong>All Users</strong> -- License every user from Salesforce</li>
+      <li><strong>Individual Users</strong> -- Pick specific users to license</li>
+      <li><strong>By Role</strong> -- License all users with selected Salesforce roles</li>
+      <li><strong>By Profile</strong> -- License all users with selected Salesforce profiles</li>
+    </ul>
+
+    <h3>Managing the user table</h3>
+    <p>After syncing, you'll see a table of all imported users. Toggle the switch to license or de-license individual users. Use the search bar and filters to find specific users. Select multiple users for bulk actions.</p>
+
+    <div class="docs-callout info">
+      <strong>Licensed + Team = Routable</strong>
+      A user must be both licensed and added to a team to receive round-robin assignments. Licensing alone makes them eligible -- the team determines when they get leads.
+    </div>
+  </section>
+
+  <!-- ── Step 10: Create Teams ── -->
+  <section class="docs-section" id="teams">
+    <h2>Step 10: Create Teams</h2>
+    <p>Create pools of reps for lead distribution. Choose between equal round robin (every rep gets the same share) or weighted round robin (assign proportional shares per rep).</p>
+
+    <h3>Create a team</h3>
+    <ol class="docs-sub-steps">
+      <li><div>In the sidebar, click <strong>Teams</strong></div></li>
+      <li><div>Click <strong>"New Team"</strong></div></li>
+      <li><div>Enter a team name (e.g. "SDR West") and optional description</div></li>
+      <li><div>Click <strong>Create</strong></div></li>
+    </ol>
+
+    <h3>Add members</h3>
+    <ol class="docs-sub-steps">
+      <li><div>Click <strong>Manage</strong> on the team card to open the detail page</div></li>
+      <li><div>Click <strong>"Add Members"</strong> and choose a method:
+        <br>- <strong>Individual Users</strong> -- search and select specific licensed users
+        <br>- <strong>By Role</strong> -- add all users with a specific Salesforce role
+        <br>- <strong>By Profile</strong> -- add all users with a specific Salesforce profile
+      </div></li>
+    </ol>
+
+    <h3>Team controls</h3>
+    <ul>
+      <li><strong>Active / Paused</strong> -- Toggle a member's status. Paused members are skipped during assignment (e.g. when someone is on PTO).</li>
+      <li><strong>Reset Pointer</strong> -- Resets the rotation back to the first member. Useful after adding or removing members.</li>
+      <li><strong>Share %</strong> -- Shows each member's share of total assignments. An even distribution means fair routing.</li>
+    </ul>
+
+    <h3>Distribution types</h3>
+    <p>Each team supports two distribution modes, selectable on the team detail page:</p>
+    <ul>
+      <li><strong>Equal Round Robin</strong> (default) -- Every active member receives leads in strict sequential order, one each in turn. All members get an equal share.</li>
+      <li><strong>Weighted Round Robin</strong> -- Assign a weight to each member to control what proportion of leads they receive. For example, weights of 40/40/20 mean the first two reps each get 40% and the third gets 20%.</li>
+    </ul>
+    <p>In weighted mode, use the sliders to adjust each member's weight. Toggle between <strong>Percentage</strong> (must sum to 100) and <strong>Points</strong> (must sum to 10) modes. Use the <strong>Equalize</strong> button to reset all weights to equal.</p>
+
+    <div class="docs-callout info">
+      <strong>Using teams in rules</strong>
+      Reference teams in your routing rules by choosing "Round Robin" as the assignment type and selecting the team. The engine will cycle through active members -- equally or by weight, depending on the team's distribution type.
+    </div>
+  </section>
+
+  <!-- ── Step 11: Create Routes ── -->
+  <section class="docs-section" id="first-route">
+    <h2>Step 11: Create Routes</h2>
+    <p>Set up routing rules in the web dashboard.</p>
+
+    <h3>Create a rule</h3>
+    <ol class="docs-sub-steps">
+      <li><div>Log in to the web dashboard at your app URL with the admin email and password you set during CLI init</div></li>
+      <li><div>Navigate to <strong>Routing Rules</strong> in the sidebar</div></li>
+      <li><div>Click <strong>New Rule</strong></div></li>
+      <li><div>Give it a name (e.g. "Enterprise Inbound") and select <strong>Lead</strong> as the object type</div></li>
+      <li><div>Set the trigger to <strong>Insert</strong> (fires when new Leads are created)</div></li>
+      <li><div>Click <strong>Edit Flow</strong> to open the visual route builder</div></li>
+    </ol>
+
+    <h3>Example: Route by company size</h3>
+    <p>In the flow builder, create a simple rule: any Lead where Company contains "Enterprise" gets assigned to the Enterprise SDR team via round robin.</p>
+
+    <div class="docs-callout info">
+      <strong>Multiple branches</strong>
+      You can add multiple branches for different conditions (e.g. route by industry, annual revenue, lead source) and set a default fallback for records that don't match any branch.
+    </div>
+  </section>
+
+  <!-- ── Step 12: Route Builder ── -->
+  <section class="docs-section" id="route-builder">
+    <h2>Step 12: Route Builder Canvas</h2>
+    <p>Build complex routing flows visually with a drag-and-drop canvas -- like n8n or Zapier, but for lead routing.</p>
+
+    <h3>The visual canvas</h3>
+    <p>When you click <strong>Edit Flow</strong> on any rule, you enter the freeform canvas. Drag steps from the right sidebar onto the canvas to build your routing flow.</p>
+
+    <h3>Step types</h3>
+    <table class="docs-table">
+      <tr><th>Step</th><th>Color</th><th>Purpose</th></tr>
+      <tr>
+        <td><strong>Trigger</strong></td>
+        <td style="color:var(--accent-violet)">Purple</td>
+        <td>Defines which object and event fires the route (Lead/Contact/Account on Insert/Update/Both)</td>
+      </tr>
+      <tr>
+        <td><strong>Match</strong></td>
+        <td style="color:var(--accent-blue)">Blue</td>
+        <td>Check for duplicate leads, contacts, or accounts before routing</td>
+      </tr>
+      <tr>
+        <td><strong>Filter &rarr; Assign</strong></td>
+        <td><span style="color:#6366f1">Indigo</span> + <span style="color:var(--accent-green)">Green</span></td>
+        <td>A condition path paired with its assignment action (User, Round Robin team, or Queue)</td>
+      </tr>
+      <tr>
+        <td><strong>Default Owner</strong></td>
+        <td style="color:var(--accent-amber)">Amber</td>
+        <td>Catch-all fallback for records that don't match any path</td>
+      </tr>
+    </table>
+
+    <h3>Canvas controls</h3>
+    <ul>
+      <li><strong>Zoom</strong> -- Scroll wheel or use the +/- buttons in the toolbar (25%-200%)</li>
+      <li><strong>Pan</strong> -- Hold Space and drag, or use the canvas background</li>
+      <li><strong>Fit to view</strong> -- Click the maximize icon to center all nodes</li>
+      <li><strong>Drag steps</strong> -- Drag from the Step Registry panel on the right onto the canvas</li>
+      <li><strong>Click to configure</strong> -- Click any node to open its config sheet with full options</li>
+    </ul>
+
+    <h3>English View</h3>
+    <p>At the top of the route builder, you'll see two tabs: <strong>Canvas</strong> and <strong>English</strong>. Click English to switch to the natural language review that shows your routing logic as plain English sentences.</p>
+    <p>The English view detects common mistakes and displays warnings:</p>
+    <table class="docs-table">
+      <tr><th>Warning</th><th>What it means</th></tr>
+      <tr><td>Unconfigured assignment</td><td>A path has no assignee set -- records would be unroutable</td></tr>
+      <tr><td>Unreachable path</td><td>A path after a catch-all will never execute</td></tr>
+      <tr><td>Multiple catch-alls</td><td>More than one path has no conditions -- only the first will trigger</td></tr>
+      <tr><td>No default owner</td><td>Records that don't match any path will be left unassigned</td></tr>
+      <tr><td>Dry run active</td><td>The rule is in test mode -- it logs but doesn't update owners</td></tr>
+    </table>
+
+    <div class="docs-callout tip">
+      <strong>Review before activating</strong>
+      Use the English view as a final review before activating a route. Click "Edit in Canvas" from the detail panel to jump directly to the relevant step.
+    </div>
+
+    <h3>Trigger Conditions</h3>
+    <p>Trigger conditions let you define criteria that records must meet <strong>before</strong> the routing engine is called. This filtering happens inside Salesforce's Apex trigger, so records that don't match never leave your org.</p>
+    <ol class="docs-sub-steps">
+      <li><div>Open a rule and click on the <strong>Trigger</strong> step in the canvas</div></li>
+      <li><div>In the Trigger config sheet, scroll down to <strong>Trigger Criteria</strong></div></li>
+      <li><div>Add conditions using the condition builder -- same UI as path conditions</div></li>
+      <li><div>Conditions within a group are joined with <strong>AND</strong>. Multiple groups are joined with <strong>OR</strong>.</div></li>
+      <li><div>Save the rule. Conditions are automatically synced to Salesforce as <code>Route_Criteria__c</code> records.</div></li>
+    </ol>
+
+    <div class="docs-callout warning">
+      <strong>Optional but recommended for high-volume orgs</strong>
+      If no trigger criteria are defined, all records are sent to the engine (legacy behavior). Adding criteria reduces API usage significantly.
+    </div>
+
+    <h3>Fuzzy &amp; AI Matching</h3>
+    <p>When configuring the <strong>Match</strong> step, you can enable company name matching with one of three modes:</p>
+    <ul>
+      <li><strong>Strict</strong> -- Exact normalized match only. "Acme Inc" = "acme"</li>
+      <li><strong>Fuzzy</strong> -- Levenshtein, Soundex, Double Metaphone + abbreviation dictionary (~85 common mappings)</li>
+      <li><strong>AI Smart</strong> -- LLM-powered semantic matching with 3-layer alias cache (in-memory, Redis, Postgres)</li>
+    </ul>
+
+    <h3>How fuzzy matching works</h3>
+    <p>The fuzzy matcher runs a cascading resolution chain -- it tries the fastest method first and only falls back to more expensive checks if needed:</p>
+    <ol>
+      <li><strong>Exact normalized</strong> -- Strip suffixes (Inc, LLC, Corp, Ltd, GmbH), lowercase, remove punctuation</li>
+      <li><strong>Abbreviation dictionary</strong> -- ~85 common mappings (IBM &rarr; International Business Machines, HP &rarr; Hewlett Packard)</li>
+      <li><strong>Levenshtein similarity</strong> -- Character-level edit distance, threshold >= 0.85</li>
+      <li><strong>Soundex match</strong> -- 4-character phonetic codes</li>
+      <li><strong>Double Metaphone</strong> -- Primary + alternate phonetic encodings</li>
+    </ol>
+
+    <h3>AI Smart mode</h3>
+    <p>When AI Smart is selected, the system adds an additional resolution step after fuzzy matching fails:</p>
+    <ol>
+      <li><strong>Alias cache check</strong> -- L1 in-memory (1,000 entries, 1hr TTL) &rarr; L2 Redis (24hr TTL) &rarr; L3 Postgres (permanent)</li>
+      <li><strong>AI provider call</strong> -- Sends company name pair to your configured LLM (Claude, OpenAI, Gemini, or custom endpoint)</li>
+      <li><strong>Cache result</strong> -- Writes the AI's decision to all cache layers to avoid repeated calls</li>
+    </ol>
+
+    <div class="docs-callout info">
+      <strong>AI Smart requires an API key</strong>
+      Configure in Settings &rarr; AI. Rate limited to 10 calls/sec per org. If the AI is unavailable, it gracefully falls back to fuzzy matching.
+    </div>
+
+    <h3>Condition operators</h3>
+    <table class="docs-table">
+      <tr><th>Operator</th><th>Algorithm</th><th>Use case</th></tr>
+      <tr>
+        <td><code>fuzzy_equals</code></td>
+        <td>Levenshtein >= 0.8</td>
+        <td>Typo tolerance -- "Microsft" matches "Microsoft"</td>
+      </tr>
+      <tr>
+        <td><code>sounds_like</code></td>
+        <td>Soundex + Double Metaphone</td>
+        <td>Phonetic matching -- "Smith" matches "Smyth"</td>
+      </tr>
+      <tr>
+        <td><code>similar_to</code> <span class="tier-badge tier-pro" style="font-size:9px;padding:1px 5px">AI</span></td>
+        <td>Full resolution chain + AI</td>
+        <td>Semantic matching -- "JPMorgan" matches "JP Morgan Chase"</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- ── Step 13: Verify Routing ── -->
+  <section class="docs-section" id="verify">
+    <h2>Step 13: Verify It Works</h2>
+    <p>Create a test Lead and watch it get routed in real time.</p>
+
+    <h3>End-to-end test</h3>
+    <ol class="docs-sub-steps">
+      <li><div>In Salesforce, create a new Lead that matches your rule (e.g. Company = "Enterprise Corp")</div></li>
+      <li><div>Within 2-3 seconds, the Lead's Owner should update to the assigned user</div></li>
+      <li><div>In the web dashboard, go to <strong>Activity</strong> to see the routing event logged</div></li>
+    </ol>
+
+    <h3>What to check</h3>
+    <table class="docs-table">
+      <tr><th>Check</th><th>Expected Result</th></tr>
+      <tr><td>Lead Owner in Salesforce</td><td>Changed to the assigned user within seconds</td></tr>
+      <tr><td>Activity page in web dashboard</td><td>Shows the routed record with status "Success"</td></tr>
+      <tr><td>Rule matches</td><td>The rule that matched is shown in the activity detail</td></tr>
+    </table>
+
+    <div class="docs-callout tip">
+      <strong>You're all set!</strong>
+      Lead Router is fully operational. New Leads and Contacts will be automatically routed according to your rules.
+    </div>
+  </section>
+
+  <!-- ── Step 14: Activity & Analytics ── -->
+  <section class="docs-section" id="activity">
+    <h2>Step 14: Activity &amp; Analytics</h2>
+    <p>Monitor every routing decision in real time.</p>
+
+    <h3>Routing History</h3>
+    <p>The Activity page shows every record the engine has processed. Navigate to <strong>Activity</strong> in the sidebar. Use filters to narrow by object type, status, rule, team, or specific assignee.</p>
+
+    <h3>Status types</h3>
+    <table class="docs-table">
+      <tr><th>Status</th><th>Meaning</th></tr>
+      <tr><td><span style="color:var(--accent-green)">Success</span></td><td>Record matched a rule and the owner was updated in Salesforce</td></tr>
+      <tr><td><span style="color:#ef4444">Failed</span></td><td>Rule matched but the engine couldn't update the owner (check error in detail view)</td></tr>
+      <tr><td><span style="color:var(--accent-amber)">Unmatched</span></td><td>No routing rule matched this record -- it was not reassigned</td></tr>
+      <tr><td><span style="color:var(--accent-blue)">Retry</span></td><td>A transient error occurred and the engine will retry automatically</td></tr>
+      <tr><td><span style="color:var(--accent-violet)">Merged</span></td><td>Duplicate record was merged with an existing one</td></tr>
+    </table>
+
+    <h3>Activity tabs</h3>
+    <ul>
+      <li><strong>Routing History</strong> -- The main event log with full details per record</li>
+      <li><strong>Assignment Stats</strong> -- Aggregated statistics on routing volume, success rates, and assignee distribution</li>
+      <li><strong>Failed Routings</strong> -- Filtered view showing only failed events for quick debugging</li>
+      <li><strong>Audit Log</strong> -- System-level log of configuration changes (rule edits, user licensing, team modifications)</li>
+    </ul>
+
+    <div class="docs-callout info">
+      <strong>Export CSV</strong>
+      Use the Export CSV button to download routing data for reporting or analysis. Filter by date range, object type, status, rule, team, or specific assignee before exporting.
+    </div>
+
+    <h3>Analytics Dashboard</h3>
+    <p>Navigate to <strong>Analytics</strong> in the sidebar for a dedicated reporting dashboard with four tabs:</p>
+    <table class="docs-table">
+      <tr><th>Tab</th><th>What it shows</th></tr>
+      <tr><td><strong>Overview</strong></td><td>KPI cards (total routed, success rate, avg response time, conversions), volume trend chart, top rules by volume</td></tr>
+      <tr><td><strong>Rules</strong></td><td>Per-rule breakdown -- volume, success/fail/unmatched split, average processing time, last triggered</td></tr>
+      <tr><td><strong>Teams</strong></td><td>Per-team and per-member metrics -- assignments, capacity, round robin distribution balance</td></tr>
+      <tr><td><strong>Conversions</strong></td><td>Lead-to-Opportunity conversion tracking -- conversion rate by rule, team, and time period with funnel visualization</td></tr>
+    </table>
+
+    <div class="docs-callout tip">
+      <strong>Real-time data</strong>
+      Analytics data updates in real time. Use the date range selector (7d, 30d, 90d, custom) and filters to drill into specific rules, teams, or object types.
+    </div>
+  </section>
+
+  <!-- ── Step 15: AI Assistant ── -->
+  <section class="docs-section" id="ai-assistant">
+    <h2>Step 15: AI Assistant <span class="tier-badge tier-pro" style="vertical-align:middle;margin-left:8px">PRO</span></h2>
+    <p>Chat with an AI that understands your routing data -- get optimization suggestions, debug issues, and query activity.</p>
+
+    <h3>What it does</h3>
+    <p>The AI Assistant is a conversational interface that has access to your routing rules, activity history, team configuration, and analytics. It can:</p>
+    <ul>
+      <li>Answer questions about your routing setup -- <em>"Which rule handles APAC leads?"</em></li>
+      <li>Suggest optimizations -- <em>"How can I improve my conversion rate?"</em></li>
+      <li>Debug routing failures -- <em>"Why did this lead go to the wrong team?"</em></li>
+      <li>Generate reports -- <em>"Show me routing volume by team this week"</em></li>
+      <li>Explain rules in plain English -- <em>"Walk me through the Enterprise Inbound rule"</em></li>
+    </ul>
+
+    <h3>Configure your AI provider</h3>
+    <p>Navigate to <strong>Settings &rarr; AI</strong> to connect your LLM provider. Bring your own API key (BYOK) -- your data stays on your server.</p>
+    <p>Supported providers:</p>
+    <ul>
+      <li><strong>Claude</strong> (Anthropic) -- Recommended</li>
+      <li><strong>OpenAI</strong> -- GPT-4o, o1</li>
+      <li><strong>Gemini</strong> -- Google AI</li>
+      <li><strong>Custom</strong> -- Any OpenAI-compatible endpoint</li>
+    </ul>
+
+    <h3>Setup steps</h3>
+    <ol class="docs-sub-steps">
+      <li><div>Go to <strong>Settings &rarr; AI</strong> in the sidebar</div></li>
+      <li><div>Click <strong>Connect</strong> on your preferred provider card</div></li>
+      <li><div>Enter your API key and select a model (e.g. <code>claude-sonnet-4-5-20250514</code>, <code>gpt-4o</code>)</div></li>
+      <li><div>For Custom endpoints: provide a base URL and optional custom headers for auth</div></li>
+      <li><div>Click <strong>Save</strong> -- the key is encrypted and stored server-side</div></li>
+      <li><div>Navigate to <strong>AI Assistant</strong> in the sidebar and start chatting</div></li>
+    </ol>
+
+    <div class="docs-callout warning">
+      <strong>Pro feature</strong>
+      AI Assistant is a Pro feature. Your API key is encrypted at rest and never leaves your server. Conversations are stored locally and can be deleted from Settings.
+    </div>
+  </section>
+
+  <!-- ── How To Videos ── -->
+  <section class="docs-section" id="videos">
+    <h2>How To Videos</h2>
+    <p>Video walkthroughs to help you get the most out of Lead Router.</p>
+    <div class="docs-video-grid">
+      <div class="docs-video-card" data-video-id="">
+        <div class="docs-video-thumb">
+          <div class="docs-video-play">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </div>
+        </div>
+        <h4>Getting Started in 5 Minutes</h4>
+        <p>Complete setup walkthrough from VPS to first route</p>
+      </div>
+      <div class="docs-video-card" data-video-id="">
+        <div class="docs-video-thumb">
+          <div class="docs-video-play">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </div>
+        </div>
+        <h4>Building Your First Route</h4>
+        <p>Learn the route builder and condition system</p>
+      </div>
+      <div class="docs-video-card" data-video-id="">
+        <div class="docs-video-thumb">
+          <div class="docs-video-play">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </div>
+        </div>
+        <h4>AI-Powered Matching</h4>
+        <p>Using fuzzy and AI matching for intelligent routing</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ── -->
+  <section class="docs-section" id="faq">
+    <h2>Frequently Asked Questions</h2>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>What are the minimum VPS requirements?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>1 vCPU, 2 GB RAM, and 20 GB disk is the absolute minimum. We recommend 2 vCPU and 4 GB RAM for production workloads. Any Linux distribution with Docker support works (Ubuntu 22+, Debian 12+, CentOS 8+). Root SSH access is required for the initial deployment.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>Which Salesforce editions are supported?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>Enterprise, Unlimited, Developer, and Performance editions are fully supported. Sandbox orgs work too -- just use <code>https://test.salesforce.com</code> as the login URL during setup. Professional Edition is not supported because it doesn't allow Apex triggers.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>How do I update to a new version?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>Run <code>npx @lead-routing/cli deploy</code> from the same directory where you ran init. This pulls the latest Docker images and recreates the containers with zero downtime. Database migrations run automatically on startup.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>Can I route Contacts and Accounts, not just Leads?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>Yes. Lead Router supports Lead, Contact, and Account objects. Enable additional objects in the Integrations page, then create routing rules with the appropriate object type selected. Each object has its own triggers and field schema.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>What happens if the engine goes down?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>If the routing engine is unreachable, Salesforce's Apex trigger will log the error to <code>Routing_Error_Log__c</code> in your org. Records are not modified -- the existing owner stays unchanged. The engine uses BullMQ for job processing, so any in-progress jobs will be retried when the service comes back online.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>How does AI matching work?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>AI matching uses a 3-layer alias cache (in-memory, Redis, Postgres) and falls back to your configured LLM provider when a match isn't cached. It's designed for company name matching where traditional fuzzy algorithms fall short -- for example, recognizing that "JPMorgan" and "JP Morgan Chase &amp; Co" are the same entity. You bring your own API key, and results are cached to minimize API calls.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>Is my data stored on your servers?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>No. Lead Router is fully self-hosted. All data -- routing rules, activity logs, Salesforce credentials, and user data -- stays on your VPS. The only external communication is the license check heartbeat (Pro plan) and optional AI provider API calls that you configure.</p></div>
+    </div>
+
+    <div class="docs-faq-item">
+      <div class="docs-faq-q" onclick="this.parentElement.classList.toggle('open')">
+        <span>How do I add more users?</span>
+        <span class="faq-icon">+</span>
+      </div>
+      <div class="docs-faq-a"><p>Go to License Users in the web dashboard and click "License Users" to sync from Salesforce. You can add users individually, by role, or by profile. Free tier allows 3 licensed users; Pro tier is unlimited.</p></div>
+    </div>
+  </section>
+
+  <!-- ── Troubleshooting ── -->
+  <section class="docs-section" id="troubleshooting">
+    <h2>Troubleshooting</h2>
+    <p>Common issues and how to resolve them.</p>
+
+    <h3>Health check times out during CLI init</h3>
+    <p><strong>Cause:</strong> DNS hasn't propagated yet, or ports 80/443 are blocked.</p>
+    <p><strong>Fix:</strong></p>
+    <ul>
+      <li>Verify DNS: <code>dig app.acme.com</code> should return your VPS IP</li>
+      <li>Check firewall: <code>ufw status</code> (Ubuntu) -- ports 80 and 443 must be open</li>
+      <li>Check Docker: SSH into VPS and run <code>docker ps</code> -- all 5 containers should be running</li>
+      <li>Let's Encrypt rate limit: if you've provisioned too many certificates for the same domain, wait 1 hour</li>
+    </ul>
+
+    <h3><code>redirect_uri_mismatch</code> error during Salesforce login</h3>
+    <p><strong>Cause:</strong> The callback URL in your Connected App doesn't match the one Lead Router is using.</p>
+    <p><strong>Fix:</strong> In Salesforce Setup &rarr; App Manager &rarr; your Connected App &rarr; Edit, verify the Callback URL is exactly:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">Terminal</span></div>
+      <div class="cli-body">
+<pre><code>https://app.acme.com/api/auth/sfdc/callback</code></pre>
+      </div>
+    </div>
+    <p>Replace <code>app.acme.com</code> with your actual app domain. No trailing slash.</p>
+
+    <h3>Records are not being routed</h3>
+    <p><strong>Check these in order:</strong></p>
+    <ol>
+      <li><strong>Triggers active?</strong> -- Open "Lead Router Setup" in Salesforce App Launcher and check Step 2 shows triggers are activated</li>
+      <li><strong>Rule matches?</strong> -- Ensure your rule conditions match the Lead field values. Check the Activity page for "Unmatched" entries.</li>
+      <li><strong>Custom Settings configured?</strong> -- In Salesforce Setup, search "Custom Settings" &rarr; "Routing Settings" &rarr; Manage. The Engine Endpoint should be your API URL.</li>
+      <li><strong>Engine reachable?</strong> -- Run <code>curl https://api.acme.com/health</code> from any machine. Should return <code>{"status":"ok"}</code></li>
+    </ol>
+
+    <h3>"Lead Router Setup" doesn't appear in App Launcher</h3>
+    <p><strong>Cause:</strong> The <code>LeadRouterAdmin</code> permission set isn't assigned to your user.</p>
+    <p><strong>Fix:</strong> Salesforce Setup &rarr; Users &rarr; Permission Sets &rarr; Lead Router Admin &rarr; Manage Assignments &rarr; Add your user.</p>
+
+    <h3>Viewing server logs</h3>
+    <p>SSH into your VPS and use Docker logs:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">SSH</span></div>
+      <div class="cli-body">
+        <button class="cli-copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><code><span style="color:var(--text-tertiary)"># Web app logs</span>
+docker logs lead-routing-web-1 --tail 100 -f
+
+<span style="color:var(--text-tertiary)"># Engine logs</span>
+docker logs lead-routing-engine-1 --tail 100 -f
+
+<span style="color:var(--text-tertiary)"># All services</span>
+docker compose -f ~/lead-routing/docker-compose.yml logs --tail 50 -f</code></pre>
+      </div>
+    </div>
+
+    <h3>Redeploying the Salesforce package</h3>
+    <p>If you need to redeploy the Apex triggers and components:</p>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">Terminal</span></div>
+      <div class="cli-body">
+        <button class="cli-copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli sfdc deploy</span></div>
+      </div>
+    </div>
+    <p>This re-deploys all Apex classes, triggers, and configurations to your Salesforce org. Run this from the same directory where you ran <code>init</code>.</p>
+
+    <h3>Updating Lead Router to a new version</h3>
+    <div class="cli-block">
+      <div class="cli-titlebar"><span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span><span class="cli-titlebar-text">Terminal</span></div>
+      <div class="cli-body">
+        <button class="cli-copy-btn" onclick="copyCode(this)">Copy</button>
+        <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli deploy</span></div>
+      </div>
+    </div>
+    <p>This pulls the latest images and recreates the containers with zero downtime.</p>
+
+    <h3>Fuzzy matching not working -- exact matches only</h3>
+    <p><strong>Cause:</strong> The match mode is set to "Strict" (default) instead of "Fuzzy" or "AI Smart".</p>
+    <p><strong>Fix:</strong></p>
+    <ul>
+      <li>Open the rule in the Route Builder and click the <strong>Match</strong> step</li>
+      <li>In the config sheet, look for <strong>Company Match Mode</strong></li>
+      <li>Switch from "Strict" to "Fuzzy" or "AI Smart"</li>
+      <li>Save the rule -- fuzzy matching takes effect immediately on the next routing event</li>
+    </ul>
+    <p>If using AI Smart mode, also verify your API key is configured in <strong>Settings &rarr; AI</strong> and the provider is reachable from your server.</p>
+
+    <h3>AI Assistant not responding or returning errors</h3>
+    <p><strong>Check these in order:</strong></p>
+    <ol>
+      <li><strong>API key valid?</strong> -- Go to Settings &rarr; AI and verify the key shows "Connected". Try disconnecting and reconnecting.</li>
+      <li><strong>Provider reachable?</strong> -- SSH into your VPS and test: <code>curl https://api.anthropic.com/v1/messages</code> (or your provider's API). Firewall rules may block outbound HTTPS.</li>
+      <li><strong>Rate limited?</strong> -- Check the engine logs for 429 responses. The AI assistant respects provider rate limits and will queue retries.</li>
+      <li><strong>Custom endpoint?</strong> -- Verify the base URL includes the correct path prefix and that any custom headers (auth tokens) are correct.</li>
+    </ol>
+
+    <h3>Trigger criteria not syncing to Salesforce</h3>
+    <p><strong>Cause:</strong> The sync from web app to Salesforce <code>Route_Criteria__c</code> records failed silently.</p>
+    <p><strong>Fix:</strong></p>
+    <ul>
+      <li><strong>Check Salesforce connection</strong> -- Go to Integrations and verify the Salesforce org shows "Connected". Reconnect if the OAuth token expired.</li>
+      <li><strong>Verify the object exists</strong> -- In Salesforce Setup, search for "Route Criteria" under Custom Objects. If missing, redeploy the package from Integrations &rarr; Deploy Package.</li>
+      <li><strong>Manual sync</strong> -- Open the rule, make any small edit to a trigger condition, and save again. This forces a re-sync.</li>
+      <li><strong>Check logs</strong> -- Look at web app logs (<code>docker logs lead-routing-web-1 --tail 50</code>) for <code>SFDC_SYNC_ERROR</code> messages with details.</li>
+    </ul>
+  </section>
+
+  <!-- ── Changelog ── -->
+  <section class="docs-section" id="changelog">
+    <h2>Changelog</h2>
+    <div class="docs-changelog-entry">
+      <div class="docs-changelog-date">Mar 16, 2026</div>
+      <div class="docs-changelog-body">
+        <h4><span class="docs-changelog-tag feature">Feature</span> v0.5.0</h4>
+        <p>License management, weighted team distribution, trigger criteria filtering, AI assistant improvements.</p>
+      </div>
+    </div>
+    <div class="docs-changelog-entry">
+      <div class="docs-changelog-date">Mar 1, 2026</div>
+      <div class="docs-changelog-body">
+        <h4><span class="docs-changelog-tag feature">Feature</span> v0.4.0</h4>
+        <p>Analytics dashboard, audit logging, rule cloning, bulk license management.</p>
+      </div>
+    </div>
+    <div class="docs-changelog-entry">
+      <div class="docs-changelog-date">Feb 15, 2026</div>
+      <div class="docs-changelog-body">
+        <h4><span class="docs-changelog-tag improvement">Improvement</span> v0.3.0</h4>
+        <p>Route builder redesign, English-language rule view, improved onboarding wizard.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Prev/Next navigation -->
+  <div class="docs-prev-next" id="prev-next"></div>
+
+</main>
+
+<!-- ═══ Right TOC ═══ -->
+<aside class="docs-toc">
+  <div class="docs-toc-title">On this page</div>
+  <nav id="toc-links"></nav>
+</aside>
+
+</div><!-- /docs-layout -->
+
+<script>
+// Section definitions for prev/next and breadcrumb
+const sections = [
+  { id: 'overview', title: 'Overview', group: 'Getting Started' },
+  { id: 'vps', title: 'VPS & DNS', group: 'Setup Guide' },
+  { id: 'connected-app', title: 'Connected App', group: 'Setup Guide' },
+  { id: 'cli-init', title: 'Run the CLI', group: 'Setup Guide' },
+  { id: 'onboarding', title: 'Onboarding Wizard', group: 'Setup Guide' },
+  { id: 'connect-sf', title: 'Connect Salesforce', group: 'Setup Guide' },
+  { id: 'sync-fields', title: 'Sync Fields', group: 'Setup Guide' },
+  { id: 'deploy-triggers', title: 'Deploy Triggers', group: 'Setup Guide' },
+  { id: 'complete-setup', title: 'Complete Setup', group: 'Setup Guide' },
+  { id: 'license-users', title: 'License Users', group: 'Setup Guide' },
+  { id: 'teams', title: 'Create Teams', group: 'Setup Guide' },
+  { id: 'first-route', title: 'Create Routes', group: 'Setup Guide' },
+  { id: 'route-builder', title: 'Route Builder', group: 'Setup Guide' },
+  { id: 'verify', title: 'Verify Routing', group: 'Setup Guide' },
+  { id: 'activity', title: 'Activity & Analytics', group: 'Setup Guide' },
+  { id: 'ai-assistant', title: 'AI Assistant', group: 'Setup Guide' },
+  { id: 'videos', title: 'How To Videos', group: 'Resources' },
+  { id: 'faq', title: 'FAQ', group: 'Resources' },
+  { id: 'troubleshooting', title: 'Troubleshooting', group: 'Resources' },
+  { id: 'changelog', title: 'Changelog', group: 'Resources' }
+];
+
+// 1. IntersectionObserver for active sidebar link
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      // Remove active from all sidebar links
+      document.querySelectorAll('.docs-sidebar a').forEach(a => a.classList.remove('active'));
+      // Add active to matching link
+      const link = document.querySelector('.docs-sidebar a[href="#' + entry.target.id + '"]');
+      if (link) {
+        link.classList.add('active');
+        link.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      // Update breadcrumb
+      const section = sections.find(s => s.id === entry.target.id);
+      if (section) {
+        document.getElementById('breadcrumb-section').textContent = section.title;
+      }
+      // Update TOC
+      updateTOC(entry.target);
+      // Update prev/next
+      updatePrevNext(entry.target.id);
+    }
+  });
+}, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+
+document.querySelectorAll('.docs-section').forEach(s => observer.observe(s));
+
+// 2. TOC auto-population
+function updateTOC(sectionEl) {
+  const tocNav = document.getElementById('toc-links');
+  const h3s = sectionEl.querySelectorAll('h3');
+  tocNav.innerHTML = '';
+  h3s.forEach(h3 => {
+    if (!h3.id) h3.id = h3.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+    const a = document.createElement('a');
+    a.href = '#' + h3.id;
+    a.textContent = h3.textContent;
+    tocNav.appendChild(a);
+  });
+}
+
+// 3. Prev/Next
+function updatePrevNext(currentId) {
+  const idx = sections.findIndex(s => s.id === currentId);
+  const container = document.getElementById('prev-next');
+  let html = '';
+  if (idx > 0) {
+    html += '<a href="#' + sections[idx-1].id + '"><div class="label">&larr; Previous</div><div class="title">' + sections[idx-1].title + '</div></a>';
+  } else {
+    html += '<div></div>';
+  }
+  if (idx < sections.length - 1) {
+    html += '<a href="#' + sections[idx+1].id + '" class="next"><div class="label">Next &rarr;</div><div class="title">' + sections[idx+1].title + '</div></a>';
+  }
+  container.innerHTML = html;
+}
+
+// 4. Mobile sidebar toggle
+function toggleSidebar() {
+  document.querySelector('.docs-sidebar').classList.toggle('mobile-open');
+  document.getElementById('docs-backdrop').classList.toggle('visible');
+}
+
+// 5. Search filter
+document.querySelector('.docs-search').addEventListener('input', function(e) {
+  const query = e.target.value.toLowerCase();
+  document.querySelectorAll('.docs-sidebar a').forEach(function(link) {
+    link.style.display = link.textContent.toLowerCase().includes(query) || !query ? '' : 'none';
+  });
+});
+
+// 6. Copy to clipboard for code blocks
+function copyCode(btn) {
+  const block = btn.closest('.cli-body') || btn.closest('.cli-block');
+  const code = block.querySelector('code') || block.querySelector('.cli-cmd-text');
+  if (code) {
+    const text = code.textContent.replace(/^\$ /gm, '').trim();
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+}
+
+document.querySelectorAll('.cli-block').forEach(function(block) {
+  block.style.cursor = 'pointer';
+  block.addEventListener('click', function(e) {
+    if (e.target.closest('.cli-copy-btn')) return;
+    const code = this.querySelector('code') || this.querySelector('.cli-cmd-text');
+    if (code) {
+      const text = code.textContent.replace(/^\$ /gm, '').trim();
+      navigator.clipboard.writeText(text);
+      this.style.outline = '2px solid var(--accent-blue)';
+      setTimeout(function() { block.style.outline = ''; }, 1000);
+    }
+  });
+});
+
+// 7. Video embed
+document.querySelectorAll('.docs-video-card').forEach(function(card) {
+  card.addEventListener('click', function() {
+    var videoId = this.dataset.videoId;
+    if (!videoId) return;
+    var thumb = this.querySelector('.docs-video-thumb');
+    thumb.innerHTML = '<iframe width="100%" height="100%" src="https://www.youtube.com/embed/' + videoId + '?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>';
+    thumb.style.position = 'relative';
+  });
+});
+
+// Close sidebar on link click (mobile)
+document.querySelectorAll('.docs-sidebar a').forEach(function(a) {
+  a.addEventListener('click', function() {
+    if (window.innerWidth <= 768) toggleSidebar();
+  });
+});
+
+// Initialize
+updatePrevNext('overview');
+</script>
+
+</body>
+</html>

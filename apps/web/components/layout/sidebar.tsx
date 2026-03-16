@@ -58,6 +58,7 @@ const NAV_SECTIONS: NavSection[] = [
         href: "/analytics",
         label: "Analytics",
         icon: BarChart3,
+        badge: "Pro",
       },
     ],
   },

@@ -14,10 +14,10 @@ const baseWebConfig = {
   redisUrl: 'redis://redis:6379',
   sessionSecret: 'session_secret_here',
   engineWebhookSecret: 'webhook_secret_here',
-  adminSecret: 'admin_secret_here',
   adminEmail: 'admin@acme.com',
   adminPassword: 'password123',
   internalApiKey: 'internal_api_key_here',
+  licenseTier: 'free',
 }
 
 // ─── renderEnvWeb ─────────────────────────────────────────────────────────────
@@ -54,11 +54,6 @@ describe('renderEnvWeb', () => {
   it('includes ENGINE_WEBHOOK_SECRET', () => {
     const out = renderEnvWeb(baseWebConfig)
     expect(out).toContain('ENGINE_WEBHOOK_SECRET=webhook_secret_here')
-  })
-
-  it('includes ADMIN_SECRET', () => {
-    const out = renderEnvWeb(baseWebConfig)
-    expect(out).toContain('ADMIN_SECRET=admin_secret_here')
   })
 
   it('outputs empty RESEND_API_KEY when not provided', () => {
@@ -164,6 +159,37 @@ describe('renderDockerCompose — always present', () => {
     expect(out).toContain('"80:80"')
     expect(out).toContain('"443:443"')
   })
+
+  it('default config includes all five expected services', () => {
+    const out = renderDockerCompose({ managedDb: true, managedRedis: true })
+    expect(out).toContain('  postgres:')
+    expect(out).toContain('  redis:')
+    expect(out).toContain('  web:')
+    expect(out).toContain('  engine:')
+    expect(out).toContain('  caddy:')
+  })
+
+  it('caddy service has correct port mappings for 80, 443, and 443/udp', () => {
+    const out = renderDockerCompose({ managedDb: false, managedRedis: false })
+    expect(out).toContain('"80:80"')
+    expect(out).toContain('"443:443"')
+    expect(out).toContain('"443:443/udp"')
+  })
+
+  it('caddy service does not have a marketing-site volume mount', () => {
+    const out = renderDockerCompose({ managedDb: true, managedRedis: true })
+    expect(out).not.toContain('marketing')
+    expect(out).not.toContain('site')
+  })
+
+  it('caddy service depends on web and engine', () => {
+    const out = renderDockerCompose({ managedDb: false, managedRedis: false })
+    // Extract the caddy block
+    const caddyStart = out.indexOf('  caddy:')
+    const caddyBlock = out.slice(caddyStart)
+    expect(caddyBlock).toContain('- web')
+    expect(caddyBlock).toContain('- engine')
+  })
 })
 
 // ─── renderCaddyfile ──────────────────────────────────────────────────────────
@@ -226,6 +252,7 @@ const baseEngineConfig = {
   redisUrl: 'redis://redis:6379',
   engineWebhookSecret: 'webhook_secret_here',
   internalApiKey: 'internal_api_key_here',
+  licenseTier: 'free',
 }
 
 describe('renderEnvEngine', () => {

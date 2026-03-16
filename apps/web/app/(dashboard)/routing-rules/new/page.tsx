@@ -6,13 +6,16 @@ import { useMutation } from "@tanstack/react-query";
 import { RouteBuilder } from "@/components/route-builder/RouteBuilder";
 import { builderToApiBody } from "@/lib/builder-to-rule";
 import type { RouteBuilderState, ObjectType, RouteType } from "@/components/route-builder/types";
+import { getLicenseTier, getTierLimits } from "@/lib/license";
 
 function NewRouteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const objectParam = (searchParams.get("object")?.toUpperCase() ?? "LEAD") as ObjectType;
-  const validObject: ObjectType = ["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)
+  const tier = getLicenseTier();
+  const limits = getTierLimits(tier);
+  const validObject: ObjectType = limits.allowedTriggers.includes(objectParam)
     ? objectParam
     : "LEAD";
 

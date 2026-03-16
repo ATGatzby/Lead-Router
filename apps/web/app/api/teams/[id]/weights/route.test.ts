@@ -26,6 +26,10 @@ const mockPrisma = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ getActorFromHeaders: mockGetActorFromHeaders }));
 vi.mock("@lead-routing/db", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/license", () => ({
+  getTierLimits: () => ({ weightedDistribution: true }),
+  upgradeRequiredResponse: () => Response.json({ error: "upgrade_required" }, { status: 402 }),
+}));
 
 import { PUT } from "./route";
 import { NextRequest } from "next/server";

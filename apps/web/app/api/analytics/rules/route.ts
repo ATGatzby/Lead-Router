@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { parseFilters } from "../filters";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 /**
  * GET /api/analytics/rules
@@ -11,6 +12,11 @@ import { parseFilters } from "../filters";
  */
 export async function GET(req: NextRequest) {
   try {
+    const limits = getTierLimits();
+    if (!limits.analytics) {
+      return upgradeRequiredResponse("Analytics");
+    }
+
     const orgId = await getOrgIdFromHeaders();
     const { fromDate, toDate, objectType } = parseFilters(
       req.nextUrl.searchParams,

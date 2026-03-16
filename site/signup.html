@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up — OpenEdgeAI Lead Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">O</div>
+      <div class="logo-text">OpenEdgeAI <span>Lead Router</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/login.html" class="btn-nav-ghost">Login</a></li>
+      <li><a href="/signup.html" class="btn-nav">Get Started</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <!-- Signup form -->
+    <div id="signup-form-view">
+      <div class="auth-header">
+        <h1>Create your <em>account</em></h1>
+        <p>Start routing leads in minutes. No credit card required.</p>
+      </div>
+
+      <div id="signup-error" class="alert-banner alert-error" style="display: none;"></div>
+
+      <form id="signup-form" onsubmit="return handleSignup(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">First name</label>
+            <input type="text" class="form-input" id="firstName" placeholder="John" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last name</label>
+            <input type="text" class="form-input" id="lastName" placeholder="Smith" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="email" placeholder="john@acme.com" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="password" placeholder="Min. 8 characters" required minlength="8" oninput="updateStrength(this.value)">
+          <div class="pw-strength">
+            <div class="pw-bar" id="pw-bar-1"></div>
+            <div class="pw-bar" id="pw-bar-2"></div>
+            <div class="pw-bar" id="pw-bar-3"></div>
+            <div class="pw-bar" id="pw-bar-4"></div>
+          </div>
+          <div class="pw-label" id="pw-label"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Confirm password</label>
+          <input type="password" class="form-input" id="confirmPassword" placeholder="Re-enter password" required>
+        </div>
+
+        <div class="form-check">
+          <input type="checkbox" id="terms" required>
+          <label for="terms">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></label>
+        </div>
+
+        <button type="submit" class="btn-primary" id="signup-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          Create Account
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="/login.html">Sign in</a>
+      </div>
+    </div>
+
+    <!-- Success view -->
+    <div id="signup-success-view" style="display: none; text-align: center;">
+      <div class="verify-icon" style="background: rgba(79, 125, 247, 0.1); border: 2px solid rgba(79, 125, 247, 0.2);">
+        <svg viewBox="0 0 24 24" style="stroke: var(--accent-blue);">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="22,6 12,13 2,6" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1 style="font-family: 'Instrument Serif', serif; font-size: 32px; font-weight: 400; margin-bottom: 12px;">Check your <em style="font-style: italic; background: var(--gradient-hero); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">email</em></h1>
+      <p style="font-size: 15px; color: var(--text-secondary); font-weight: 300; line-height: 1.6; margin-bottom: 32px;">We sent a verification link to <strong id="sent-email" style="color: var(--text-primary);"></strong>. Click it to activate your account.</p>
+      <a href="/login.html" class="btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Continue to Login
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://lead-routing-license.artyagi2011.workers.dev';
+
+// Store plan from query param
+const params = new URLSearchParams(window.location.search);
+if (params.get('plan') === 'pro') {
+  localStorage.setItem('lr_plan', 'pro');
+}
+
+function updateStrength(val) {
+  const bars = [document.getElementById('pw-bar-1'), document.getElementById('pw-bar-2'), document.getElementById('pw-bar-3'), document.getElementById('pw-bar-4')];
+  const label = document.getElementById('pw-label');
+  let score = 0;
+  if (val.length >= 8) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+  bars.forEach((b, i) => {
+    b.className = 'pw-bar';
+    if (i < score) {
+      if (score <= 1) b.classList.add('active-weak');
+      else if (score <= 2) b.classList.add('active-medium');
+      else b.classList.add('active-strong');
+    }
+  });
+  if (val.length === 0) { label.textContent = ''; label.className = 'pw-label'; }
+  else if (score <= 1) { label.textContent = 'Weak'; label.className = 'pw-label weak'; }
+  else if (score <= 2) { label.textContent = 'Medium'; label.className = 'pw-label medium'; }
+  else { label.textContent = 'Strong'; label.className = 'pw-label strong'; }
+}
+
+async function handleSignup(e) {
+  e.preventDefault();
+  const errorEl = document.getElementById('signup-error');
+  errorEl.style.display = 'none';
+
+  const password = document.getElementById('password').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+
+  if (password !== confirmPassword) {
+    errorEl.textContent = 'Passwords do not match.';
+    errorEl.style.display = 'flex';
+    return false;
+  }
+
+  const btn = document.getElementById('signup-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0;border-width:2px;"></div> Creating account...';
+
+  try {
+    const res = await fetch(API + '/v1/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName: document.getElementById('firstName').value.trim(),
+        lastName: document.getElementById('lastName').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: password
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Signup failed. Please try again.');
+    }
+
+    // Show success
+    document.getElementById('sent-email').textContent = document.getElementById('email').value.trim();
+    document.getElementById('signup-form-view').style.display = 'none';
+    document.getElementById('signup-success-view').style.display = 'block';
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Create Account';
+  }
+
+  return false;
+}
+</script>
+</body>
+</html>

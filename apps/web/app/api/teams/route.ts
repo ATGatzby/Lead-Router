@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // GET /api/teams — list all teams for the org with member counts + assignment totals
 export async function GET(_req: NextRequest) {
@@ -61,6 +62,12 @@ export async function POST(req: NextRequest) {
     const distributionType = body.distributionType ?? "round-robin";
     if (distributionType !== "round-robin" && distributionType !== "weighted") {
       return NextResponse.json({ error: "distributionType must be 'round-robin' or 'weighted'" }, { status: 400 });
+    }
+
+    // ── License tier gating ──────────────────────────────────────────────
+    const limits = getTierLimits();
+    if (distributionType === "weighted" && !limits.weightedDistribution) {
+      return upgradeRequiredResponse("Weighted distribution");
     }
 
     const team = await prisma.roundRobinTeam.create({

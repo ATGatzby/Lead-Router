@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { parseFilters, buildAggregateQuery } from "../filters";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 type GroupBy = "status" | "objectType" | "rule" | "team";
 type Granularity = "day" | "week" | "month";
@@ -19,6 +20,11 @@ const VALID_GRANULARITY = new Set<Granularity>(["day", "week", "month"]);
  */
 export async function GET(req: NextRequest) {
   try {
+    const limits = getTierLimits();
+    if (!limits.analytics) {
+      return upgradeRequiredResponse("Analytics");
+    }
+
     const orgId = await getOrgIdFromHeaders();
     const filters = parseFilters(req.nextUrl.searchParams);
 

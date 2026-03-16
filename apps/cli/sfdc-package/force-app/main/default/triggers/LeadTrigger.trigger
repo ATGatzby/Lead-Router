@@ -15,11 +15,6 @@ trigger LeadTrigger on Lead (after insert, after update) {
 
     if (Trigger.isUpdate && settings.Lead_Update_Enabled__c) {
         for (Lead l : Trigger.new) {
-            Lead old = Trigger.oldMap.get(l.Id);
-            // Skip if the routing engine just stamped this record
-            if (l.Routing_Action__c != old.Routing_Action__c
-                && l.Routing_Action__c != null
-                && l.Routing_Action__c.startsWith('assigned')) continue;
             updateIds.add(l.Id);
         }
     }

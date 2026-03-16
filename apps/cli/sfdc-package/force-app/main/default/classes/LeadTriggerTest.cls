@@ -7,8 +7,7 @@ class LeadTriggerTest {
             Lead_Routing_Enabled__c  = true,
             Lead_Insert_Enabled__c   = true,
             Lead_Update_Enabled__c   = true,
-            Webhook_Secret__c        = 'test-secret-key',
-            Engine_Endpoint__c       = 'https://engine.example.com'
+            Webhook_Secret__c        = 'test-secret-key'
         );
         upsert settings;
     }

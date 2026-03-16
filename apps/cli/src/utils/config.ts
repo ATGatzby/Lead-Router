@@ -24,6 +24,10 @@ export interface InstallConfig {
   }
   /** Engine webhook secret — used for HMAC validation in SFDC callouts */
   engineWebhookSecret?: string
+  /** License key — empty for free tier */
+  licenseKey?: string
+  /** License tier — 'free' or 'pro' */
+  licenseTier: 'free' | 'pro'
   installedAt: string
   version: string
 }
