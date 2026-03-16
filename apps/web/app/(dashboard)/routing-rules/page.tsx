@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Square,
   FlaskConical,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -188,6 +189,15 @@ function NewRouteDropdown({ atLimit = false }: { atLimit?: boolean }) {
           <Search className="h-4 w-4 mr-2 text-teal-600 dark:text-teal-400" />
           Scheduled Route
         </DropdownMenuItem>
+        {process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true" && (
+          <DropdownMenuItem onClick={() => router.push("/routing-rules/new?type=realtime&ai=1")}>
+            <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
+            AI Generate
+            <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
+              PRO
+            </Badge>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

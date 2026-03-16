@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { useTheme } from "next-themes"
-import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText, Play, Loader2 } from "lucide-react"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText, Play, Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StepRegistry, type CanvasNodeType } from "./StepRegistry"
 import { TriggerConfigSheet } from "./config/TriggerConfigSheet"
@@ -23,6 +23,7 @@ import type { RuleConditions } from "@/components/condition-builder"
 import { EnglishView } from "./EnglishView"
 import { routeToEnglish } from "@/lib/route-to-english"
 import { RunPanel, type RunningStep } from "./RunPanel"
+import { AIRouteGenerator } from "./AIRouteGenerator"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -385,8 +386,8 @@ function buildNodesFromState(initialState?: Partial<RouteBuilderState>): CanvasN
     const filterY = splitY + 140
     paths.forEach((path, i) => {
       const filterX = 300 + i * FILTER_GAP
-      nodes.push({ id: `filter-${i}`, type: "filter", x: filterX, y: filterY, pathId: path.id })
-      nodes.push({ id: `assign-${i}`, type: "assign", x: filterX, y: filterY + 140, pathId: path.id })
+      nodes.push({ id: `path-filter-${i}`, type: "filter", x: filterX, y: filterY, pathId: path.id })
+      nodes.push({ id: `path-assign-${i}`, type: "assign", x: filterX, y: filterY + 140, pathId: path.id })
     })
     if (defaultOwner) {
       const avgX = Math.round(
@@ -428,6 +429,23 @@ export function RouteBuilder({
   const isSaving = externalIsSaving ?? internalIsSaving
   const [saveError, setSaveError] = useState<string | null>(null)
   const isDirty = JSON.stringify(state) !== JSON.stringify(savedState)
+
+  // ── AI generator state ─────────────────────────────────────────────────────
+  const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true"
+  const [showAIGenerator, setShowAIGenerator] = useState(false)
+
+  // Auto-open AI panel when ?ai=1 is in URL (must be in useEffect for SSR safety)
+  useEffect(() => {
+    if (aiEnabled && new URLSearchParams(window.location.search).get("ai") === "1") {
+      setShowAIGenerator(true)
+    }
+  }, [aiEnabled])
+  const handleApplyAIRoute = useCallback((aiState: RouteBuilderState) => {
+    setState(aiState)
+    // Rebuild canvas nodes from the new state
+    setNodes(buildNodesFromState(aiState))
+    setShowAIGenerator(false)
+  }, [])
 
   // ── Run panel state ────────────────────────────────────────────────────────
   const [showRunPanel, setShowRunPanel] = useState(false)
@@ -1062,6 +1080,19 @@ export function RouteBuilder({
           </button>
         </div>
 
+        {aiEnabled && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setShowAIGenerator(true)}
+            className="gap-1.5 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+          >
+            <Sparkles className="size-3.5" />
+            AI Generate
+          </Button>
+        )}
+
         {isDirty && (
           <span className="text-xs text-muted-foreground hidden sm:inline">
             Unsaved changes
@@ -1362,6 +1393,14 @@ export function RouteBuilder({
         }
         onClear={() => setState((s) => ({ ...s, defaultOwner: null }))}
       />
+
+      {/* ── AI Route Generator floating panel ──────────────────────────────── */}
+      {showAIGenerator && (
+        <AIRouteGenerator
+          onApply={handleApplyAIRoute}
+          onClose={() => setShowAIGenerator(false)}
+        />
+      )}
 
     </div>
   )

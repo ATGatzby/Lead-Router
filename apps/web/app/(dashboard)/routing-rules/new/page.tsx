@@ -43,32 +43,39 @@ function NewRouteContent() {
     },
   });
 
+  const isAI = searchParams.get("ai") === "1";
+
   const defaultState: Partial<RouteBuilderState> = {
     name: "Untitled Route",
     routeType,
-    trigger: routeType === "REALTIME"
-      ? {
-          triggerName: "",
-          objectType: validObject,
-          triggerEvent: "INSERT",
-          isDryRun: false,
-          triggerConditions: [],
-        }
-      : null,
-    searchTrigger: routeType === "SCHEDULED"
-      ? {
-          triggerName: "",
-          objectType: validObject,
-          searchCriteria: [],
-          frequency: "DAILY",
-          scheduleTime: "06:00",
-          scheduleTimezone: "UTC",
-          batchSize: 500,
-          searchMaxRecords: null,
-          skipRecentlyRouted: true,
-          isDryRun: false,
-        }
-      : null,
+    // When AI mode, start with empty canvas (no trigger) — AI will populate everything
+    trigger: isAI
+      ? null
+      : routeType === "REALTIME"
+        ? {
+            triggerName: "",
+            objectType: validObject,
+            triggerEvent: "INSERT",
+            isDryRun: false,
+            triggerConditions: [],
+          }
+        : null,
+    searchTrigger: isAI
+      ? null
+      : routeType === "SCHEDULED"
+        ? {
+            triggerName: "",
+            objectType: validObject,
+            searchCriteria: [],
+            frequency: "DAILY",
+            scheduleTime: "06:00",
+            scheduleTimezone: "UTC",
+            batchSize: 500,
+            searchMaxRecords: null,
+            skipRecentlyRouted: true,
+            isDryRun: false,
+          }
+        : null,
     matchConfig: null,
     paths: [],
     defaultOwner: null,
