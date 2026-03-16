@@ -431,7 +431,7 @@ export function RouteBuilder({
   const isDirty = JSON.stringify(state) !== JSON.stringify(savedState)
 
   // ── AI generator state ─────────────────────────────────────────────────────
-  const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true"
+  const aiEnabled = true
   const [showAIGenerator, setShowAIGenerator] = useState(false)
 
   // Auto-open AI panel when ?ai=1 is in URL (must be in useEffect for SSR safety)
