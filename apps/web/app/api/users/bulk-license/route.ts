@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 interface BulkLicenseBody {
   userIds: string[];
@@ -36,6 +37,15 @@ export async function POST(req: NextRequest) {
       const toActivate = users.filter((u) => !u.isLicensed && u.isActive);
       if (toActivate.length === 0) {
         return NextResponse.json({ affected: 0 });
+      }
+
+      // ── License tier seat limit ────────────────────────────────────────
+      const limits = getTierLimits();
+      if (limits.maxSeats !== Infinity) {
+        const licensedCount = await prisma.user.count({ where: { orgId, isLicensed: true } });
+        if (licensedCount + toActivate.length > limits.maxSeats) {
+          return upgradeRequiredResponse(`Licensing more than ${limits.maxSeats} users`);
+        }
       }
 
       // Seat cap check

@@ -23,6 +23,13 @@
 15. [Known Gotchas](#15-known-gotchas)
 16. [AI Routing Assistant](#16-ai-routing-assistant)
 17. [Fuzzy & AI-Powered Matching Engine](#17-fuzzy--ai-powered-matching-engine)
+18. [Smart Trigger Optimization — Anti-Recursion System](#18-smart-trigger-optimization--anti-recursion-system)
+19. [Record Journey — Routing Audit Trail](#19-record-journey--routing-audit-trail)
+20. [Scheduled Routes & Search Salesforce Trigger](#20-scheduled-routes--search-salesforce-trigger)
+21. [Weighted Round Robin Distribution](#21-weighted-round-robin-distribution)
+22. [Run Route Experience](#22-run-route-experience)
+23. [Theme & Design System](#23-theme--design-system)
+24. [Licensing & Monetization System](#24-licensing--monetization-system)
 
 ---
 
@@ -156,7 +163,7 @@ lead-routing/
 | POST | `/api/cli-auth/request` | Public | Create CLI auth session |
 | GET | `/api/cli-auth/poll/[sessionId]` | Public | Poll CLI auth status |
 
-#### Routing Rules (9 routes)
+#### Routing Rules (10 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/rules?object=LEAD` | Session | List rules (all rules if no object param, or filtered by object type) |
@@ -167,6 +174,7 @@ lead-routing/
 | PATCH | `/api/rules/[id]/status` | Session | Toggle ACTIVE/INACTIVE |
 | POST | `/api/rules/[id]/clone` | Session | Duplicate rule |
 | POST | `/api/rules/[id]/test` | Session | Dry-run evaluation against sample record |
+| POST | `/api/rules/[id]/run` | Session | Manual trigger for scheduled routes — records run attempt, updates lastRunAt/lastRunStatus/totalRuns (stub) |
 | POST | `/api/rules/[id]/sync-criteria` | Session | Sync trigger conditions to SFDC Route_Criteria__c |
 | POST | `/api/rules/reorder` | Session | Bulk priority reorder |
 
@@ -180,7 +188,7 @@ lead-routing/
 | POST | `/api/routing-logs/[id]/retry` | Session | Re-enqueue failed log to BullMQ |
 | POST | `/api/routing-logs/[id]/dismiss` | Session | Mark log as dismissed |
 
-#### Users & Licensing (9 routes)
+#### Users & Licensing (13 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/users` | Session | Paginated user list |
@@ -190,25 +198,32 @@ lead-routing/
 | POST | `/api/users/[id]/de-license` | Session | Revoke license |
 | POST | `/api/users/bulk-license` | Session | Bulk license |
 | POST | `/api/users/bulk-delete` | Session | Bulk delete |
-| GET | `/api/users/stats` | Session | User metrics |
+| GET | `/api/users/stats` | Session | User metrics (includes breakdown by licensing method + licensed queue count) |
 | GET | `/api/users/filters` | Session | Distinct roles and profiles from licensed+active users |
+| POST | `/api/users/license-by-role` | Session | License all users matching given roles `{ roles: string[] }` — sets `licensedVia = "role"` |
+| POST | `/api/users/license-by-profile` | Session | License all users matching given profiles `{ profiles: string[] }` — sets `licensedVia = "profile"` |
+| POST | `/api/users/license-by-custom-field` | Session | License users matching a custom SFDC field `{ fieldName: string }` — sets `licensedVia = "custom_field"` |
 
-#### Teams / Round-Robin (7 routes)
+#### Teams / Round-Robin (9 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/teams` | Session | List teams with member counts |
-| POST | `/api/teams` | Session | Create team |
-| GET | `/api/teams/[id]` | Session | Team detail + members |
-| PUT | `/api/teams/[id]` | Session | Update team |
+| GET | `/api/teams` | Session | List teams with member counts + `distributionType` |
+| POST | `/api/teams` | Session | Create team (optional `distributionType`: `"round-robin"` or `"weighted"`, default `"round-robin"`) |
+| GET | `/api/teams/[id]` | Session | Team detail + members (includes `weight` per member + `distributionType`) |
+| PUT | `/api/teams/[id]` | Session | Update team (accepts `distributionType` changes) |
 | POST | `/api/teams/[id]/members` | Session | Add members (by userIds, roles, or profiles) |
+| PATCH | `/api/teams/[id]/members/[userId]` | Session | Update member status + optional `weight` |
 | DELETE | `/api/teams/[id]/members/[userId]` | Session | Remove member |
+| PUT | `/api/teams/[id]/weights` | Session | Bulk update member weights `{ mode: "percentage"|"points", weights: { userId: number } }` — percentage must sum to 100, points must sum to 10 |
 | POST | `/api/teams/[id]/reset-pointer` | Session | Reset round-robin pointer |
 
-#### Queues, Fields, Settings (6 routes)
+#### Queues, Fields, Settings (8 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/queues` | Session | List SFDC queues |
 | POST | `/api/queues/sync` | Session | Sync queues from SFDC |
+| POST | `/api/queues/license` | Session | License queues as routing targets `{ queueIds: string[] }` — sets `isLicensed = true` |
+| POST | `/api/queues/de-license` | Session | De-license queues `{ queueIds: string[] }` — sets `isLicensed = false` |
 | GET | `/api/fields?object=LEAD` | Session | List field schemas |
 | POST | `/api/fields/sync` | X-Sfdc-Org-Id | Sync field schemas (called by Apex) |
 | POST | `/api/settings/sync-sfdc` | Session | Push settings to Salesforce |
@@ -220,20 +235,6 @@ lead-routing/
 | GET | `/api/setup/status` | X-Sfdc-Org-Id | Check org connection (Apex polling) |
 | POST | `/api/setup/onboarding-done` | X-Sfdc-Org-Id | Mark onboarding complete |
 | GET | `/api/onboarding/status` | Session | Sidebar checklist progress (5 items with clickable links: Connect CRM → /integrations/salesforce, Deploy Package → /integrations/salesforce, Sync Fields → /integrations/salesforce, License Users → /license-users, Create Routing Rule → /routing-rules/new) |
-
-#### Admin Portal (10 routes)
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/admin/auth/login` | ADMIN_SECRET | Admin login (HMAC token) |
-| POST | `/api/admin/auth/logout` | Admin token | Destroy admin session |
-| GET | `/api/admin/orgs` | Admin token | List all orgs |
-| POST | `/api/admin/orgs` | Admin token | Pre-provision org + invite |
-| GET | `/api/admin/orgs/[id]` | Admin token | Org detail |
-| POST | `/api/admin/orgs/[id]/activate` | Admin token | Reactivate org |
-| POST | `/api/admin/orgs/[id]/deactivate` | Admin token | Suspend org |
-| POST | `/api/admin/orgs/[id]/plan` | Admin token | Change plan |
-| POST | `/api/admin/orgs/[id]/seats` | Admin token | Update seat count |
-| POST | `/api/admin/orgs/[id]/reset` | Admin token | Full org data reset |
 
 #### Salesforce Integration Management (6 routes)
 | Method | Path | Auth | Purpose |
@@ -258,22 +259,20 @@ lead-routing/
 | `/login` | Email + password login |
 | `/register?token=...` | Invite-based registration |
 | `/dashboard` | Main dashboard (redirect target) |
-| `/routing-rules` | Rules list (flat list with Route Name, Object, Status toggle, Actions) |
-| `/routing-rules/new` | Zapier-style Route Builder canvas |
+| `/routing-rules` | Route list — card-based layout with filter tabs (All, Real-Time, Scheduled with counts), search by name, stats columns (Total Routed + Paths for realtime, Total Routed + Runs for scheduled). Scheduled routes show a Run (play) button for manual execution via `POST /api/rules/[id]/run`. |
+| `/routing-rules/new` | Route Builder canvas — "New Route" dropdown offers Real-Time and Scheduled options; accepts `?type=realtime|scheduled` query param to pre-select route type |
 | `/routing-rules/[id]/edit` | Edit existing rule |
 | `/routing-rules/[id]/flow` | Flow visualization |
 | `/activity` | Routing log viewer (with Route Rule and Team filter dropdowns) |
 | `/activity/audit` | Audit log |
 | `/activity/failed` | Failed routing logs |
 | `/analytics` | Routing analytics dashboard |
-| `/license-users` | License Users — CRM gate (empty state when no CRM connected), Salesforce badge + Sync Users button in header, search + filter bar below title, sync by All/Individual/Role/Profile; Team column |
-| `/teams` | Teams management (renamed from Round Robins) |
-| `/teams/[id]` | Team detail + members (add by individual, Role, or Profile) |
+| `/license-users` | License Users — 2 tabs (Users, Overview). CRM gate (empty state when no CRM connected). 5 method cards: Individual Users, By Role, By Profile, By Queue, By Custom Field. Each card opens a searchable multi-select dropdown (no modals). Queue licensing treats queues as routing targets, not seat-consuming users. Overview tab shows stats breakdown by licensing method + licensed queue count. |
+| `/teams` | Teams management — cards show distribution type badge (Round Robin / Weighted) |
+| `/teams/[id]` | Team detail + members (add by individual, Role, or Profile). Distribution type picker (equal vs weighted). Weighted mode: per-member weight sliders, %/pts toggle, distribution bar, equalize button. |
 | `/integrations` | Integrations landing page — card grid (Salesforce active, HubSpot/Zoho coming soon) |
 | `/integrations/salesforce` | Salesforce detail page — 4 sections: Connection, Package Deploy, Object Config, Field Sync |
 | `/settings` | Org settings |
-| `/admin` | Admin portal |
-| `/admin/orgs` | Org management |
 | `/suspended` | Suspension notice |
 
 ### 4.3 Route Builder Component Architecture
@@ -322,7 +321,6 @@ interface RouteBuilderState {
 |------|---------|
 | `auth.ts` | `getOrgIdFromHeaders()`, `getActorFromHeaders()` — read proxy-injected headers |
 | `session.ts` | SessionData interface, `getSession()`, `requireSession()` (iron-session) |
-| `admin-auth.ts` | HMAC-SHA256 admin token signing + validation (8h TTL) |
 | `redis.ts` | Singleton ioredis client (lazyConnect) |
 | `routing-queue.ts` | BullMQ queue for retry jobs (dedicated Redis conn) |
 | `evaluator.ts` | `evaluateRule()` — dry-run condition evaluation (AND/OR groups) |
@@ -419,7 +417,7 @@ POST /route/batch
 |------|---------|
 | `server.ts` | Fastify setup, startup sequence, raw body parser |
 | `routes/route.ts` | POST /route + POST /route/batch handlers, auth/quota/idempotency checks |
-| `router.ts` | Core routing logic — new-style (branches) + legacy modes |
+| `router.ts` | Core routing logic — new-style (branches) + legacy modes; branches on `distributionType` for equal vs weighted round-robin |
 | `evaluator.ts` | Condition evaluation engine (20 operators, AND/OR groups) |
 | `cache.ts` | In-memory rule cache, `loadAllRules()`, pub/sub listener |
 | `queue.ts` | BullMQ queue + worker for retry jobs |
@@ -428,7 +426,7 @@ POST /route/batch
 | `sfdc.ts` | jsforce connection caching, SFDC ID lookups |
 | `webhook.ts` | Fire-and-forget notification webhook (3s timeout) |
 | `idempotency.ts` | Single + bulk Redis idempotency (`claimIdempotencyKey` + `claimIdempotencyKeys` pipeline) |
-| `round-robin.ts` | Atomic Redis Lua script for pointer increment |
+| `round-robin.ts` | Equal + weighted round-robin: `getNextMember()` (equal) and `getNextWeightedMember()` (GCD-normalized, deficit-based interleaving) — atomic Redis Lua script |
 | `middleware/validate-signature.ts` | HMAC-SHA256 verification |
 | `lib/crypto.ts` | AES-256-GCM decryption (`decryptField`) — reads `APP_SECRET` env var |
 | `lib/ai-client.ts` | Multi-provider AI similarity client for fuzzy company name matching |
@@ -456,7 +454,7 @@ POST /route/batch
 | Type | Mechanism |
 |------|-----------|
 | **USER** | Lookup `sfdcUserId` from `users` table → `updateOwner()` |
-| **ROUND_ROBIN** | Atomic Redis Lua `INCR + modulo` → next team member → `updateOwner()` |
+| **ROUND_ROBIN** | Equal: Atomic Redis Lua `INCR + modulo` → next team member. Weighted: GCD-normalized deficit-based interleaved slots → Lua `INCR + modulo` over virtual slot array → `updateOwner()` |
 | **QUEUE** | Lookup `sfdcQueueId` from `sfdcQueues` table → `updateOwner()` |
 
 ### 5.6 Retry & Error Handling
@@ -528,7 +526,7 @@ Step 3: Collect App Config
   ├─ SFDC client ID/secret/login URL
   ├─ Admin email + password
   └─ Auto-generate: dbPassword, sessionSecret,
-     engineWebhookSecret, adminSecret
+     engineWebhookSecret, internalApiKey
 
 Step 4: Generate Files (locally)
   ├─ docker-compose.yml
@@ -675,12 +673,13 @@ Prisma ORM wrapper exporting singleton client + generated types.
 - `PLAN_LIMITS` / `getPlanLimits()` — plan-specific quotas
 - `RULES_INVALIDATE_CHANNEL` — Redis channel constant
 
-**Migrations (5):**
+**Migrations (6+):**
 1. `20260101000000_init` — Initial schema
 2. `20260223000000_add_routing_log_dismissed` — Add dismissedAt
 3. `20260224000000_add_org_notification_webhook` — Add notificationWebhookUrl
 4. `20260227000000_self_hosted_schema_updates` — SFDC columns nullable, app_users/invites, plan/quota
 5. `20260308100000_route_match_config` — Route Builder tables (branches, match config, default owner)
+6. Various: `add_cooldown_stamp_status`, `add_decision_trace`, `add_license_fields`, `add_distribution_type` — Anti-recursion enums, record journey trace, license fields, weighted round robin
 
 ### 8.2 @lead-routing/sfdc (packages/sfdc)
 
@@ -710,10 +709,10 @@ Organization (1)
   │
   ├──▶ AppUser (*)           — Dashboard login users
   ├──▶ Invite (*)            — Registration invites
-  ├──▶ User (*)              — Synced SFDC users
-  ├──▶ RoundRobinTeam (*)
-  │      └──▶ TeamMember (*) — Links User ↔ Team
-  ├──▶ SfdcQueue (*)
+  ├──▶ User (*)              — Synced SFDC users (licensedVia tracks licensing method)
+  ├──▶ RoundRobinTeam (*)    — distributionType: "round-robin" | "weighted"
+  │      └──▶ TeamMember (*) — Links User ↔ Team (weight: Int, default 1)
+  ├──▶ SfdcQueue (*)         — isLicensed: whether queue is a licensed routing target
   ├──▶ FieldSchema (*)
   ├──▶ RoutingRule (*)
   │      ├──▶ RuleCondition (*)     — Legacy conditions
@@ -749,6 +748,13 @@ Organization (1)
 - plan, isActive, seatsPurchased, seatsUsed, routingQuotaUsed, quotaResetAt
 - Integration tracking: `packageDeployedAt`, `packageDeployId`, `packageVersion`, `objectConfig` (JSON), `fieldsSyncedAt`
 
+**User** — Synced SFDC users (routing recipients)
+- isLicensed, isActive, lastRoutedAt
+- `licensedVia` (String?) — tracks how the user was licensed: `"individual"`, `"role"`, `"profile"`, `"custom_field"`, or null (legacy/unknown)
+
+**SfdcQueue** — Synced Salesforce queues
+- `isLicensed` (Boolean) — whether the queue is a licensed routing target; queues do NOT consume user seats
+
 **RoutingRule** — Routing logic definition
 - Legacy: single assignmentType + conditions
 - Route Builder: branches[] + matchConfig? + defaultOwner*
@@ -782,10 +788,6 @@ Organization (1)
 │                 │ PBKDF2-SHA256 password (310k iterations)  │
 │                 │ 7-day cookie maxAge                       │
 ├─────────────────┼───────────────────────────────────────────┤
-│ Admin Portal    │ HMAC-SHA256 signed token (admin_token)    │
-│                 │ Login with ADMIN_SECRET env var            │
-│                 │ 8-hour token lifespan                     │
-├─────────────────┼───────────────────────────────────────────┤
 │ SFDC OAuth      │ OAuth 2.0 + PKCE (code_challenge)         │
 │                 │ Verifier in sfdc_pkce_verifier cookie      │
 │                 │ CLI bridge: in-memory token store          │
@@ -803,11 +805,10 @@ Organization (1)
 Next.js 16 uses `proxy.ts` (NOT `middleware.ts`). On every request:
 
 1. Allow static files and `PUBLIC_PREFIXES`
-2. Check admin routes (admin_token cookie)
-3. Decrypt iron-session → validate `session.orgId`
-4. Check org suspension via Redis
-5. Inject headers: `x-org-id`, `x-user-id`, `x-user-name`
-6. Continue to route handler
+2. Decrypt iron-session → validate `session.orgId`
+3. Check org suspension via Redis
+4. Inject headers: `x-org-id`, `x-user-id`, `x-user-name`
+5. Continue to route handler
 
 ---
 
@@ -886,6 +887,7 @@ Evaluate rule.conditions (AND/OR groups)
 
 ### 11.3 Round-Robin Algorithm
 
+**Equal Round Robin** (`distributionType: "round-robin"`):
 ```
 Redis Lua Script (atomic):
   INCR rr:{orgId}:{teamId}:pointer
@@ -893,6 +895,21 @@ Redis Lua Script (atomic):
 
 Members: sorted by createdAt ASC, filtered to ACTIVE status
 Pointer: persistent across requests, reset via API
+```
+
+**Weighted Round Robin** (`distributionType: "weighted"`):
+```
+1. Normalize weights by GCD  (e.g. [40,40,20] → GCD=20 → [2,2,1])
+2. Build interleaved slot array via deficit-based algorithm:
+   - For each slot position, pick the member most "overdue" (highest deficit)
+   - Deficit = (idealFraction * position) - filledSoFar
+   - Result: [A,B,A,B,C] instead of clustered [A,A,B,B,C]
+3. Same atomic Redis Lua script, but over virtual slots:
+   INCR wrr:{orgId}:{teamId}:pointer
+   RETURN (value - 1) % totalSlots → maps to member
+
+Separate Redis key prefix (wrr: vs rr:) — switching distribution
+type does not corrupt the other mode's pointer.
 ```
 
 ---
@@ -947,7 +964,8 @@ Local Mac (ARM64) → VPS (AMD64): requires `docker buildx build --platform linu
 |------|-------------|---------|
 | Pub/Sub | `rules:invalidate` | Web → Engine: reload rules from DB |
 | Key | `org:suspended:{orgId}` | Org suspension flag (web proxy check) |
-| Key | `rr:{orgId}:{teamId}:pointer` | Round-robin pointer (Lua atomic INCR) |
+| Key | `rr:{orgId}:{teamId}:pointer` | Equal round-robin pointer (Lua atomic INCR) |
+| Key | `wrr:{orgId}:{teamId}:pointer` | Weighted round-robin pointer (Lua atomic INCR over virtual slot array) |
 | Key | `idem:{orgId}:{recordId}:{event}:{ts}` | Idempotency (1h TTL, SET NX) |
 | Queue | `routing-retries` | BullMQ job queue (web enqueue, engine consume) |
 | Queue | `routing-batch` | BullMQ batch processing queue (10 concurrent workers, 20/sec rate limit) |
@@ -1079,6 +1097,14 @@ Tab layout at `/analytics` with shared filter bar (date range, object type, rule
 
 24. **Route_Criteria__c fields not queryable without PermissionSet FLS access** — even if the custom object and fields are deployed successfully, SOQL queries return empty results unless the running user has field-level security granted via the `LeadRouterAdmin` permission set. The permission set must be both deployed AND assigned to the integration user.
 
+25. **License server secrets are in `wrangler.toml` `[vars]`** — must be moved to `wrangler secret put` for production. D1 binding and Stripe keys are currently in plaintext vars.
+
+26. **Ed25519 public key is hardcoded in `verify-license.js`** — the offline JWT verification script bakes in the public key. If the signing key rotates on the license server, Docker images must be rebuilt and redeployed to pick up the new public key.
+
+27. **`yaml.dump` can break `docker-compose.yml` formatting** — Python's `yaml.dump` re-serializes the entire file, potentially reordering keys and stripping comments. Use Python string replacement (e.g., `re.sub`) for targeted edits to docker-compose files.
+
+28. **Marketing site at `/root/marketing-site/` is independent from `/root/lead-routing/`** — safe to wipe `lead-routing/` without losing the marketing site. They share the same Caddy instance but are separate directory trees.
+
 ---
 
 ## 16. AI Routing Assistant
@@ -1127,11 +1153,12 @@ Provider selection and API key configuration are managed in the AI settings page
 
 ### 16.4 Tool-Use Architecture
 
-The assistant exposes 9 org-scoped query tools. Tool definitions (JSON Schema parameters + descriptions) are sent to the LLM as part of the system prompt. When the LLM returns a `tool_use` response, the server-side dispatcher invokes the corresponding Prisma query function, passes the result back to the LLM, and the LLM produces a natural-language answer.
+The assistant exposes 21 org-scoped query tools covering all 21 database tables. Tool definitions (JSON Schema parameters + descriptions) are sent to the LLM as part of the system prompt. When the LLM returns a `tool_use` response, the server-side dispatcher invokes the corresponding Prisma query function, passes the result back to the LLM, and the LLM produces a natural-language answer. Sensitive fields (OAuth tokens, API keys, password hashes, session tokens) are excluded via explicit Prisma `select` clauses.
 
 | Tool | Purpose |
 |------|---------|
-| `query_routing_logs` | Filter routing logs by status, rule, assignee, and/or date range |
+| `query_routing_logs` | Filter routing logs by status, rule, assignee, pathLabel, branchId, and/or date range |
+| `get_branch_performance` | Success/fail/unmatched aggregation per branch (RoutingLog grouped by branchId) |
 | `get_rule_performance` | Success/fail/unmatched aggregation per rule |
 | `get_team_workload` | Assignment counts per team member (grouped by team) |
 | `get_conversion_metrics` | Conversion rate and pipeline value by rule |
@@ -1140,6 +1167,17 @@ The assistant exposes 9 org-scoped query tools. Tool definitions (JSON Schema pa
 | `get_assignee_stats` | Assignment counts per individual assignee (user or queue) across all rules |
 | `explain_rule` | Full rule configuration with branches, conditions, and teams |
 | `get_routing_timeline` | Ordered event history for a specific Salesforce record ID |
+| `list_teams` | Round-robin teams with members, weights, and active/paused status |
+| `list_users` | Salesforce users — licensed status, department, last routed |
+| `query_audit_logs` | Configuration change history (rule edits, licensing, team changes) |
+| `list_queues` | Salesforce queues synced for assignment |
+| `query_company_aliases` | Fuzzy company name match cache with confidence scores |
+| `list_fields` | Available Salesforce fields per object type with picklist values |
+| `get_org_settings` | Organization config — plan, quotas, SFDC connection, package status (secrets stripped) |
+| `list_app_users` | Dashboard login users — role, email, active status (passwords stripped) |
+| `list_invites` | Pending/accepted/expired invitations (tokens stripped) |
+| `get_billing_info` | Billing details — entity name, GSTIN, address |
+| `list_sessions` | Active login sessions — user, expiry (session IDs stripped) |
 
 Each tool function lives in `apps/web/lib/ai/queries.ts` and accepts `orgId` as a mandatory first parameter. The dispatcher in `apps/web/lib/ai/tools.ts` maps tool names to query functions and validates input parameters before execution.
 
@@ -1181,6 +1219,7 @@ The AI Settings page (`/settings/ai`) and Chat page (`/ai-assistant`) are cross-
 | `apps/web/components/ai-chat/PaywallOverlay.tsx` | Upgrade prompt for free-plan users |
 | `apps/web/app/(dashboard)/settings/ai/page.tsx` | AI provider settings page (connect/edit/disconnect providers) |
 | `apps/web/app/(dashboard)/settings/layout.tsx` | Settings layout with tabs (General, Webhooks, AI Assistant) |
+| `apps/web/lib/ai/tools.test.ts` | Unit tests for tool dispatcher and query functions |
 
 ### 16.7 Charts & Visualizations
 
@@ -1345,3 +1384,696 @@ The Match step in `router.ts` includes company name matching as the 4th check (a
 | `apps/engine/src/router.test.ts` | 72 total (10 new) | Company name matching: STRICT, FUZZY, AI_SMART modes |
 
 **Total new tests added: ~50**
+
+---
+
+## §18 Smart Trigger Optimization — Anti-Recursion System
+
+### 18.1 Problem
+
+When the engine routes a record (INSERT event), it updates `OwnerId` via REST API. This fires Salesforce's `after update` trigger, sending the record **back** to the engine as an UPDATE event — wasted callout, confusing activity log, potential infinite loop.
+
+### 18.2 Four-Layer Defense
+
+#### Layer 1 — Smart Flag Sync (`apps/web/lib/sync-routing-flags.ts`)
+
+When rules are created/updated/deleted/toggled, `syncRoutingFlags(orgId)` queries all ACTIVE rules, computes which `{Object}_{Event}_Enabled__c` flags should be true, and writes them to `lrt__Routing_Settings__c` in Salesforce.
+
+- Called from: POST/PUT/DELETE `/api/rules`, clone, status toggle, and deploy route
+- On fresh deploy with no rules, all flags = `false` (no unnecessary callouts)
+- Fire-and-forget with `console.warn` on failure
+
+#### Layer 2 — Routing Action Field Stamp (LeanData pattern)
+
+Custom field `Routing_Action__c` (Text 255) added to Lead, Contact, Account in the managed package (`lrt__Routing_Action__c` in subscriber orgs).
+
+**Engine side** (`packages/sfdc/src/update-owner.ts`): Sets `lrt__Routing_Action__c = "assigned:<ISO timestamp>"` alongside `OwnerId` in the same DML operation.
+
+**Trigger side** (LeadTrigger, ContactTrigger, AccountTrigger): For UPDATE events, checks if `Routing_Action__c` changed AND starts with `"assigned"`. If the engine just stamped it, skips the record:
+
+```apex
+if (l.Routing_Action__c != old.Routing_Action__c
+    && l.Routing_Action__c != null
+    && l.Routing_Action__c.startsWith('assigned')) continue;
+```
+
+#### Layer 3 — Engine-Side Cooldown (`apps/engine/src/cooldown.ts`)
+
+Before updating owner, sets Redis key `cooldown:${orgId}:${recordId}` with 30s TTL. Before processing any UPDATE event, checks the key and logs `COOLDOWN_SKIPPED` if present.
+
+- **Critical timing**: `setCooldown()` must execute BEFORE `updateOwner()` — because `updateOwner()` triggers Salesforce's `after update` trigger which sends the UPDATE callout back to the engine immediately. If cooldown is set after, the UPDATE arrives before the Redis key exists.
+- Fail-open: returns `false` if Redis is unavailable
+- Defense in depth for edge cases where Apex guard might not catch it
+
+#### Layer 4 — Observability & Proactive Alerting
+
+- **`RoutingStatus` enum**: Added `COOLDOWN_SKIPPED` and `STAMP_SKIPPED` values
+- **`GET /api/health/recursive`**: Returns counts of cooldown skips, stamp skips, and recursive bounces (records SUCCESS 2+ times within 60s) across 1h/24h/7d windows
+- **`RecursiveAlertBanner`**: Persistent dashboard banner (red for breaches, amber for cooldown activity), dismissible, polls every 60s
+- **Activity page**: Warning badges for `COOLDOWN_SKIPPED`/`STAMP_SKIPPED` entries; recursive bounce detection with tooltip
+- **Analytics page**: "System Health" section with 3 KPI cards (Recursive Events, Cooldown Skips, Stamp Skips)
+- **Trigger Health page** (`apps/web/app/(dashboard)/trigger-health/page.tsx`): Dedicated dashboard showing health status banner (green/amber/red), KPI cards, safeguard layer status, and recent events table with status badges. Auto-refreshes every 60s via TanStack Query. Accessible from sidebar under "Verify & Debug".
+
+### 18.3 File Map
+
+| File | Change |
+|------|--------|
+| `apps/web/lib/sync-routing-flags.ts` | NEW — compute and sync routing flags to Salesforce |
+| `apps/web/app/api/rules/route.ts` | Call `syncRoutingFlags()` after rule create |
+| `apps/web/app/api/rules/[id]/route.ts` | Call `syncRoutingFlags()` after PUT and DELETE |
+| `apps/web/app/api/rules/[id]/clone/route.ts` | Call `syncRoutingFlags()` after clone |
+| `apps/web/app/api/rules/[id]/status/route.ts` | Call `syncRoutingFlags()` after status toggle |
+| `apps/web/app/api/integrations/salesforce/deploy/route.ts` | Replace hardcoded flags with `syncRoutingFlags()` |
+| `apps/engine/src/cooldown.ts` | NEW — Redis setCooldown/isInCooldown |
+| `apps/engine/src/router.ts` | Cooldown check + `setCooldown()` + `ROUTING_ACTION_FIELD` on all `updateOwner()` calls |
+| `packages/sfdc/src/update-owner.ts` | Optional `routingActionField` parameter for field stamp |
+| `packages/db/prisma/schema.prisma` | Added `COOLDOWN_SKIPPED`, `STAMP_SKIPPED` to `RoutingStatus` |
+| `packages/db/prisma/migrations/20260312200000_add_cooldown_stamp_status/` | Enum migration |
+| `apps/cli/sfdc-package/.../objects/{Lead,Contact,Account}/fields/Routing_Action__c.field-meta.xml` | NEW — custom field for stamp |
+| `apps/cli/sfdc-package/.../triggers/{Lead,Contact,Account}Trigger.trigger` | Stamp guard in UPDATE loop |
+| `apps/web/app/api/health/recursive/route.ts` | NEW — recursive event counts API |
+| `apps/web/components/recursive-alert-banner.tsx` | NEW — dashboard warning banner |
+| `apps/web/app/(dashboard)/layout.tsx` | Include `RecursiveAlertBanner` |
+| `apps/web/app/(dashboard)/activity/page.tsx` | Warning badges + recursive bounce detection |
+| `apps/web/app/(dashboard)/analytics/page.tsx` | System Health KPI cards |
+| `apps/web/app/(dashboard)/trigger-health/page.tsx` | NEW — Trigger Health observability dashboard |
+| `apps/web/components/layout/sidebar.tsx` | Added "Verify & Debug" section with Trigger Health link |
+| `apps/web/proxy.ts` | Exact-match `/api/health` (prevents auth bypass on sub-routes) |
+
+### 18.4 Verification Checklist
+
+1. Create INSERT-only rule → verify `Lead_Update_Enabled__c = false` in Salesforce
+2. Create lead → one event (INSERT only), no UPDATE bounce
+3. Create UPDATE rule → verify flag flips to `true`; delete rule → flips back
+4. After routing: check `lrt__Routing_Action__c = "assigned:..."` on the lead
+5. Manually edit a lead's Status field → UPDATE event fires normally
+6. Engine logs show `COOLDOWN_SKIPPED` for edge cases
+7. Activity page shows warning badges on skip entries
+8. Analytics page shows System Health KPI cards
+9. Trigger Health page (`/trigger-health`) shows green banner, KPI cards, safeguard layers
+10. Recursive alert banner appears when bounce threshold exceeded
+
+---
+
+## 19. Record Journey — Routing Audit Trail
+
+### Purpose
+Complete visibility into **why** a record was routed a certain way. Users enter a Salesforce Record ID on the Activity → Record Journey tab and see every routing decision: which rules were evaluated, which conditions matched/failed, what actual field values were compared, and how assignment was resolved.
+
+### Data Model
+Single `decisionTrace Json?` column on the existing `RoutingLog` model. The engine populates this with a structured JSON trace during routing. No separate model needed — trace data is always read alongside the log entry.
+
+- **Migration**: `20260314000000_add_decision_trace` — adds JSONB column + composite index on `(orgId, sfdcRecordId, createdAt)`
+- **Backward compatible**: Existing logs have `decisionTrace: null`. UI shows simplified view for null traces.
+
+### DecisionTrace Schema
+```
+{
+  version: 1,
+  trigger: { event, objectType, recordId, timestampMs },
+  cooldown?: { checked: true, skipped: boolean },
+  rulesEvaluated: [{
+    ruleId, ruleName, priority,
+    outcome: "MATCHED" | "UNMATCHED" | "SKIPPED_TRIGGER_EVENT",
+    matchPhase?: { config, checks[], result },
+    branches?: [{ branchId, label, priority, matched, conditionGroups[] }],
+    legacyConditions?: [{ groupId, groupMatched, conditions[] }],
+    defaultOwner?: { evaluated, resolved }
+  }],
+  assignment?: { type, assigneeName, assigneeId, teamId, teamName, source, branchLabel },
+  timing: { totalMs, cooldownCheckMs?, matchPhaseMs?, evaluationMs?, assignmentMs?, sfdcUpdateMs? }
+}
+```
+
+### Engine Instrumentation
+- `evaluateRuleDetailed()` in `evaluator.ts` — same logic as `evaluateRule()` but returns per-condition pass/fail with actual values
+- `router.ts` builds a `DecisionTrace` object alongside routing execution:
+  - Cooldown check → `trace.cooldown`
+  - Rule filtering → `trace.rulesEvaluated` (skipped trigger events)
+  - Match phase → `ruleTrace.matchPhase` (config, checks, result)
+  - Branch evaluation → `ruleTrace.branches` (each with `evaluateRuleDetailed` results)
+  - Default owner → `ruleTrace.defaultOwner`
+  - Assignment → `trace.assignment`
+- Trace is attached to the final routing log via `attachTrace()` after routing completes (single DB update, avoids modifying every log create call)
+
+### APIs
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/routing-logs/journey/[recordId]` | GET | All routing events for one record (limit 50) |
+| `/api/routing-logs/journey/batch` | POST | Batch: up to 100 record IDs, grouped response with `meta` block |
+
+**Batch request**: `{ recordIds: string[], limit?: number, since?: string }`
+**Batch response**: `{ records: { [id]: { objectType, totalEvents, entries[] } }, meta: { requestedIds, foundIds, missingIds, truncated } }`
+
+### UI Components
+| File | Purpose |
+|------|---------|
+| `app/(dashboard)/activity/journey/page.tsx` | Search bar + record header + results container |
+| `components/record-journey/JourneyTimeline.tsx` | Vertical timeline rendering all events |
+| `components/record-journey/JourneyStep.tsx` | Expandable event card with trace detail |
+| `components/record-journey/ConditionTable.tsx` | Field/operator/expected/actual/result table (green/red rows) |
+| `components/record-journey/AssignmentCard.tsx` | Assignment detail with team/RR info |
+| `components/record-journey/TimingBreakdown.tsx` | Horizontal bar chart showing time per phase |
+
+### Activity Side Panel
+Clicking any row in the Routing History table opens a Sheet (slide-in panel) showing the full journey detail for that routing event — same `TraceDetail` / `NoTraceDetail` components used in the Record Journey tab. Implemented in `activity/page.tsx` using shadcn `Sheet` component.
+
+### Journey Steps (per event)
+1. **Trigger** — event type, object type, timestamp
+2. **Cooldown Check** — pass/blocked
+3. **Match / Dedup Check** — which objects searched, which fields used, result
+4. **Rule Evaluation** — all rules evaluated with expandable condition tables
+5. **Assignment** — type, team, round-robin position, source
+
+### Test Coverage
+| File | Tests | Coverage |
+|------|-------|----------|
+| `apps/engine/src/evaluator-detailed.test.ts` | 10 | `evaluateRuleDetailed()` — pass/fail detail, group logic, value capture, truncation, case normalization |
+| `apps/engine/src/router.test.ts` (§ Decision Trace) | 7 | Trace attachment via `findFirst`+`update`, trigger info, UNMATCHED/SKIPPED rules, timing, branch traces, null safety |
+| `apps/web/app/api/routing-logs/journey/[recordId]/route.test.ts` | 8 | Auth, ID validation, scoping, empty results, 15/18-char IDs, limit |
+| `apps/web/app/api/routing-logs/journey/batch/route.test.ts` | 10 | Auth, empty/missing IDs, 100-ID limit, grouping, meta block, invalid IDs, per-record limit |
+
+### Migration Strategy
+- Existing RoutingLog entries have `decisionTrace: null`
+- UI shows simplified view for null traces (using existing flat fields)
+- Info banner: "Detailed routing trace is not available for events before this feature was enabled"
+- No backfill needed — traces accumulate going forward
+
+---
+
+## 20. Scheduled Routes & Search Salesforce Trigger
+
+### Purpose
+Enables **batch/retrospective routing**: the system queries Salesforce on a schedule (or manually) for records matching user-defined criteria, then feeds them through the same routing pipeline used by real-time triggers. This is a new route type (`SCHEDULED`) that runs independently of the Apex trigger.
+
+### Architecture Overview
+```
+                REAL-TIME FLOW (existing)
+Salesforce Apex ──POST──▶ Engine /route ──▶ routeRecord() ──▶ SFDC Update
+
+                SCHEDULED FLOW (new)
+BullMQ Cron Job ──▶ Engine: runScheduledRoute()
+                      ├── Build SOQL from searchCriteria + objectType
+                      ├── Query Salesforce (batched, paginated)
+                      ├── For each record: routeRecord({ eventType: "SEARCH", ruleId })
+                      ├── Update rule stats (lastRunAt, totalRuns, etc.)
+                      └── Log run result
+
+Web UI "Run Now" ──POST──▶ /api/rules/[id]/run
+                      ├── Build SOQL from searchCriteria (filters empty values)
+                      ├── Query Salesforce REST API (comprehensive field list)
+                      ├── POST /route/batch (HMAC-signed, ruleId + eventType: SEARCH)
+                      ├── Engine: BullMQ worker → routeRecord({ ruleId }) per record
+                      └── Only target rule evaluated (others skipped)
+```
+Both flows converge at `routeRecord()` — same evaluator, branches, match step, and assignment logic. The only difference is the **source of records** (Apex webhook vs SOQL query).
+
+### Schema Changes
+
+**New enum**: `RouteType` (`REALTIME` | `SCHEDULED`)
+**Extended enum**: `TriggerEvent` — added `SEARCH` value
+
+**New fields on `RoutingRule`**:
+| Field | Type | Purpose |
+|-------|------|---------|
+| `routeType` | `RouteType` | Distinguishes real-time from scheduled routes (default: `REALTIME`) |
+| `scheduleFrequency` | `String?` | `DAILY` / `WEEKLY` / `MONTHLY` / null (one-time) |
+| `scheduleTime` | `String?` | Time of day in 24h format, e.g. `"06:00"` |
+| `scheduleTimezone` | `String?` | IANA timezone, e.g. `"UTC"`, `"US/Eastern"` |
+| `scheduleCron` | `String?` | Computed cron expression for BullMQ |
+| `searchCriteria` | `Json?` | `ConditionGroup[]` — same shape as trigger conditions |
+| `lastRunAt` | `DateTime?` | Timestamp of last scheduled execution |
+| `lastRunStatus` | `String?` | `SUCCESS` / `FAILED` / `PARTIAL` |
+| `lastRunRecords` | `Int?` | Records routed in last run |
+| `lastRunDurationMs` | `Int?` | Duration of last run |
+| `totalRuns` | `Int` | Cumulative run count |
+| `totalRecordsRouted` | `Int` | Cumulative records routed across all runs |
+
+**Migration**: `20260314000000_add_route_type`
+
+### Engine Files
+
+| File | Purpose |
+|------|---------|
+| `apps/engine/src/soql-builder.ts` | Converts `ConditionGroup[]` → SOQL queries. `buildSearchSOQL()` for data retrieval, `buildCountSOQL()` for preview counts. Includes SOQL injection prevention via `escapeSoqlField()` / `escapeSoqlValue()`. Smart quoting: numeric values and SOQL date literals (`LAST_N_DAYS:7`, `TODAY`) are unquoted. |
+| `apps/engine/src/search-runner.ts` | Core execution logic: `runScheduledRoute(ruleId, orgId)` — loads rule, builds SOQL, paginates SFDC query, routes each record through `routeRecord()` with `eventType: "SEARCH"`, updates rule stats. |
+| `apps/engine/src/scheduler.ts` | BullMQ cron job manager: `initScheduler()` creates queue + worker, `syncScheduledJobs()` upserts/removes repeatable jobs based on active scheduled rules. Called on startup and cache invalidation. |
+| `apps/engine/src/routes/scheduled.ts` | Fastify plugin: `POST /run-scheduled` (manual trigger) and `POST /preview-count` (record count without routing). |
+
+### Router Changes
+- `RoutingPayload.eventType` now includes `"SEARCH"`
+- `RoutingPayload.ruleId` (optional) — when set, only the specified rule is evaluated (all others are skipped with `SKIPPED_TRIGGER_EVENT` trace)
+- SEARCH events bypass the `triggerEvent` filter (no INSERT/UPDATE check)
+- SEARCH events only match rules with `routeType === "SCHEDULED"` (or when `targetRuleId` is set)
+- The web run endpoint (`POST /api/rules/:id/run`) passes `ruleId` through to engine `/route/batch`, which threads it through BullMQ jobs to `routeRecord()` — ensuring only the target scheduled rule evaluates records, even when multiple scheduled rules exist
+
+### Cache Changes
+`CachedRule` extended with: `routeType`, `searchCriteria`, `scheduleFrequency`, `scheduleCron`
+
+### Web API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/rules` | GET | Returns `routeType`, schedule fields, run stats |
+| `/api/rules` | POST | Accepts `routeType`, schedule fields, `searchCriteria` |
+| `/api/rules/[id]` | PUT | Updates schedule fields |
+| `/api/rules/[id]/run` | POST | Manual execution of scheduled routes (ADMIN only) |
+| `/api/rules/[id]/preview` | GET | Returns count of records matching `searchCriteria` |
+
+### Frontend Components
+
+| File | Purpose |
+|------|---------|
+| `components/route-builder/types.ts` | Added `RouteType`, `ScheduleFrequency`, `SearchTriggerConfig` types. `RouteBuilderState` now includes `routeType` and `searchTrigger`. |
+| `components/route-builder/config/SearchTriggerConfigSheet.tsx` | Config panel for search trigger: name, object type, search criteria (reuses `ConditionBuilder`), frequency (Schedule vs One-time with amber disclaimer), advanced section (batch size, skip recently routed, dry run). |
+| `components/route-builder/StepRegistry.tsx` | Added `searchTrigger` node type. Registry now has 3 sections: Triggers, Actions, (implicit Notifications placeholder). |
+| `components/route-builder/RouteBuilder.tsx` | Canvas supports dual trigger nodes (real-time violet + search teal), both fan-out to match. Drop handler creates searchTrigger node beside trigger. Delete handler re-centers trigger. |
+| `lib/builder-to-rule.ts` | Converts `searchTrigger` config → API body with `routeType: "SCHEDULED"`, `triggerEvent: "SEARCH"`, schedule fields, and `searchCriteria`. Reverse conversion (`apiRuleToBuilderState`) reconstructs `searchTrigger` from rule data. |
+
+### BullMQ Scheduler
+- Queue name: `route-scheduler`
+- Worker concurrency: 3
+- Job key format: `route-{ruleId}`
+- `syncScheduledJobs()` called on engine startup + cache invalidation
+- Stale jobs (inactive/deleted rules) automatically cleaned up
+- Repeatable jobs use `upsertJobScheduler()` with cron pattern from `scheduleCron`
+
+### Test Coverage
+| File | Tests |
+|------|-------|
+| `apps/engine/src/soql-builder.test.ts` | 22 — all operators, date literals, numeric values, injection escaping, COUNT queries |
+| `apps/web/lib/builder-to-rule.test.ts` | 13 — includes searchTrigger → API body conversion |
+| `apps/engine/src/router.test.ts` | ruleId targeting — skips non-target rules, routes only target rule, unmatched when conditions fail |
+| `apps/web/lib/route-to-english.test.ts` | Search trigger section — daily/one-time schedules, criteria, dry run, batch size, coexistence with real-time trigger, warnings |
+| `apps/web/lib/build-soql.test.ts` | Empty-value filtering — skips empty values for value-requiring operators, keeps no-value operators (is_blank, is_true) |
+
+---
+
+## 21. Weighted Round Robin Distribution
+
+### 21.1 Overview
+
+Teams now support two distribution modes controlled by the `distributionType` column on `RoundRobinTeam`:
+
+| Mode | Value | Behavior |
+|------|-------|----------|
+| **Equal Round Robin** | `"round-robin"` (default) | Members receive leads in strict sequential order, one each in turn |
+| **Weighted Round Robin** | `"weighted"` | Members receive leads proportional to their `weight` values |
+
+Switching distribution type is non-destructive — each mode uses a separate Redis pointer key (`rr:` vs `wrr:`), so reverting preserves the other mode's position.
+
+### 21.2 Schema
+
+**`RoundRobinTeam.distributionType`** — `String @default("round-robin")`, values: `"round-robin"` | `"weighted"`
+
+**`TeamMember.weight`** — `Int @default(1)` (pre-existing column, now actively used in weighted mode)
+
+### 21.3 Engine Algorithm (`round-robin.ts`)
+
+**`getNextWeightedMember(orgId, teamId, activeMembers)`:**
+
+1. **GCD normalization** — Divide all weights by their GCD to minimize the virtual slot array size. Example: weights [40, 40, 20] → GCD 20 → normalized [2, 2, 1] → 5 total slots
+2. **Deficit-based interleaving** — Build a slot array where members are spread evenly rather than clustered:
+   - For each slot position, pick the member with the highest "deficit" score
+   - Deficit = `(idealFraction * (position + 1)) - filledSoFar`
+   - Produces `[A, B, A, B, C]` instead of `[A, A, B, B, C]`
+3. **Atomic Redis pointer** — Same Lua script as equal RR (`INCR + modulo`), but modulo is over total virtual slots, and the result maps back to a member via the slot array
+4. **Separate Redis key** — `wrr:{orgId}:{teamId}:pointer` (not `rr:`)
+
+**`resetWeightedPointer(orgId, teamId)`** — Resets the weighted pointer to 0.
+
+### 21.4 Router Integration (`router.ts`)
+
+In `resolveAssigneeFromFields()`, the ROUND_ROBIN branch:
+1. Fetches `team.distributionType` alongside the team data
+2. If `"weighted"` → calls `getNextWeightedMember()` with members including their `weight` field
+3. If `"round-robin"` → calls existing `getNextMember()` (unchanged)
+
+### 21.5 API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `PUT /api/teams/:id/weights` | PUT | Bulk update member weights. Body: `{ mode: "percentage" \| "points", weights: { [userId]: number } }`. Percentage mode: values must sum to 100. Points mode: values must sum to 10. All values must be non-negative integers. All userIds must be existing team members. |
+| `PATCH /api/teams/:id/members/:userId` | PATCH | Update individual member status + optional `weight` field |
+| `GET /api/teams/:id` | GET | Returns `distributionType` on team + `weight` per member |
+| `POST /api/teams` | POST | Accepts optional `distributionType` (validated: must be `"round-robin"` or `"weighted"`) |
+| `PUT /api/teams/:id` | PUT | Accepts `distributionType` changes |
+
+### 21.6 UI
+
+**Team Detail Page** — Distribution type picker (two cards: Equal Round Robin / Weighted), appears below the team header. Selecting "Weighted" reveals:
+- Per-member weight sliders with numeric input
+- Percentage / Points mode toggle
+- Distribution preview bar showing proportional allocation
+- Auto-redistributing sliders (adjusting one member rebalances others)
+- Equalize button to reset all weights to equal
+
+**Team List Page** — Distribution type badge on each team card (`Round Robin` or `Weighted`).
+
+### 21.7 Key Files
+
+| File | Purpose |
+|------|--------|
+| `apps/engine/src/round-robin.ts` | `getNextWeightedMember()`, `resetWeightedPointer()`, `buildInterleavedSlots()`, `gcd()`, `gcdArray()` |
+| `apps/engine/src/router.ts` | Branches on `distributionType` in ROUND_ROBIN assignment resolution |
+| `apps/web/app/api/teams/[id]/weights/route.ts` | Bulk weight update endpoint with mode-based validation |
+| `apps/web/app/api/teams/route.ts` | Create team with `distributionType` |
+| `apps/web/app/api/teams/[id]/route.ts` | Team detail includes `distributionType` + member `weight`; PUT accepts `distributionType` |
+| `apps/web/app/api/teams/[id]/members/[userId]/route.ts` | PATCH accepts optional `weight` |
+| `packages/db/prisma/schema.prisma` | `distributionType` on `RoundRobinTeam`, `weight` on `TeamMember` |
+
+### 21.8 Test Coverage
+
+| File | Tests |
+|------|-------|
+| `apps/engine/src/round-robin.test.ts` | Weighted RR: empty members, single member, `wrr:` key prefix, GCD normalization (40/40/20 → 5 slots), distribution proportionality over 100 iterations, equal weights produce equal distribution, interleaving order |
+
+---
+
+## 22. Run Route Experience
+
+### Purpose
+Provides a full manual execution workflow for scheduled routes — from the route list (quick inline run) and from the route detail page (detailed phased execution with real-time progress tracking).
+
+### Run Route API
+
+**`POST /api/rules/:id/run`** — Executes a scheduled route manually. Full pipeline:
+1. Loads rule's `searchCriteria` and `objectType` from database
+2. Loads org's `sfdcOrgId`, `oauthAccessToken`, and `webhookSecret`
+3. Builds SOQL with comprehensive field list per object type (Lead: 20+ fields, Contact: 16, Account: 14) so the engine can evaluate rule conditions
+4. Filters out criteria with empty values (prevents invalid SOQL like `AnnualRevenue > ''`)
+5. Queries Salesforce via REST API (`/services/data/v59.0/query`)
+6. Sends records to engine via `POST /route/batch` in batches of 200, signed with HMAC-SHA256 (`X-Signature-256: sha256=<hex>`)
+7. Payload includes `eventType: "SEARCH"` and `ruleId: rule.id` — ensures only the target rule evaluates records
+8. Updates run stats on RoutingRule and creates audit log entry
+9. Returns `{ success, recordsFound, recordsRouted, recordsDuplicate, durationMs }`
+
+### SOQL Builder (`apps/web/lib/build-soql.ts`)
+
+Converts `searchCriteria` JSON (same `ConditionGroup[]` shape used by trigger conditions) into a SOQL `WHERE` clause. Supported operators:
+
+| Operator | SOQL Output |
+|----------|-------------|
+| `equals` | `Field = 'value'` |
+| `not_equals` | `Field != 'value'` |
+| `contains` | `Field LIKE '%value%'` |
+| `starts_with` | `Field LIKE 'value%'` |
+| `greater_than` | `Field > 'value'` |
+| `less_than` | `Field < 'value'` |
+| `in` | `Field IN ('a','b','c')` |
+| `not_in` | `Field NOT IN ('a','b','c')` |
+| `is_blank` | `Field = null` |
+| `is_not_blank` | `Field != null` |
+
+Single quotes in values are escaped (`'` → `\'`) to prevent SOQL injection.
+
+### Route List Run UX
+
+Clicking the **Play** button on a scheduled route card triggers inline execution:
+- Progress bar appears directly on the card with phase labels and percentage
+- Completion triggers a toast notification and automatic stat refresh
+- No page navigation required — the user stays on the route list
+
+### Route Detail Run UX
+
+**"Run Route" button** in the top bar (visible only for `SCHEDULED` routes) opens the slide-out `RunPanel`:
+- **Dynamic workflow phases** based on route configuration (via `RouteStepsConfig`): always includes Query SF + Assign; conditionally adds Match and Filter/Route steps based on `hasMatch`, `hasPaths`, `hasDefaultOwner`
+- **Real API data** — calls `/api/rules/:id/run`, displays actual `recordsFound`, `recordsRouted`, `durationMs`
+- **Elapsed timer** showing real-time duration
+- **Completion summary** with record counts, green/red status
+- **Error handling** with red state display on failure
+
+### RunPanel Component (`apps/web/components/route-builder/RunPanel.tsx`)
+
+Slide-out panel that visualizes the route execution workflow:
+- `RouteStepsConfig` interface: `{ hasMatch, hasPaths, hasDefaultOwner }` — passed from `RouteBuilder`
+- `buildSteps(config)` dynamically creates workflow steps based on route config
+- Each phase maps to a canvas node type (trigger → match → filter → assign)
+- Canvas nodes **glow teal** during their active phase and **green** when completed
+- Panel slides in from the right side of the route builder canvas
+
+### English View — Search Trigger
+
+The English/natural language view (`route-to-english.ts`) now renders search triggers:
+- Section id: `"search-trigger"`, type: `"trigger"`, title: `"SEARCH TRIGGER"`
+- Renders schedule description (daily/weekly/monthly at time+timezone, or one-time/manual)
+- Renders search criteria as human-readable conditions
+- Shows options: skip recently routed, dry run, non-default batch size
+- Validation warnings: missing search criteria (warning), active dry run (info)
+- `EnglishSectionCard` renders with teal color + Search icon (distinct from violet real-time trigger)
+- `PathDetailPanel` shows full config detail (object, schedule, batch size, criteria tokens)
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/web/app/api/rules/[id]/run/route.ts` | Run Route API — SOQL build, SF query, engine `/route/batch` integration with HMAC signing + ruleId targeting |
+| `apps/web/lib/build-soql.ts` | SOQL builder — `searchCriteria` → WHERE clause conversion with empty-value filtering |
+| `apps/web/lib/build-soql.test.ts` | Tests for SOQL builder — operator coverage, escaping, empty values, edge cases |
+| `apps/web/lib/route-to-english.ts` | English view — `buildSearchTriggerSection()` + search trigger warnings |
+| `apps/web/components/route-builder/RunPanel.tsx` | Slide-out execution panel with dynamic steps, real API data, and run history |
+| `apps/web/components/route-builder/EnglishView.tsx` | English view layout — renders search trigger card with teal styling |
+| `apps/web/components/route-builder/PathDetailPanel.tsx` | Detail panel — search trigger config + criteria token rendering |
+| `apps/web/components/route-builder/EnglishSectionCard.tsx` | Section card — teal override for search-trigger id |
+| `apps/engine/src/router.ts` | `RoutingPayload.ruleId` + `targetRuleId` filtering in `routeRecord()` |
+| `apps/engine/src/routes/route.ts` | Batch endpoint — extracts `ruleId` from payload, threads to BullMQ jobs |
+| `apps/engine/src/batch-queue.ts` | `BatchJobData.ruleId` — worker passes to `routeRecord()` |
+| `apps/engine/src/lib/schemas.ts` | Zod schemas — `SEARCH` eventType + optional `ruleId` |
+
+---
+
+## 23. Theme & Design System
+
+### Color System
+The app uses CSS custom properties defined in `apps/web/app/globals.css` with full light and dark mode support.
+
+- **Light mode** (`:root`): Warm off-white palette with `#f8f7f4` background, `#6d5acd` violet primary
+- **Dark mode** (`.dark`): Deep space aesthetic with `#050508` background, `#7c6aff` violet primary, glass morphism effects
+- **Sidebar**: Always dark in both themes (dark nav anchor pattern, like Linear/Notion)
+- **Semantic tokens**: `--success`, `--warning`, `--info` with surface variants for status colors
+
+### Theme Toggle
+- Component: `apps/web/components/theme-toggle.tsx`
+- Three-state cycle: Light → Dark → System
+- Uses `next-themes` (already configured in `providers.tsx` with `attribute="class"`)
+- Located in sidebar footer
+
+### Typography
+- **Display font**: Clash Display (via Fontshare CDN) — used for page titles, stat numbers, headings
+- **Body font**: Cabinet Grotesk (via Fontshare CDN) — default `font-sans`
+- Tailwind utility: `font-display` maps to Clash Display
+
+### Visual Effects
+- **Aurora background**: Animated gradient orbs behind dashboard content (`.aurora-bg` class in dashboard layout)
+- **Noise grain**: SVG feTurbulence overlay on body (1.8% light / 3% dark opacity)
+- **Glass morphism**: `backdrop-filter: blur(16px)` on cards in dark mode (`.glass-card` class)
+- **Animations**: `cardSlide` (staggered entrance), `shimmer` (button gradient), `pip-pulse` (status dot)
+- **Reduced motion**: All animations disabled via `prefers-reduced-motion: reduce`
+
+### Dark Mode Color Convention
+All hard-coded Tailwind color classes have `dark:` counterparts:
+```
+bg-violet-50 dark:bg-violet-950
+text-violet-600 dark:text-violet-400
+border-violet-200 dark:border-violet-800
+```
+When adding new colored UI, always include both light and dark variants.
+
+---
+
+## 24. Licensing & Monetization System
+
+### 24.1 Overview
+
+Two-tier monetization model enforced across CLI, web app, and engine:
+
+| Tier | Price | Rules | Orgs | Seats | Trigger Types | Advanced Features |
+|------|-------|-------|------|-------|---------------|-------------------|
+| **Free** | $0 | 2 | 1 | 3 | Lead only | None |
+| **Pro** | $999/year ($500 renewal) | Unlimited | Unlimited | Unlimited | Lead, Contact, Account | Weighted distribution, analytics, audit logs |
+
+Enforcement points: CLI init gate, container startup phone-home, weekly heartbeat from engine.
+
+License server: Cloudflare Worker + D1 at `lead-routing-license.artyagi2011.workers.dev`.
+Payment: Stripe subscriptions (checkout + webhooks).
+
+### 24.2 License Server (`license-server/`)
+
+Cloudflare Worker running a Hono router with D1 (SQLite) for license persistence. Signs offline-verifiable JWTs using Ed25519.
+
+**Key format:** `LR-XXXX-XXXX-XXXX-XXXX`
+
+**Endpoints:**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/v1/licenses/validate` | Validate key, return tier + JWT token |
+| `POST` | `/v1/licenses/heartbeat` | Weekly check-in from engine, extends grace window |
+| `POST` | `/v1/checkout/create` | Create Stripe Checkout session for Pro upgrade |
+| `POST` | `/v1/stripe/webhook` | Handle Stripe events (checkout.completed, invoice.paid, subscription.deleted) |
+
+**Server fingerprint binding:** Licenses are bound to a hostname-based fingerprint generated during first validation. Prevents key sharing across deployments.
+
+### 24.3 CLI License Step
+
+Step 1 of 9 in the `init` wizard (`apps/cli/src/steps/validate-license.ts`).
+
+1. Prompt for license key (press Enter to skip → free tier)
+2. `POST /v1/licenses/validate` against the license API
+3. Store `LICENSE_KEY` and `LICENSE_TIER` in `.env.web`, `.env.engine`, and `lead-routing.json`
+
+Free-tier users skip this step entirely — containers default to free tier when no key is present.
+
+### 24.4 Container Enforcement
+
+**Web (`docker-entrypoint.sh`):**
+- Phones home to license server before starting Next.js
+- On network failure: falls back to offline JWT verification via `verify-license.js` (Ed25519 signature check)
+- Defaults to free tier if no key or if server is unreachable
+
+**Engine (`server.ts` → `start()`):**
+- License check runs during engine startup
+- Same fallback logic: offline JWT → free tier default
+
+### 24.5 Feature Gating (`apps/web/lib/license.ts`)
+
+Central gating module with three exports:
+
+| Function | Purpose |
+|----------|---------|
+| `getLicenseTier()` | Reads `LICENSE_TIER` env var, returns `"free"` or `"pro"` |
+| `getTierLimits()` | Returns tier-specific limits (rules, orgs, seats, trigger types) |
+| `upgradeRequiredResponse()` | Returns a `402` JSON response with upgrade messaging |
+
+**Free Tier Limits (`FREE_LIMITS`):**
+
+| Feature | Limit |
+|---------|-------|
+| Seats (licensed users) | 3 |
+| Routing rules | 2 |
+| Object types | Lead only (Contact/Account locked) |
+| Distribution | Round-robin only (no weighted) |
+| Analytics | Not available |
+| Audit logs | Not available |
+| AI assistant | Not available |
+
+**Pro Tier Limits (`PRO_LIMITS`):**
+
+| Feature | Limit |
+|---------|-------|
+| Seats (licensed users) | Unlimited |
+| Routing rules | Unlimited |
+| Object types | Lead, Contact, Account |
+| Distribution | Round-robin + weighted |
+| Analytics & conversions | Full access |
+| Audit logs | Full access |
+| AI assistant | Full access |
+
+**Enforcement Points:**
+
+| Layer | Location | Behavior |
+|-------|----------|----------|
+| **UI** | `TriggerConfigSheet`, `SearchTriggerConfigSheet`, integrations/salesforce page | Contact/Account `SelectItem`s disabled with PRO badge overlay |
+| **API** | `POST /api/rules`, `POST /api/rules/[id]/clone`, `POST /api/fields/sync`, `GET /api/integrations/salesforce/objects` | Return `402 upgrade_required` when free-tier limits exceeded |
+| **API** | `POST /api/users/:id/license`, `POST /api/users/bulk-license` | Seat count limit enforcement |
+| **API** | `PUT /api/teams/:id/weights` | Pro only (weighted distribution) |
+| **API** | `GET /api/analytics/*` | Pro only |
+| **API** | `GET /api/audit-logs` | Pro only |
+| **Seed** | `seed.js` | Reads `LICENSE_TIER` env var → sets `seatsPurchased` (3 for free, 9999 for pro) |
+| **Config** | `apps/web/lib/license.ts` | `FREE_LIMITS` and `PRO_LIMITS` objects, `getLicenseTier()` reads `process.env.LICENSE_TIER` |
+
+### 24.6 UI Paywalls & Upgrade Prompts
+
+Free-tier users see paywalled previews across the dashboard to entice upgrades. Each paywall shows real-looking dummy data behind a frosted overlay with an "Upgrade to Pro" CTA linking to `https://openedgeai.tech/pricing`.
+
+| Page | Component/File | Behavior |
+|------|---------------|----------|
+| **Routing Rules** | `apps/web/app/(dashboard)/routing-rules/page.tsx` | Violet banner at top when rule limit reached. "New Route" button disabled with Pro badge. Clone button disabled with tooltip. Fetches `/api/license` to check limits. |
+| **Analytics** | `apps/web/app/(dashboard)/analytics/page.tsx` | Dummy KPI cards (2,847 routed, 94.2% success, 4.8s speed), volume chart, and top-rules table rendered behind `blur-[3px] opacity-40` overlay. `AnalyticsPaywall` component overlays with lock icon. Real API queries disabled (`enabled: !isFree`). |
+| **AI Assistant** | `apps/web/components/ai-chat/ChatWindow.tsx` + `PaywallOverlay.tsx` | Dummy chat conversation with inline KPI cards, bar charts, and team comparison table behind `blur-[3px] opacity-40`. `PaywallOverlay` renders as a solid card (`bg-white dark:bg-gray-900 shadow-2xl`) centered over the blurred content. Feature checklist included. |
+| **Settings > AI Assistant** | `apps/web/app/(dashboard)/settings/ai/page.tsx` | License check via `/api/license`. Free tier shows paywall card (`fixed` centered on viewport) over blurred provider cards and usage stats (`blur-[3px] opacity-40`). |
+
+**Sidebar badges:** Analytics and AI Assistant show gradient "Pro" badges. Activity does not have a Pro badge (it is available on all tiers).
+
+**Design pattern:** All paywalls use consistent styling — violet gradient CTA button, `shadow-2xl shadow-violet-500/10` on the overlay card, and `blur-[3px] opacity-40` on background content to keep it visible but clearly inaccessible.
+
+### 24.7 Heartbeat System (`apps/engine/src/license-heartbeat.ts`)
+
+BullMQ repeatable job scheduled for Sundays at 00:00 UTC. Also fires on engine startup.
+
+- `POST /v1/licenses/heartbeat` with license key + server fingerprint
+- Result cached in Redis key `license:heartbeat:latest`
+- Web dashboard reads heartbeat status via `GET /api/license/status`
+
+### 24.8 Grace Period
+
+After a Stripe subscription lapses (non-renewal or cancellation):
+
+1. **30-day grace period** — Pro features continue working
+2. **After grace** — automatic downgrade to free tier
+3. **Data preservation** — no data is deleted; existing rules/users beyond free-tier limits become read-only
+
+### 24.9 Marketing Site Architecture
+
+Static HTML site served by Caddy at `openedgeai.tech`. Deployed independently from the lead-routing application stack.
+
+**Deployment:**
+- Served from `/root/marketing-site/` on the VPS via a standalone `marketing-caddy` container
+- Has its own `docker-compose.yml` and `Caddyfile` at `/root/marketing-site/`
+- Uses `restart: unless-stopped` — survives VPS reboots without manual intervention
+- Completely independent from the lead-routing stack at `/root/lead-routing/`
+- When testing `lead-routing init` on the same VPS, must stop `marketing-caddy` first to free ports 80/443
+
+**Files:**
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Landing page with pricing, features, hero section |
+| `dashboard.html` | Product screenshots / demo page |
+| `docs.html` | Full documentation page (see 24.9.1 below) |
+| `login.html` | Marketing login page |
+| `signup.html` | Marketing signup page |
+| `verify-email.html` | Email verification page |
+| `shared.css` | Shared styles across all marketing pages |
+
+- Stripe Checkout integration for Pro purchases (links to `POST /v1/checkout/create`)
+- Test mode: card `4242 4242 4242 4242`
+
+#### 24.9.1 Documentation Page (`site/docs.html`)
+
+Full documentation page with dark theme, providing setup guides, how-to videos, FAQ, and troubleshooting.
+
+**Layout:** Three-part responsive layout:
+- Left sidebar (260px fixed) — section navigation with nested links
+- Scrollable main content area — all documentation sections
+- Sticky right TOC — table of contents tracking current scroll position
+
+**Sections:**
+1. **Setup Guide** — All 15 setup steps migrated from `docs/setup-guide.html`
+2. **How To Videos** — Video embeds for common workflows
+3. **FAQ** — Accordion-style frequently asked questions
+4. **Troubleshooting** — Common issues and fixes
+5. **Changelog** — Version history and release notes
+
+**JavaScript Features:**
+- `IntersectionObserver` for active navigation highlighting as user scrolls
+- Search filter to find documentation sections by keyword
+- Copy-to-clipboard on code blocks
+- Video embed support
+- FAQ accordion (expand/collapse)
+
+**Styling:** CSS lives in `site/shared.css` under the `/* -- Docs -- */` section.
+
+**Mobile:** Responsive design with hamburger menu toggling the left sidebar on smaller viewports.
+
+### 24.10 Stripe Integration
+
+**Webhook events handled:**
+
+| Event | Action |
+|-------|--------|
+| `checkout.session.completed` | Activate Pro license, bind to server fingerprint |
+| `invoice.paid` | Extend license expiry |
+| `customer.subscription.deleted` | Start 30-day grace countdown |
+
+Test mode card: `4242 4242 4242 4242`, any future expiry, any CVC.

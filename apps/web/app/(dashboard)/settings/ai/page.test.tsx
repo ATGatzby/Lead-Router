@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AiSettingsPage from "./page";
@@ -18,88 +18,106 @@ function createWrapper() {
   };
 }
 
-function mockFetchResponse(data: unknown) {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve(data),
+function mockFetchResponses(overrides: {
+  license?: { tier: string };
+  ai?: {
+    provider: string | null;
+    model: string | null;
+    baseUrl: string | null;
+    customHeaders: Record<string, string> | null;
+    hasKey: boolean;
+    chatCount: number;
+  };
+} = {}) {
+  const license = overrides.license ?? { tier: "pro" };
+  const ai = overrides.ai ?? {
+    provider: null,
+    model: null,
+    baseUrl: null,
+    customHeaders: null,
+    hasKey: false,
+    chatCount: 0,
+  };
+
+  global.fetch = vi.fn().mockImplementation((input: string | Request) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/api/license")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(license),
+      });
+    }
+    // /api/settings/ai
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(ai),
+    });
   });
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+const originalFetch = global.fetch;
+
 beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+afterEach(() => {
+  global.fetch = originalFetch;
+});
+
 describe("AiSettingsPage", () => {
-  it("renders the description text", async () => {
-    mockFetchResponse({
-      provider: null,
-      model: null,
-      baseUrl: null,
-      customHeaders: null,
-      hasKey: false,
-      chatCount: 0,
-    });
+  it("renders the description text for pro users", async () => {
+    mockFetchResponses();
 
     render(<AiSettingsPage />, { wrapper: createWrapper() });
 
     expect(
-      screen.getByText(/connect an llm provider to power the ai routing assistant/i)
+      await screen.findByText(/connect an llm provider to power the ai routing assistant/i)
     ).toBeDefined();
   });
 
-  it("shows all four provider cards", async () => {
-    mockFetchResponse({
-      provider: null,
-      model: null,
-      baseUrl: null,
-      customHeaders: null,
-      hasKey: false,
-      chatCount: 0,
-    });
+  it("shows all four provider cards and connect buttons for pro users", async () => {
+    mockFetchResponses();
 
-    render(<AiSettingsPage />, { wrapper: createWrapper() });
+    const { container } = render(<AiSettingsPage />, { wrapper: createWrapper() });
 
+    // The description appears synchronously (not gated by query)
+    expect(
+      screen.getAllByText(/connect an llm provider/i).length
+    ).toBeGreaterThan(0);
+
+    // Provider short names are rendered immediately (static content)
     expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Gemini").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Custom").length).toBeGreaterThan(0);
-  });
 
-  it("shows Connect buttons for unconnected providers", async () => {
-    mockFetchResponse({
-      provider: null,
-      model: null,
-      baseUrl: null,
-      customHeaders: null,
-      hasKey: false,
-      chatCount: 0,
-    });
-
-    render(<AiSettingsPage />, { wrapper: createWrapper() });
-
-    expect(screen.getAllByText("Connect Claude").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Connect OpenAI").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Connect Gemini").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Connect Custom").length).toBeGreaterThan(0);
+    // Connect buttons (text includes icon children)
+    const buttons = container.querySelectorAll("button");
+    const connectButtons = Array.from(buttons).filter(
+      (b) => b.textContent?.includes("Connect")
+    );
+    expect(connectButtons.length).toBe(4);
   });
 
   it("shows Connected status and Edit/Disconnect for the active provider", async () => {
-    mockFetchResponse({
-      provider: "claude",
-      model: "claude-sonnet-4-5-20250514",
-      baseUrl: null,
-      customHeaders: null,
-      hasKey: true,
-      chatCount: 5,
+    mockFetchResponses({
+      ai: {
+        provider: "claude",
+        model: "claude-sonnet-4-5-20250514",
+        baseUrl: null,
+        customHeaders: null,
+        hasKey: true,
+        chatCount: 5,
+      },
     });
 
     const { findByText } = render(<AiSettingsPage />, {
       wrapper: createWrapper(),
     });
 
-    // Wait for query to resolve and re-render
     expect(await findByText("Connected")).toBeDefined();
     expect(screen.getByText("Edit")).toBeDefined();
     expect(screen.getByText("Disconnect")).toBeDefined();
@@ -111,13 +129,15 @@ describe("AiSettingsPage", () => {
   });
 
   it("shows the active provider banner when connected", async () => {
-    mockFetchResponse({
-      provider: "openai",
-      model: "gpt-4o",
-      baseUrl: null,
-      customHeaders: null,
-      hasKey: true,
-      chatCount: 12,
+    mockFetchResponses({
+      ai: {
+        provider: "openai",
+        model: "gpt-4o",
+        baseUrl: null,
+        customHeaders: null,
+        hasKey: true,
+        chatCount: 12,
+      },
     });
 
     const { findByText } = render(<AiSettingsPage />, {
@@ -126,5 +146,55 @@ describe("AiSettingsPage", () => {
 
     expect(await findByText("Active Provider")).toBeDefined();
     expect(screen.getByText("Open Chat")).toBeDefined();
+  });
+
+  // ─── Free tier paywall ────────────────────────────────────────────────────
+
+  it("shows paywall overlay for free tier users", async () => {
+    mockFetchResponses({ license: { tier: "free" } });
+
+    const { findByText } = render(<AiSettingsPage />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(await findByText("AI Settings require Pro")).toBeDefined();
+    expect(
+      screen.getByText(/configure your ai provider to unlock/i)
+    ).toBeDefined();
+  });
+
+  it("shows Upgrade to Pro button in paywall", async () => {
+    mockFetchResponses({ license: { tier: "free" } });
+
+    const { findByText } = render(<AiSettingsPage />, {
+      wrapper: createWrapper(),
+    });
+
+    await findByText("AI Settings require Pro");
+
+    const upgradeLink = screen.getByText("Upgrade to Pro").closest("a");
+    expect(upgradeLink).toBeDefined();
+    expect(upgradeLink?.getAttribute("href")).toBe(
+      "https://openedgeai.tech/pricing"
+    );
+  });
+
+  it("shows blurred provider cards behind paywall for free tier", async () => {
+    mockFetchResponses({ license: { tier: "free" } });
+
+    const { findByText } = render(<AiSettingsPage />, {
+      wrapper: createWrapper(),
+    });
+
+    await findByText("AI Settings require Pro");
+
+    // Provider names should still be rendered (behind blur) as preview content
+    expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Gemini").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Custom").length).toBeGreaterThan(0);
+
+    // Usage section should be visible too
+    expect(screen.getAllByText("Total conversations").length).toBeGreaterThan(0);
   });
 });

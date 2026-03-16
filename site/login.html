@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — OpenEdgeAI Lead Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">O</div>
+      <div class="logo-text">OpenEdgeAI <span>Lead Router</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/signup.html" class="btn-nav">Get Started</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h1>Welcome <em>back</em></h1>
+      <p>Sign in to your Lead Router account.</p>
+    </div>
+
+    <div id="login-error" class="alert-banner alert-error" style="display: none;"></div>
+
+    <div id="unverified-banner" class="alert-banner alert-warning" style="display: none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Email not verified. <a onclick="resendVerification()" style="cursor:pointer;">Resend verification email</a></span>
+    </div>
+
+    <form id="login-form" onsubmit="return handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" id="email" placeholder="john@acme.com" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-input" id="password" placeholder="Enter your password" required>
+        <div style="text-align: right; margin-top: 6px;">
+          <a href="#" style="font-size: 12px; color: var(--accent-blue); text-decoration: none;">Forgot password?</a>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary" id="login-btn" style="margin-top: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Sign In
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      Don't have an account? <a href="/signup.html">Create one</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://lead-routing-license.artyagi2011.workers.dev';
+
+// Redirect if already logged in
+if (localStorage.getItem('lr_token')) {
+  window.location.href = '/dashboard.html';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const errorEl = document.getElementById('login-error');
+  const unverifiedEl = document.getElementById('unverified-banner');
+  errorEl.style.display = 'none';
+  unverifiedEl.style.display = 'none';
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0;border-width:2px;"></div> Signing in...';
+
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    const res = await fetch(API + '/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Login failed. Please try again.');
+    }
+
+    // Check if email is verified
+    if (data.customer && data.customer.emailVerified === false) {
+      unverifiedEl.style.display = 'flex';
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Sign In';
+      // Still store token so they can access dashboard
+      localStorage.setItem('lr_token', data.token);
+      localStorage.setItem('lr_customer', JSON.stringify(data.customer));
+      return false;
+    }
+
+    // Store auth data
+    localStorage.setItem('lr_token', data.token);
+    localStorage.setItem('lr_customer', JSON.stringify(data.customer));
+
+    // Check if user had a plan=pro from signup
+    const pendingPlan = localStorage.getItem('lr_plan');
+    if (pendingPlan === 'pro' && data.customer.tier === 'free') {
+      // Redirect to upgrade after login
+      localStorage.removeItem('lr_plan');
+      window.location.href = '/dashboard.html?upgrade=true';
+    } else {
+      window.location.href = '/dashboard.html';
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'flex';
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Sign In';
+  }
+
+  return false;
+}
+
+async function resendVerification() {
+  const email = document.getElementById('email').value.trim();
+  if (!email) return;
+
+  try {
+    await fetch(API + '/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const banner = document.getElementById('unverified-banner');
+    banner.className = 'alert-banner alert-success';
+    banner.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> <span>Verification email sent! Check your inbox.</span>';
+  } catch (err) {
+    // Silently fail
+  }
+}
+</script>
+</body>
+</html>

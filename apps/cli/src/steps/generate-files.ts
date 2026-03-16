@@ -26,10 +26,14 @@ export interface GeneratedPaths {
   composeFile: string
   envWeb: string
   envEngine: string
-  adminSecret: string
 }
 
-export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): GeneratedPaths {
+export interface LicenseConfig {
+  licenseKey?: string
+  licenseTier: 'free' | 'pro'
+}
+
+export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: LicenseConfig = { licenseTier: 'free' }): GeneratedPaths {
   const dir = join(process.cwd(), 'lead-routing')
   mkdirSync(dir, { recursive: true })
 
@@ -61,12 +65,13 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     redisUrl: cfg.redisUrl,
     sessionSecret: cfg.sessionSecret,
     engineWebhookSecret: cfg.engineWebhookSecret,
-    adminSecret: cfg.adminSecret,
     adminEmail: cfg.adminEmail,
     adminPassword: cfg.adminPassword,
     internalApiKey: cfg.internalApiKey,
     resendApiKey: cfg.resendApiKey || undefined,
     feedbackToEmail: cfg.feedbackToEmail || undefined,
+    licenseKey: license.licenseKey,
+    licenseTier: license.licenseTier,
   })
   const envWeb = join(dir, '.env.web')
   writeFileSync(envWeb, envWebContent, 'utf8')
@@ -78,6 +83,8 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
     redisUrl: cfg.redisUrl,
     engineWebhookSecret: cfg.engineWebhookSecret,
     internalApiKey: cfg.internalApiKey,
+    licenseKey: license.licenseKey,
+    licenseTier: license.licenseTier,
   })
   const envEngine = join(dir, '.env.engine')
   writeFileSync(envEngine, envEngineContent, 'utf8')
@@ -102,10 +109,12 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig): Generate
       redis: cfg.managedRedis,
     },
     engineWebhookSecret: cfg.engineWebhookSecret,
+    licenseKey: license.licenseKey,
+    licenseTier: license.licenseTier,
     installedAt: new Date().toISOString(),
     version: getCliVersion(),
   })
   log.success('Generated lead-routing.json')
 
-  return { dir, composeFile, envWeb, envEngine, adminSecret: cfg.adminSecret }
+  return { dir, composeFile, envWeb, envEngine }
 }

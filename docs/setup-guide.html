@@ -907,28 +907,56 @@
     <span class="step-num">4</span> Onboarding Wizard
     <span class="time-est">2 min</span>
   </a>
+  <a href="#integrations">
+    <span class="step-num">5</span> Integrations
+    <span class="time-est">2 min</span>
+  </a>
+  <a href="#license-users">
+    <span class="step-num">6</span> License Users
+    <span class="time-est">2 min</span>
+  </a>
+  <a href="#teams">
+    <span class="step-num">7</span> Create Teams
+    <span class="time-est">3 min</span>
+  </a>
+
+  <div class="sidebar-section" style="margin-top:18px">
+    <div class="sidebar-label">Building Routes</div>
+  </div>
+  <a href="#first-route">
+    <span class="step-num">8</span> Create Routes
+    <span class="time-est">2 min</span>
+  </a>
+  <a href="#route-builder">
+    <span class="step-num">9</span> Route Builder Canvas
+    <span class="time-est">5 min</span>
+  </a>
+  <a href="#english-view">
+    <span class="step-num">10</span> English View
+    <span class="time-est">1 min</span>
+  </a>
+  <a href="#trigger-conditions">
+    <span class="step-num">11</span> Trigger Conditions
+    <span class="time-est">3 min</span>
+  </a>
+  <a href="#fuzzy-matching">
+    <span class="step-num">12</span> Fuzzy & AI Matching
+    <span class="time-est">3 min</span>
+  </a>
 
   <div class="sidebar-section" style="margin-top:18px">
     <div class="sidebar-label">Using the App</div>
   </div>
-  <a href="#license-users">
-    <span class="step-num">5</span> License Users
-    <span class="time-est">2 min</span>
-  </a>
-  <a href="#teams">
-    <span class="step-num">6</span> Create Teams
-    <span class="time-est">3 min</span>
-  </a>
-  <a href="#first-route">
-    <span class="step-num">7</span> Create Routes
-    <span class="time-est">2 min</span>
-  </a>
   <a href="#verify">
-    <span class="step-num">8</span> Verify
+    <span class="step-num">13</span> Verify
     <span class="time-est">1 min</span>
   </a>
   <a href="#activity">
-    <span class="step-num">9</span> View Activity
+    <span class="step-num">14</span> Activity & Analytics
+  </a>
+  <a href="#ai-assistant">
+    <span class="step-num">15</span> AI Assistant
+    <span style="margin-left:auto; font-size:10px; background:#7c3aed; color:#fff; padding:1px 6px; border-radius:8px; font-weight:600">PRO</span>
   </a>
 
   <div class="sidebar-section" style="margin-top:18px">
@@ -948,7 +976,7 @@
     <p>Everything you need to deploy Lead Router from zero to a working installation. Your data never leaves your infrastructure.</p>
     <div class="est">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      ~15 minutes total
+      ~25 minutes total
     </div>
   </div>
 
@@ -1438,10 +1466,76 @@
 
   <div class="section-divider"></div>
 
-  <!-- ── Step 5: License Users ─────────────── -->
-  <section class="step-section" id="license-users">
+  <!-- ── Step 5: Integrations ────────────────── -->
+  <section class="step-section" id="integrations">
     <div class="step-header">
       <span class="step-badge">5</span>
+      <h2>Integrations</h2>
+    </div>
+    <p class="step-desc">Manage your Salesforce connection and package deployment from the web dashboard.</p>
+
+    <div class="card">
+      <h3>Salesforce Integration Hub</h3>
+      <p>Navigate to <strong>Integrations</strong> in the sidebar. This page gives you full control over your Salesforce connection without needing the CLI.</p>
+
+      <!-- Integration status mockup -->
+      <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:14px">
+        <div style="padding:16px 20px; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px">
+          <div style="width:36px; height:36px; background:#eff6ff; border-radius:8px; display:flex; align-items:center; justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px; font-weight:600">Salesforce</div>
+            <div style="font-size:12px; color:var(--text-secondary)">Connected to acme.my.salesforce.com</div>
+          </div>
+          <span style="margin-left:auto; font-size:11px; background:var(--green-bg); color:var(--green); padding:3px 10px; border-radius:10px; font-weight:500; display:inline-flex; align-items:center; gap:4px">
+            <span style="width:6px; height:6px; background:var(--green); border-radius:50%"></span>
+            Connected
+          </span>
+        </div>
+        <div style="padding:16px 20px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px">
+          <div style="text-align:center">
+            <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px">Package</div>
+            <div style="font-size:13px; font-weight:600; color:var(--green)">Deployed</div>
+            <div style="font-size:11px; color:var(--text-secondary)">v1.0 · Mar 10</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px">Fields</div>
+            <div style="font-size:13px; font-weight:600; color:var(--green)">Synced</div>
+            <div style="font-size:11px; color:var(--text-secondary)">42 fields</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px">Objects</div>
+            <div style="font-size:13px; font-weight:600">Lead, Contact</div>
+            <div style="font-size:11px; color:var(--text-secondary)">2 enabled</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>What you can do</h3>
+      <ul style="padding-left:18px">
+        <li><strong>Deploy / Redeploy Package</strong> — Push the latest Apex triggers, classes, and components to Salesforce. No CLI required.</li>
+        <li style="margin-top:6px"><strong>Sync Fields</strong> — Refresh the field schema from Salesforce so the condition builder shows current fields and picklist values.</li>
+        <li style="margin-top:6px"><strong>Enable Objects</strong> — Choose which objects (Lead, Contact, Account) are routable.</li>
+        <li style="margin-top:6px"><strong>View Status</strong> — Check deployment status, last sync timestamp, and connection health at a glance.</li>
+        <li style="margin-top:6px"><strong>Disconnect</strong> — Revoke the OAuth connection and remove stored credentials.</li>
+      </ul>
+    </div>
+
+    <div class="callout info">
+      <div class="callout-icon">i</div>
+      <div>The Integrations page replaces the need to run <code>lead-routing sfdc deploy</code> from the CLI. All Salesforce package management can now be done directly in the web dashboard.</div>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 6: License Users ─────────────── -->
+  <section class="step-section" id="license-users">
+    <div class="step-header">
+      <span class="step-badge">6</span>
       <h2>License Users</h2>
     </div>
     <p class="step-desc">Control which Salesforce users can receive routed records.</p>
@@ -1562,10 +1656,10 @@
   <!-- ── Step 6: Create Teams ──────────────── -->
   <section class="step-section" id="teams">
     <div class="step-header">
-      <span class="step-badge">6</span>
+      <span class="step-badge">7</span>
       <h2>Create Teams</h2>
     </div>
-    <p class="step-desc">Create pools of reps for fair, sequential lead distribution via round robin.</p>
+    <p class="step-desc">Create pools of reps for lead distribution. Choose between equal round robin (every rep gets the same share) or weighted round robin (assign proportional shares per rep).</p>
 
     <div class="card">
       <h3>Create a team</h3>
@@ -1674,16 +1768,32 @@
       <div style="margin-top:14px; font-size:14px">
         <p><strong>Key controls:</strong></p>
         <ul style="padding-left:18px; margin-top:6px">
-          <li><strong>Active / Paused</strong> — Toggle a member's status. Paused members are skipped during round-robin assignment (e.g. when someone is on PTO).</li>
-          <li style="margin-top:4px"><strong>Reset Pointer</strong> — Resets the round-robin rotation back to the first member. Useful after adding or removing members.</li>
+          <li><strong>Active / Paused</strong> — Toggle a member's status. Paused members are skipped during assignment (e.g. when someone is on PTO).</li>
+          <li style="margin-top:4px"><strong>Reset Pointer</strong> — Resets the rotation back to the first member. Useful after adding or removing members.</li>
           <li style="margin-top:4px"><strong>Share %</strong> — Shows each member's share of total assignments. An even distribution means fair routing.</li>
         </ul>
       </div>
     </div>
 
+    <div class="card">
+      <h3>Distribution types</h3>
+      <p style="font-size:14px; margin-bottom:10px">Each team supports two distribution modes, selectable on the team detail page:</p>
+      <div style="font-size:14px">
+        <div style="margin-bottom:8px">
+          <strong>Equal Round Robin</strong> (default) — Every active member receives leads in strict sequential order, one each in turn. All members get an equal share.
+        </div>
+        <div style="margin-bottom:8px">
+          <strong>Weighted Round Robin</strong> — Assign a weight to each member to control what proportion of leads they receive. For example, weights of 40/40/20 mean the first two reps each get 40% and the third gets 20%.
+        </div>
+        <div>
+          In weighted mode, use the sliders to adjust each member's weight. Toggle between <strong>Percentage</strong> (must sum to 100) and <strong>Points</strong> (must sum to 10) modes. Use the <strong>Equalize</strong> button to reset all weights to equal.
+        </div>
+      </div>
+    </div>
+
     <div class="callout info">
       <div class="callout-icon">i</div>
-      <div>Reference teams in your routing rules by choosing <strong>"Round Robin"</strong> as the assignment type and selecting the team. The engine will cycle through active members in order.</div>
+      <div>Reference teams in your routing rules by choosing <strong>"Round Robin"</strong> as the assignment type and selecting the team. The engine will cycle through active members — equally or by weight, depending on the team's distribution type.</div>
     </div>
   </section>
 
@@ -1692,7 +1802,7 @@
   <!-- ── Step 7: Create Routes ─────────────── -->
   <section class="step-section" id="first-route">
     <div class="step-header">
-      <span class="step-badge">7</span>
+      <span class="step-badge">8</span>
       <h2>Create Routes</h2>
     </div>
     <p class="step-desc">Set up routing rules in the web dashboard.</p>
@@ -1737,10 +1847,396 @@
 
   <div class="section-divider"></div>
 
-  <!-- ── Step 8: Verify ────────────────────── -->
+  <!-- ── Step 9: Route Builder Canvas ────────── -->
+  <section class="step-section" id="route-builder">
+    <div class="step-header">
+      <span class="step-badge">9</span>
+      <h2>Route Builder Canvas</h2>
+    </div>
+    <p class="step-desc">Build complex routing flows visually with a drag-and-drop canvas — like n8n or Zapier, but for lead routing.</p>
+
+    <div class="card">
+      <h3>The visual canvas</h3>
+      <p>When you click <strong>Edit Flow</strong> on any rule, you enter the freeform canvas. Drag steps from the right sidebar onto the canvas to build your routing flow.</p>
+
+      <!-- Canvas mockup -->
+      <div style="background:#fafaf9; border:1px solid var(--border); border-radius:10px; padding:24px; margin-top:14px; position:relative; overflow:hidden; min-height:280px">
+        <!-- Dot grid background -->
+        <div style="position:absolute; inset:0; background-image:radial-gradient(circle, #d4d4d4 1px, transparent 1px); background-size:24px 24px; opacity:0.5"></div>
+
+        <!-- Trigger node -->
+        <div style="position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:0">
+          <div style="display:flex; align-items:center; gap:32px; justify-content:center; flex-wrap:wrap">
+            <!-- Trigger -->
+            <div style="width:200px">
+              <div style="background:#7c3aed; color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">⚡ Trigger</div>
+              <div style="background:#fff; border:2px solid #7c3aed; border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                <div style="font-size:13px; font-weight:500">Lead Created</div>
+                <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">On Insert</div>
+              </div>
+            </div>
+
+            <div style="color:var(--text-secondary); font-size:16px">→</div>
+
+            <!-- Match -->
+            <div style="width:200px">
+              <div style="background:#2563eb; color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">🔍 Match</div>
+              <div style="background:#fff; border:2px solid #2563eb; border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                <div style="font-size:13px; font-weight:500">Check Duplicates</div>
+                <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">Email, Domain</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="color:var(--text-secondary); font-size:14px; margin:12px 0">↓</div>
+
+          <!-- Paths row -->
+          <div style="display:flex; align-items:flex-start; gap:24px; justify-content:center; flex-wrap:wrap">
+            <!-- Path A -->
+            <div>
+              <div style="width:200px">
+                <div style="background:#4f46e5; color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">🔀 Path A</div>
+                <div style="background:#fff; border:2px solid #4f46e5; border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                  <div style="font-size:13px; font-weight:500">Enterprise</div>
+                  <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">Revenue &gt; $1M</div>
+                </div>
+              </div>
+              <div style="text-align:center; color:var(--text-secondary); font-size:14px; margin:8px 0">↓</div>
+              <div style="width:200px">
+                <div style="background:var(--green); color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">✓ Assign</div>
+                <div style="background:#fff; border:2px solid var(--green); border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                  <div style="font-size:13px; font-weight:500">Enterprise SDRs</div>
+                  <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">Round Robin</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Path B -->
+            <div>
+              <div style="width:200px">
+                <div style="background:#4f46e5; color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">🔀 Path B</div>
+                <div style="background:#fff; border:2px solid #4f46e5; border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                  <div style="font-size:13px; font-weight:500">SMB</div>
+                  <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">All remaining</div>
+                </div>
+              </div>
+              <div style="text-align:center; color:var(--text-secondary); font-size:14px; margin:8px 0">↓</div>
+              <div style="width:200px">
+                <div style="background:var(--green); color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">✓ Assign</div>
+                <div style="background:#fff; border:2px solid var(--green); border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+                  <div style="font-size:13px; font-weight:500">SMB Team</div>
+                  <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">Round Robin</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="color:var(--text-secondary); font-size:14px; margin:12px 0">↓</div>
+
+          <!-- Default Owner -->
+          <div style="width:200px">
+            <div style="background:#d97706; color:#fff; padding:6px 14px; border-radius:8px 8px 0 0; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">⚠ Default</div>
+            <div style="background:#fff; border:2px dashed #d97706; border-top:0; border-radius:0 0 8px 8px; padding:12px 14px">
+              <div style="font-size:13px; font-weight:500">Overflow Queue</div>
+              <div style="font-size:11px; color:var(--text-secondary); margin-top:2px">Catch-all fallback</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Step types</h3>
+      <table class="dns-table">
+        <tr><th>Step</th><th>Color</th><th>Purpose</th></tr>
+        <tr>
+          <td><strong>Trigger</strong></td>
+          <td><span style="color:#7c3aed; font-weight:600">Purple</span></td>
+          <td>Defines which object and event fires the route (Lead/Contact/Account on Insert/Update/Both)</td>
+        </tr>
+        <tr>
+          <td><strong>Match</strong></td>
+          <td><span style="color:#2563eb; font-weight:600">Blue</span></td>
+          <td>Check for duplicate leads, contacts, or accounts before routing</td>
+        </tr>
+        <tr>
+          <td><strong>Filter → Assign</strong></td>
+          <td><span style="color:#4f46e5; font-weight:600">Indigo</span> + <span style="color:var(--green); font-weight:600">Green</span></td>
+          <td>A condition path paired with its assignment action (User, Round Robin team, or Queue)</td>
+        </tr>
+        <tr>
+          <td><strong>Default Owner</strong></td>
+          <td><span style="color:#d97706; font-weight:600">Amber</span></td>
+          <td>Catch-all fallback for records that don't match any path</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Canvas controls</h3>
+      <ul style="padding-left:18px">
+        <li><strong>Zoom</strong> — Scroll wheel or use the +/− buttons in the toolbar (25%–200%)</li>
+        <li style="margin-top:6px"><strong>Pan</strong> — Hold Space and drag, or use the canvas background</li>
+        <li style="margin-top:6px"><strong>Fit to view</strong> — Click the maximize icon to center all nodes</li>
+        <li style="margin-top:6px"><strong>Drag steps</strong> — Drag from the Step Registry panel on the right onto the canvas</li>
+        <li style="margin-top:6px"><strong>Click to configure</strong> — Click any node to open its config sheet with full options</li>
+      </ul>
+    </div>
+
+    <div class="callout info">
+      <div class="callout-icon">i</div>
+      <div>Add multiple Filter → Assign pairs to create multi-path routing. Paths are evaluated top to bottom by priority — the first matching path wins.</div>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 10: English View ───────────────── -->
+  <section class="step-section" id="english-view">
+    <div class="step-header">
+      <span class="step-badge">10</span>
+      <h2>English View</h2>
+    </div>
+    <p class="step-desc">Review your routing logic as plain English — catch mistakes before they go live.</p>
+
+    <div class="card">
+      <h3>Canvas / English toggle</h3>
+      <p>At the top of the route builder, you'll see two tabs: <strong>Canvas</strong> and <strong>English</strong>. Click English to switch to the natural language review.</p>
+
+      <!-- Toggle mockup -->
+      <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:14px">
+        <div style="padding:10px 16px; background:var(--bg); border-bottom:1px solid var(--border); display:flex; gap:4px; align-items:center">
+          <button style="padding:6px 14px; font-size:12px; font-weight:500; border:1px solid var(--border); border-radius:6px; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Canvas</button>
+          <button style="padding:6px 14px; font-size:12px; font-weight:600; border:1px solid var(--accent); border-radius:6px; background:var(--accent-light); cursor:pointer; font-family:inherit; color:var(--accent)">English</button>
+          <span style="margin-left:auto; font-size:11px; background:var(--red-bg); color:var(--red); padding:2px 8px; border-radius:8px; font-weight:500">2 warnings</span>
+        </div>
+
+        <!-- English cards -->
+        <div style="padding:16px; display:flex; flex-direction:column; gap:10px">
+          <!-- Trigger card -->
+          <div style="border-left:3px solid #7c3aed; background:#fff; border:1px solid var(--border); border-left:3px solid #7c3aed; border-radius:6px; padding:12px 16px">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:#7c3aed; margin-bottom:4px">Trigger</div>
+            <div style="font-size:13px; color:var(--text)">When a <strong>Lead</strong> is <strong>created</strong>, start the route.</div>
+          </div>
+          <!-- Match card -->
+          <div style="border-left:3px solid #2563eb; background:#fff; border:1px solid var(--border); border-left:3px solid #2563eb; border-radius:6px; padding:12px 16px">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:#2563eb; margin-bottom:4px">Match</div>
+            <div style="font-size:13px; color:var(--text)">Check for duplicates by <strong>Email</strong> and <strong>Domain</strong>. If a Lead matches, merge. If a Contact matches, assign to existing owner.</div>
+          </div>
+          <!-- Path card -->
+          <div style="border-left:3px solid #4f46e5; background:#fff; border:1px solid var(--border); border-left:3px solid #4f46e5; border-radius:6px; padding:12px 16px">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:#4f46e5; margin-bottom:4px">Path A — Enterprise</div>
+            <div style="font-size:13px; color:var(--text)">If AnnualRevenue <strong>is greater than</strong> 1000000, assign via <strong>Round Robin</strong> to Enterprise SDRs.</div>
+          </div>
+          <!-- Path B -->
+          <div style="border-left:3px solid #4f46e5; background:#fff; border:1px solid var(--border); border-left:3px solid #4f46e5; border-radius:6px; padding:12px 16px">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:#4f46e5; margin-bottom:4px">Path B — SMB</div>
+            <div style="font-size:13px; color:var(--text)">All remaining records → assign via <strong>Round Robin</strong> to SMB Team.</div>
+          </div>
+          <!-- Default card -->
+          <div style="border-left:3px solid #d97706; background:#fff; border:1px solid var(--border); border-left:3px solid #d97706; border-radius:6px; padding:12px 16px">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:#d97706; margin-bottom:4px">Default</div>
+            <div style="font-size:13px; color:var(--text)">If no path matches, assign to <strong>Overflow Queue</strong> (Queue).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Detail panel</h3>
+      <p>Click any card to open a <strong>detail panel</strong> on the right showing structured information:</p>
+      <ul style="padding-left:18px; margin-top:8px">
+        <li><strong>Trigger</strong> — Object type, event, dry run status, trigger criteria</li>
+        <li style="margin-top:4px"><strong>Match</strong> — Which objects are checked, match fields (Email, Phone, Domain, Company Name), match mode</li>
+        <li style="margin-top:4px"><strong>Paths</strong> — Full condition tree with AND/OR groups, assignment type and assignee name</li>
+        <li style="margin-top:4px"><strong>Default</strong> — Fallback assignment type and assignee</li>
+      </ul>
+      <p style="margin-top:8px; font-size:13px; color:var(--text-secondary)">The panel is resizable — drag the left edge to expand or collapse it.</p>
+    </div>
+
+    <div class="card">
+      <h3>Warnings</h3>
+      <p>The English view detects common mistakes and displays warnings at the bottom:</p>
+      <table class="dns-table" style="margin-top:10px">
+        <tr><th>Warning</th><th>What it means</th></tr>
+        <tr><td><span style="color:var(--red); font-weight:500">Unconfigured assignment</span></td><td>A path has no assignee set — records would be unroutable</td></tr>
+        <tr><td><span style="color:var(--yellow); font-weight:500">Unreachable path</span></td><td>A path after a catch-all will never execute</td></tr>
+        <tr><td><span style="color:var(--yellow); font-weight:500">Multiple catch-alls</span></td><td>More than one path has no conditions — only the first will trigger</td></tr>
+        <tr><td><span style="color:var(--yellow); font-weight:500">No default owner</span></td><td>Records that don't match any path will be left unassigned</td></tr>
+        <tr><td><span style="color:var(--accent); font-weight:500">Dry run active</span></td><td>The rule is in test mode — it logs but doesn't update owners</td></tr>
+      </table>
+    </div>
+
+    <div class="callout success">
+      <div class="callout-icon">&#10003;</div>
+      <div>Use the English view as a final review before activating a route. Click <strong>Edit in Canvas</strong> from the detail panel to jump directly to the relevant step.</div>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 11: Trigger Conditions ─────────── -->
+  <section class="step-section" id="trigger-conditions">
+    <div class="step-header">
+      <span class="step-badge">11</span>
+      <h2>Trigger Conditions</h2>
+    </div>
+    <p class="step-desc">Filter records before they leave Salesforce — save API calls and reduce noise.</p>
+
+    <div class="card">
+      <h3>Pre-callout filtering</h3>
+      <p>Trigger conditions let you define criteria that records must meet <strong>before</strong> the routing engine is called. This filtering happens inside Salesforce's Apex trigger, so records that don't match never leave your org.</p>
+
+      <div style="background:var(--bg); border-radius:8px; padding:20px; margin-top:14px; display:flex; align-items:center; gap:0; justify-content:center; flex-wrap:wrap">
+        <div style="background:#fff; border:2px solid #7c3aed; border-radius:8px; padding:14px 18px; text-align:center; min-width:140px">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#7c3aed; font-weight:600; margin-bottom:4px">All Records</div>
+          <div style="font-size:24px; font-weight:700; color:var(--text)">1,000</div>
+        </div>
+        <div style="padding:0 12px; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <span style="font-size:16px; color:var(--text-secondary)">→</span>
+          <span style="font-size:10px; color:var(--text-secondary)">Filter in Apex</span>
+        </div>
+        <div style="background:#fff; border:2px solid var(--green); border-radius:8px; padding:14px 18px; text-align:center; min-width:140px">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--green); font-weight:600; margin-bottom:4px">Sent to Engine</div>
+          <div style="font-size:24px; font-weight:700; color:var(--green)">150</div>
+        </div>
+        <div style="padding:0 12px; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <span style="font-size:16px; color:var(--text-secondary)">→</span>
+          <span style="font-size:10px; color:var(--text-secondary)">Evaluate rules</span>
+        </div>
+        <div style="background:#fff; border:2px solid var(--accent); border-radius:8px; padding:14px 18px; text-align:center; min-width:140px">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent); font-weight:600; margin-bottom:4px">Routed</div>
+          <div style="font-size:24px; font-weight:700; color:var(--accent)">150</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>How to set up</h3>
+      <ol class="sub-steps">
+        <li><div>Open a rule and click on the <strong>Trigger</strong> step in the canvas</div></li>
+        <li><div>In the Trigger config sheet, scroll down to <strong>Trigger Criteria</strong></div></li>
+        <li><div>Add conditions using the condition builder — same UI as path conditions</div></li>
+        <li><div>Conditions within a group are joined with <strong>AND</strong>. Multiple groups are joined with <strong>OR</strong>.</div></li>
+        <li><div>Save the rule. Conditions are automatically synced to Salesforce as <code>Route_Criteria__c</code> records.</div></li>
+      </ol>
+
+      <!-- Condition builder mockup -->
+      <div style="border:1px solid var(--border); border-radius:8px; padding:16px; margin-top:14px; background:var(--bg)">
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin-bottom:10px">Trigger Criteria</div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:12px; color:var(--text-secondary); width:40px">Where</span>
+            <span style="background:#fff; border:1px solid var(--border); border-radius:4px; padding:4px 10px; font-size:12px; font-weight:500; color:#4f46e5">LeadSource</span>
+            <span style="font-size:12px; color:var(--text-secondary)">equals</span>
+            <span style="background:#fff; border:1px solid var(--border); border-radius:4px; padding:4px 10px; font-size:12px; font-weight:500; color:#d97706">Web</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:12px; color:var(--text-secondary); width:40px; font-weight:600">AND</span>
+            <span style="background:#fff; border:1px solid var(--border); border-radius:4px; padding:4px 10px; font-size:12px; font-weight:500; color:#4f46e5">Status</span>
+            <span style="font-size:12px; color:var(--text-secondary)">not equals</span>
+            <span style="background:#fff; border:1px solid var(--border); border-radius:4px; padding:4px 10px; font-size:12px; font-weight:500; color:#d97706">Disqualified</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout warning">
+      <div class="callout-icon">⚠</div>
+      <div>If no trigger criteria are defined, all records are sent to the engine (legacy behavior). Adding criteria is optional but recommended for high-volume orgs to reduce API usage.</div>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 12: Fuzzy & AI Matching ────────── -->
+  <section class="step-section" id="fuzzy-matching">
+    <div class="step-header">
+      <span class="step-badge">12</span>
+      <h2>Fuzzy & AI Matching</h2>
+    </div>
+    <p class="step-desc">Match records using phonetic algorithms, similarity scoring, or AI-powered semantic comparison.</p>
+
+    <div class="card">
+      <h3>Three matching modes</h3>
+      <p>When configuring the <strong>Match</strong> step, you can enable company name matching with one of three modes:</p>
+
+      <!-- Mode selector mockup -->
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:14px">
+        <div style="background:#fff; border:2px solid var(--border); border-radius:8px; padding:16px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🎯</div>
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px">Strict</div>
+          <div style="font-size:11px; color:var(--text-secondary); line-height:1.5">Exact normalized match only. "Acme Inc" = "acme"</div>
+        </div>
+        <div style="background:var(--accent-light); border:2px solid var(--accent); border-radius:8px; padding:16px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🔮</div>
+          <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:4px">Fuzzy</div>
+          <div style="font-size:11px; color:var(--text-secondary); line-height:1.5">Levenshtein, Soundex, Double Metaphone + abbreviation dictionary</div>
+        </div>
+        <div style="background:#faf5ff; border:2px solid #7c3aed; border-radius:8px; padding:16px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🧠</div>
+          <div style="font-size:13px; font-weight:600; color:#7c3aed; margin-bottom:4px">AI Smart</div>
+          <div style="font-size:11px; color:var(--text-secondary); line-height:1.5">LLM-powered semantic matching with 3-layer alias cache</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>How fuzzy matching works</h3>
+      <p>The fuzzy matcher runs a <strong>cascading resolution chain</strong> — it tries the fastest method first and only falls back to more expensive checks if needed:</p>
+      <ol style="padding-left:18px; margin-top:8px">
+        <li style="margin-bottom:6px"><strong>Exact normalized</strong> — Strip suffixes (Inc, LLC, Corp, Ltd, GmbH), lowercase, remove punctuation</li>
+        <li style="margin-bottom:6px"><strong>Abbreviation dictionary</strong> — ~85 common mappings (IBM → International Business Machines, HP → Hewlett Packard)</li>
+        <li style="margin-bottom:6px"><strong>Levenshtein similarity</strong> — Character-level edit distance, threshold ≥ 0.85</li>
+        <li style="margin-bottom:6px"><strong>Soundex match</strong> — 4-character phonetic codes</li>
+        <li style="margin-bottom:6px"><strong>Double Metaphone</strong> — Primary + alternate phonetic encodings</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>AI Smart mode</h3>
+      <p>When AI Smart is selected, the system adds an additional resolution step after fuzzy matching fails:</p>
+      <ol style="padding-left:18px; margin-top:8px">
+        <li style="margin-bottom:6px"><strong>Alias cache check</strong> — L1 in-memory (1,000 entries, 1hr TTL) → L2 Redis (24hr TTL) → L3 Postgres (permanent)</li>
+        <li style="margin-bottom:6px"><strong>AI provider call</strong> — Sends company name pair to your configured LLM (Claude, OpenAI, Gemini, or custom endpoint)</li>
+        <li style="margin-bottom:6px"><strong>Cache result</strong> — Writes the AI's decision to all cache layers to avoid repeated calls</li>
+      </ol>
+      <div class="callout info" style="margin-top:8px; margin-bottom:0">
+        <div class="callout-icon">i</div>
+        <div>AI Smart mode requires an API key configured in <strong>Settings → AI</strong>. Rate limited to 10 calls/sec per org. If the AI is unavailable, it gracefully falls back to fuzzy matching.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Condition operators</h3>
+      <p>You can also use fuzzy operators in path conditions:</p>
+      <table class="dns-table" style="margin-top:8px">
+        <tr><th>Operator</th><th>Algorithm</th><th>Use case</th></tr>
+        <tr>
+          <td><code>fuzzy_equals</code></td>
+          <td>Levenshtein ≥ 0.8</td>
+          <td>Typo tolerance — "Microsft" matches "Microsoft"</td>
+        </tr>
+        <tr>
+          <td><code>sounds_like</code></td>
+          <td>Soundex + Double Metaphone</td>
+          <td>Phonetic matching — "Smith" matches "Smyth"</td>
+        </tr>
+        <tr>
+          <td><code>similar_to</code> <span style="font-size:10px; background:#7c3aed; color:#fff; padding:1px 5px; border-radius:4px; font-weight:600; vertical-align:middle">AI</span></td>
+          <td>Full resolution chain + AI</td>
+          <td>Semantic matching — "JPMorgan" matches "JP Morgan Chase"</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 13: Verify ────────────────────── -->
   <section class="step-section" id="verify">
     <div class="step-header">
-      <span class="step-badge">8</span>
+      <span class="step-badge">13</span>
       <h2>Verify It Works</h2>
     </div>
     <p class="step-desc">Create a test Lead and watch it get routed in real time.</p>
@@ -1775,8 +2271,8 @@
   <!-- ── Step 9: View Activity ─────────────── -->
   <section class="step-section" id="activity">
     <div class="step-header">
-      <span class="step-badge">9</span>
-      <h2>View Activity</h2>
+      <span class="step-badge">14</span>
+      <h2>Activity & Analytics</h2>
     </div>
     <p class="step-desc">Monitor every routing decision in real time.</p>
 
@@ -1928,6 +2424,193 @@
       <div class="callout-icon">i</div>
       <div>Use <strong>Export CSV</strong> to download routing data for reporting or analysis. Filter by date range, object type, status, rule, team, or specific assignee before exporting.</div>
     </div>
+
+    <div class="card">
+      <h3>Analytics Dashboard</h3>
+      <p>Navigate to <strong>Analytics</strong> in the sidebar for a dedicated reporting dashboard with four tabs:</p>
+
+      <!-- Tab mockup -->
+      <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:14px">
+        <div style="padding:10px 16px; background:var(--bg); border-bottom:1px solid var(--border); display:flex; gap:2px; align-items:center">
+          <button style="padding:6px 14px; font-size:12px; font-weight:600; border:1px solid var(--accent); border-radius:6px 6px 0 0; background:var(--accent-light); cursor:pointer; font-family:inherit; color:var(--accent); border-bottom:2px solid var(--accent)">Overview</button>
+          <button style="padding:6px 14px; font-size:12px; font-weight:500; border:1px solid var(--border); border-radius:6px 6px 0 0; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Rules</button>
+          <button style="padding:6px 14px; font-size:12px; font-weight:500; border:1px solid var(--border); border-radius:6px 6px 0 0; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Teams</button>
+          <button style="padding:6px 14px; font-size:12px; font-weight:500; border:1px solid var(--border); border-radius:6px 6px 0 0; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Conversions</button>
+          <div style="margin-left:auto; display:flex; gap:6px; align-items:center">
+            <select style="font-size:11px; padding:4px 8px; border:1px solid var(--border); border-radius:4px; background:#fff; font-family:inherit"><option>Last 30 days</option></select>
+          </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div style="padding:16px; display:grid; grid-template-columns:repeat(4, 1fr); gap:12px">
+          <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); font-weight:500">Total Routed</div>
+            <div style="font-size:26px; font-weight:700; color:var(--text); margin-top:4px">4,832</div>
+            <div style="font-size:11px; color:var(--green); font-weight:500; margin-top:2px">+12.4% vs prior</div>
+          </div>
+          <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); font-weight:500">Success Rate</div>
+            <div style="font-size:26px; font-weight:700; color:var(--green); margin-top:4px">97.3%</div>
+            <div style="font-size:11px; color:var(--green); font-weight:500; margin-top:2px">+1.2% vs prior</div>
+          </div>
+          <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); font-weight:500">Avg Response</div>
+            <div style="font-size:26px; font-weight:700; color:var(--text); margin-top:4px">1.8s</div>
+            <div style="font-size:11px; color:var(--green); font-weight:500; margin-top:2px">-0.3s vs prior</div>
+          </div>
+          <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); font-weight:500">Conversions</div>
+            <div style="font-size:26px; font-weight:700; color:#7c3aed; margin-top:4px">312</div>
+            <div style="font-size:11px; color:var(--green); font-weight:500; margin-top:2px">6.5% rate</div>
+          </div>
+        </div>
+
+        <!-- Mini chart placeholder -->
+        <div style="padding:0 16px 16px">
+          <div style="background:var(--bg); border-radius:8px; padding:20px; text-align:center">
+            <div style="font-size:12px; color:var(--text-secondary)">Volume trend chart &middot; Stacked bar chart by status (Success / Failed / Unmatched)</div>
+            <div style="display:flex; align-items:flex-end; justify-content:center; gap:4px; margin-top:12px; height:60px">
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:40px; opacity:0.7"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:48px; opacity:0.8"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:35px; opacity:0.7"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:55px; opacity:0.85"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:42px; opacity:0.7"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:58px; opacity:0.9"></div>
+              <div style="width:12px; background:var(--green); border-radius:2px 2px 0 0; height:60px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Analytics tabs</h3>
+      <table class="dns-table">
+        <tr><th>Tab</th><th>What it shows</th></tr>
+        <tr>
+          <td><strong>Overview</strong></td>
+          <td>KPI cards (total routed, success rate, avg response time, conversions), volume trend chart, top rules by volume</td>
+        </tr>
+        <tr>
+          <td><strong>Rules</strong></td>
+          <td>Per-rule breakdown — volume, success/fail/unmatched split, average processing time, last triggered</td>
+        </tr>
+        <tr>
+          <td><strong>Teams</strong></td>
+          <td>Per-team and per-member metrics — assignments, capacity, round robin distribution balance</td>
+        </tr>
+        <tr>
+          <td><strong>Conversions</strong></td>
+          <td>Lead-to-Opportunity conversion tracking — conversion rate by rule, team, and time period with funnel visualization</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout success">
+      <div class="callout-icon">&#10003;</div>
+      <div>Analytics data updates in real time. Use the date range selector (7d, 30d, 90d, custom) and filters to drill into specific rules, teams, or object types.</div>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ── Step 15: AI Assistant ────────────── -->
+  <section class="step-section" id="ai-assistant">
+    <div class="step-header">
+      <span class="step-badge" style="background:#7c3aed">15</span>
+      <h2>AI Assistant <span style="font-size:11px; background:#7c3aed; color:#fff; padding:2px 8px; border-radius:8px; font-weight:600; vertical-align:middle; margin-left:8px">PRO</span></h2>
+    </div>
+    <p class="step-desc">Chat with an AI that understands your routing data — get optimization suggestions, debug issues, and query activity.</p>
+
+    <div class="card">
+      <h3>What it does</h3>
+      <p>The AI Assistant is a conversational interface that has access to your routing rules, activity history, team configuration, and analytics. It can:</p>
+      <ul style="padding-left:18px; margin-top:8px">
+        <li>Answer questions about your routing setup — <em>"Which rule handles APAC leads?"</em></li>
+        <li style="margin-top:4px">Suggest optimizations — <em>"How can I improve my conversion rate?"</em></li>
+        <li style="margin-top:4px">Debug routing failures — <em>"Why did this lead go to the wrong team?"</em></li>
+        <li style="margin-top:4px">Generate reports — <em>"Show me routing volume by team this week"</em></li>
+        <li style="margin-top:4px">Explain rules in plain English — <em>"Walk me through the Enterprise Inbound rule"</em></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Configure your AI provider</h3>
+      <p>Navigate to <strong>Settings &rarr; AI</strong> to connect your LLM provider. Bring your own API key (BYOK) — your data stays on your server.</p>
+
+      <!-- Provider cards mockup -->
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:14px">
+        <div style="background:#fff; border:2px solid var(--accent); border-radius:8px; padding:14px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🟠</div>
+          <div style="font-size:13px; font-weight:600; margin-bottom:2px">Claude</div>
+          <div style="font-size:10px; color:var(--text-secondary)">Anthropic</div>
+          <div style="font-size:10px; color:var(--green); font-weight:600; margin-top:6px">Connected</div>
+        </div>
+        <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🟢</div>
+          <div style="font-size:13px; font-weight:600; margin-bottom:2px">OpenAI</div>
+          <div style="font-size:10px; color:var(--text-secondary)">GPT-4o, o1</div>
+          <button style="font-size:10px; margin-top:6px; padding:2px 8px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Connect</button>
+        </div>
+        <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">🔵</div>
+          <div style="font-size:13px; font-weight:600; margin-bottom:2px">Gemini</div>
+          <div style="font-size:10px; color:var(--text-secondary)">Google AI</div>
+          <button style="font-size:10px; margin-top:6px; padding:2px 8px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Connect</button>
+        </div>
+        <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center">
+          <div style="font-size:20px; margin-bottom:6px">⚙️</div>
+          <div style="font-size:13px; font-weight:600; margin-bottom:2px">Custom</div>
+          <div style="font-size:10px; color:var(--text-secondary)">Any endpoint</div>
+          <button style="font-size:10px; margin-top:6px; padding:2px 8px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; font-family:inherit; color:var(--text-secondary)">Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Setup steps</h3>
+      <ol class="sub-steps">
+        <li><div>Go to <strong>Settings &rarr; AI</strong> in the sidebar</div></li>
+        <li><div>Click <strong>Connect</strong> on your preferred provider card</div></li>
+        <li><div>Enter your API key and select a model (e.g. <code>claude-sonnet-4-5-20250514</code>, <code>gpt-4o</code>)</div></li>
+        <li><div>For Custom endpoints: provide a base URL and optional custom headers for auth</div></li>
+        <li><div>Click <strong>Save</strong> — the key is encrypted and stored server-side</div></li>
+        <li><div>Navigate to <strong>AI Assistant</strong> in the sidebar and start chatting</div></li>
+      </ol>
+    </div>
+
+    <!-- Chat mockup -->
+    <div class="card">
+      <h3>Chat interface</h3>
+      <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-top:14px">
+        <div style="padding:10px 16px; background:var(--bg); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px">
+          <span style="font-size:13px; font-weight:600">AI Assistant</span>
+          <span style="font-size:10px; background:var(--green-bg); color:var(--green); padding:1px 6px; border-radius:8px; font-weight:500">Online</span>
+          <span style="margin-left:auto; font-size:11px; color:var(--text-secondary)">Claude &middot; claude-sonnet-4-5</span>
+        </div>
+        <div style="padding:16px; display:flex; flex-direction:column; gap:12px; min-height:120px">
+          <!-- User message -->
+          <div style="display:flex; justify-content:flex-end">
+            <div style="background:var(--accent); color:#fff; padding:8px 14px; border-radius:12px 12px 2px 12px; font-size:12px; max-width:70%">Which rule has the highest failure rate this month?</div>
+          </div>
+          <!-- AI message -->
+          <div style="display:flex; justify-content:flex-start">
+            <div style="background:var(--bg); border:1px solid var(--border); padding:10px 14px; border-radius:2px 12px 12px 12px; font-size:12px; max-width:80%; line-height:1.6">
+              The <strong>Partner Leads</strong> rule has the highest failure rate at <strong>8.2%</strong> (14 failures out of 171 events). Most failures are <code>INSUFFICIENT_ACCESS</code> errors — the assigned user likely doesn't have edit permission on the Lead record. I'd recommend checking the profile permissions for users in the Partner SDR team.
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 16px; border-top:1px solid var(--border); display:flex; gap:8px; align-items:center">
+          <input style="flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; font-family:inherit; outline:none" placeholder="Ask about your routing data..." readonly>
+          <button style="padding:6px 14px; background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; font-weight:500">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout warning">
+      <div class="callout-icon">⚠</div>
+      <div>AI Assistant is a <strong>Pro</strong> feature. Your API key is encrypted at rest and never leaves your server. Conversations are stored locally and can be deleted from Settings.</div>
+    </div>
   </section>
 
   <div class="section-divider"></div>
@@ -2056,6 +2739,57 @@ docker compose -f ~/lead-routing/docker-compose.yml logs --tail 50 -f</pre>
           <pre>npx @lead-routing/cli deploy</pre>
         </div>
         <p>This pulls the latest images and recreates the containers with zero downtime.</p>
+      </div>
+    </div>
+
+    <div class="expandable">
+      <button class="expandable-trigger" onclick="this.parentElement.classList.toggle('open')">
+        <span class="expandable-chevron">&#9656;</span>
+        Fuzzy matching not working — exact matches only
+      </button>
+      <div class="expandable-content">
+        <p><strong>Cause:</strong> The match mode is set to "Strict" (default) instead of "Fuzzy" or "AI Smart".</p>
+        <p style="margin-top:8px"><strong>Fix:</strong></p>
+        <ul style="padding-left:18px; margin-top:4px">
+          <li>Open the rule in the Route Builder and click the <strong>Match</strong> step</li>
+          <li>In the config sheet, look for <strong>Company Match Mode</strong></li>
+          <li>Switch from "Strict" to "Fuzzy" or "AI Smart"</li>
+          <li>Save the rule — fuzzy matching takes effect immediately on the next routing event</li>
+        </ul>
+        <p style="margin-top:8px">If using AI Smart mode, also verify your API key is configured in <strong>Settings &rarr; AI</strong> and the provider is reachable from your server.</p>
+      </div>
+    </div>
+
+    <div class="expandable">
+      <button class="expandable-trigger" onclick="this.parentElement.classList.toggle('open')">
+        <span class="expandable-chevron">&#9656;</span>
+        AI Assistant not responding or returning errors
+      </button>
+      <div class="expandable-content">
+        <p><strong>Check these in order:</strong></p>
+        <ol style="padding-left:18px; margin-top:8px">
+          <li style="margin-bottom:6px"><strong>API key valid?</strong> — Go to <strong>Settings &rarr; AI</strong> and verify the key shows "Connected". Try disconnecting and reconnecting.</li>
+          <li style="margin-bottom:6px"><strong>Provider reachable?</strong> — SSH into your VPS and test: <code>curl https://api.anthropic.com/v1/messages</code> (or your provider's API). Firewall rules may block outbound HTTPS.</li>
+          <li style="margin-bottom:6px"><strong>Rate limited?</strong> — Check the engine logs for 429 responses. The AI assistant respects provider rate limits and will queue retries.</li>
+          <li style="margin-bottom:6px"><strong>Custom endpoint?</strong> — Verify the base URL includes the correct path prefix and that any custom headers (auth tokens) are correct.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="expandable">
+      <button class="expandable-trigger" onclick="this.parentElement.classList.toggle('open')">
+        <span class="expandable-chevron">&#9656;</span>
+        Trigger criteria not syncing to Salesforce
+      </button>
+      <div class="expandable-content">
+        <p><strong>Cause:</strong> The sync from web app to Salesforce <code>Route_Criteria__c</code> records failed silently.</p>
+        <p style="margin-top:8px"><strong>Fix:</strong></p>
+        <ul style="padding-left:18px; margin-top:4px">
+          <li><strong>Check Salesforce connection</strong> — Go to <strong>Integrations</strong> and verify the Salesforce org shows "Connected". Reconnect if the OAuth token expired.</li>
+          <li style="margin-top:4px"><strong>Verify the object exists</strong> — In Salesforce Setup, search for "Route Criteria" under Custom Objects. If missing, redeploy the package from <strong>Integrations &rarr; Deploy Package</strong>.</li>
+          <li style="margin-top:4px"><strong>Manual sync</strong> — Open the rule, make any small edit to a trigger condition, and save again. This forces a re-sync.</li>
+          <li style="margin-top:4px"><strong>Check logs</strong> — Look at web app logs (<code>docker logs lead-routing-web-1 --tail 50</code>) for <code>SFDC_SYNC_ERROR</code> messages with details.</li>
+        </ul>
       </div>
     </div>
   </section>

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { prisma } from "@lead-routing/db";
 import { createConnection, syncFieldSchema } from "@lead-routing/sfdc";
 import { validateSfdcHmac } from "@/lib/validate-sfdc-hmac";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // POST /api/fields/sync?object=LEAD — trigger SFDC describeSObject sync
 // Called by the LWC onboarding wizard (Apex HTTP callout) using X-Sfdc-Org-Id,
@@ -38,6 +39,11 @@ export async function POST(req: NextRequest) {
 
     if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
+    }
+
+    const limits = getTierLimits();
+    if (!limits.allowedTriggers.includes(objectParam)) {
+      return upgradeRequiredResponse(`${objectParam} object syncing`);
     }
 
     const objectType = (objectParam.charAt(0) + objectParam.slice(1).toLowerCase()) as

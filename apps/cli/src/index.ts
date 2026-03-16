@@ -7,6 +7,8 @@ import { runStatus } from './commands/status.js'
 import { runConfigSfdc, runConfigShow } from './commands/config.js'
 import { runSfdcDeploy } from './commands/sfdc.js'
 import { runUninstall } from './commands/uninstall.js'
+import { runSignup } from './commands/signup.js'
+import { runLogin } from './commands/login.js'
 
 const program = new Command()
 
@@ -62,7 +64,7 @@ const config = program
 
 config
   .command('show')
-  .description('Print key config values for this installation (admin secret, app URL, SFDC client ID)')
+  .description('Print key config values for this installation (app URL)')
   .action(runConfigShow)
 
 config
@@ -83,6 +85,16 @@ program
   .command('uninstall')
   .description('Stop all containers, remove all data, and delete the remote installation')
   .action(runUninstall)
+
+program
+  .command('signup')
+  .description('Create a new Lead Routing account')
+  .action(runSignup)
+
+program
+  .command('login')
+  .description('Log in to your Lead Routing account')
+  .action(runLogin)
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err))

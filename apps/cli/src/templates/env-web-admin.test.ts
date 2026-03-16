@@ -11,10 +11,10 @@ const fullConfig = {
   redisUrl: 'redis://redis:6379',
   sessionSecret: 'session_secret',
   engineWebhookSecret: 'webhook_secret',
-  adminSecret: 'admin_secret',
   adminEmail: 'admin@example.com',
   adminPassword: 'secureP@ss123',
   internalApiKey: 'internal_api_key_here',
+  licenseTier: 'free',
 }
 
 // ─── Tests for new ADMIN_EMAIL / ADMIN_PASSWORD fields ───────────────────────

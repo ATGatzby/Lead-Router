@@ -25,6 +25,7 @@ const sampleConfig: InstallConfig = {
     username: 'root',
   },
   dockerManaged: { db: true, redis: true },
+  licenseTier: 'free',
   installedAt: '2026-01-01T00:00:00.000Z',
   version: '0.1.0',
 }

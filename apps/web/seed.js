@@ -30,11 +30,25 @@ const passwordHash = `${salt}:${hash}`;
 const safeEmail = ADMIN_EMAIL.replace(/'/g, "''");
 const safeWebhookSecret = ENGINE_WEBHOOK_SECRET.replace(/'/g, "''");
 
+// Determine plan and seats from LICENSE_TIER env var
+const licenseTier = (process.env.LICENSE_TIER || 'free').toLowerCase();
+const plan = licenseTier === 'pro' ? 'PAID' : 'FREE';
+const seatsPurchased = licenseTier === 'pro' ? 9999 : 3;
+console.log(`[seed] License tier: ${licenseTier} → plan=${plan}, seats=${seatsPurchased}`);
+
 const sql = `
--- Create initial organisation if none exists (self-hosted defaults: PAID plan, unlimited seats)
+-- Create initial organisation (plan and seats based on LICENSE_TIER)
 INSERT INTO organizations (id, "webhookSecret", plan, "seatsPurchased", "isActive", "createdAt", "updatedAt")
-SELECT gen_random_uuid(), '${safeWebhookSecret}', 'PAID', 9999, true, NOW(), NOW()
+SELECT gen_random_uuid(), '${safeWebhookSecret}', '${plan}', ${seatsPurchased}, true, NOW(), NOW()
 WHERE NOT EXISTS (SELECT 1 FROM organizations);
+
+-- Sync plan and seats from LICENSE_TIER env var (skip if activated via web UI)
+UPDATE organizations
+SET plan = '${plan}',
+    "seatsPurchased" = ${seatsPurchased},
+    "updatedAt" = NOW()
+WHERE "licenseKey" IS NULL
+  AND (plan != '${plan}' OR "seatsPurchased" != ${seatsPurchased});
 
 -- Create admin AppUser under the first org (idempotent)
 INSERT INTO app_users (id, "orgId", email, name, "passwordHash", role, "isActive", "createdAt", "updatedAt")

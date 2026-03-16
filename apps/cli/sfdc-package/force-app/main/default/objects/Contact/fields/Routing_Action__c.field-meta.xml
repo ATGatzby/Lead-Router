@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
-    <fullName>Routing_Action__c</fullName>
-    <label>Routing Action</label>
-    <type>Text</type>
-    <length>255</length>
-    <required>false</required>
-    <description>Stamped by the routing engine when it assigns this record. Used to prevent recursive trigger firing.</description>
-</CustomField>

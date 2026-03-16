@@ -73,6 +73,18 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
   const [isDryRun, setIsDryRun] = useState(searchTrigger.isDryRun)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
+  // Fetch license tier to gate Contact/Account behind Pro
+  const licenseQuery = useQuery({
+    queryKey: ["license"],
+    queryFn: async () => {
+      const res = await fetch("/api/license")
+      if (!res.ok) return { tier: "free" }
+      return res.json()
+    },
+  })
+  const tier = licenseQuery.data?.tier ?? "free"
+  const isFreeTier = tier === "free"
+
   // Fetch fields for ConditionBuilder
   const fieldsQuery = useQuery<FieldsResponse>({
     queryKey: ["fields", objectType],
@@ -152,8 +164,12 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="LEAD">Lead</SelectItem>
-                <SelectItem value="CONTACT">Contact</SelectItem>
-                <SelectItem value="ACCOUNT">Account</SelectItem>
+                <SelectItem value="CONTACT" disabled={isFreeTier}>
+                  Contact {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
+                </SelectItem>
+                <SelectItem value="ACCOUNT" disabled={isFreeTier}>
+                  Account {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

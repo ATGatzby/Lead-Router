@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 /**
  * GET /api/integrations/salesforce/objects
@@ -58,6 +59,14 @@ export async function POST(req: NextRequest) {
           { error: `Invalid objectConfig entry for "${key}": must have { enabled: boolean }` },
           { status: 400 }
         );
+      }
+    }
+
+    // Tier check: prevent free tier from enabling Contact/Account objects
+    const limits = getTierLimits();
+    for (const [objKey, config] of Object.entries(body.objectConfig)) {
+      if ((config as any).enabled && !limits.allowedTriggers.includes(objKey.toUpperCase())) {
+        return upgradeRequiredResponse(`${objKey} routing`);
       }
     }
 

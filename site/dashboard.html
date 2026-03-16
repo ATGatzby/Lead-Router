@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — OpenEdgeAI Lead Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">O</div>
+      <div class="logo-text">OpenEdgeAI <span>Lead Router</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/docs.html">Documentation</a></li>
+      <li><a href="#">Support</a></li>
+      <li><a href="#" class="btn-nav-ghost" onclick="logout()">Logout</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Loading state -->
+<div class="dash-wrapper" id="dash-loading" style="display: flex; align-items: center; justify-content: center;">
+  <div style="text-align: center;">
+    <div class="spinner"></div>
+    <p style="color: var(--text-secondary); font-size: 14px;">Loading your dashboard...</p>
+  </div>
+</div>
+
+<!-- Dashboard content -->
+<div class="dash-wrapper" id="dash-content" style="display: none;">
+  <div class="dash-container">
+    <!-- Header -->
+    <div class="dash-header">
+      <div class="dash-user">
+        <div class="dash-avatar" id="dash-avatar"></div>
+        <div class="dash-user-info">
+          <h2 id="dash-name"></h2>
+          <p id="dash-email"></p>
+        </div>
+      </div>
+      <div class="dash-actions" id="dash-actions"></div>
+    </div>
+
+    <!-- Dynamic content injected here -->
+    <div id="dash-body"></div>
+  </div>
+</div>
+
+<script>
+const API = 'https://lead-routing-license.artyagi2011.workers.dev';
+let customer = null;
+
+function logout() {
+  localStorage.removeItem('lr_token');
+  localStorage.removeItem('lr_customer');
+  window.location.href = '/';
+}
+
+function getInitials(first, last) {
+  return ((first || '')[0] || '') + ((last || '')[0] || '');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return 'N/A';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return 0;
+  const diff = new Date(dateStr) - new Date();
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
+function daysSince(dateStr) {
+  if (!dateStr) return 0;
+  const diff = new Date() - new Date(dateStr);
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+}
+
+function maskKey(key) {
+  if (!key || key.length < 8) return key || '';
+  return key.substring(0, 3) + '-****-****-****-' + key.substring(key.length - 4);
+}
+
+async function handleUpgrade() {
+  try {
+    const res = await fetch(API + '/v1/account/upgrade', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('lr_token'), 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert(data.error || 'Could not start upgrade. Please try again.');
+    }
+  } catch (err) {
+    alert('Network error. Please try again.');
+  }
+}
+
+async function handleBilling() {
+  try {
+    const res = await fetch(API + '/v1/account/billing-portal', {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('lr_token') }
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert(data.error || 'Could not open billing portal.');
+    }
+  } catch (err) {
+    alert('Network error. Please try again.');
+  }
+}
+
+function renderFree(c) {
+  const body = document.getElementById('dash-body');
+  const created = daysSince(c.createdAt);
+
+  body.innerHTML = `
+    <!-- Upgrade banner -->
+    <div class="upgrade-banner">
+      <div>
+        <h3>Unlock the full power of <em>Lead Router</em></h3>
+        <p>Upgrade to Pro for unlimited rules, analytics, and priority support.</p>
+        <div class="upgrade-features">
+          <span class="upgrade-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Unlimited rules</span>
+          <span class="upgrade-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Analytics</span>
+          <span class="upgrade-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> All triggers</span>
+          <span class="upgrade-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Unlimited seats</span>
+        </div>
+      </div>
+      <button class="btn-upgrade" onclick="handleUpgrade()">Upgrade to Pro &mdash; $999/yr</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Current Plan</div>
+        <div class="stat-value" style="font-size: 22px;">Free Tier</div>
+        <div class="stat-sub">2 rules &middot; 3 seats &middot; Lead triggers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Account Created</div>
+        <div class="stat-value" style="font-size: 22px;">${formatDate(c.createdAt)}</div>
+        <div class="stat-sub">${created} day${created !== 1 ? 's' : ''} ago</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Deployments</div>
+        <div class="stat-value">${c.deployments || 0}</div>
+        <div class="stat-sub">${(c.deployments || 0) === 0 ? 'Deploy your first instance' : 'Active'}</div>
+      </div>
+    </div>
+
+    <!-- CLI Quickstart -->
+    <div class="dash-card">
+      <div class="dash-card-header">
+        <div class="dash-card-title">
+          <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          CLI Quickstart
+        </div>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; font-weight: 300;">
+        Log in from the CLI, then deploy Lead Router to your server with a single command.
+      </p>
+      <div class="cli-block">
+        <div class="cli-titlebar">
+          <span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span>
+          <span class="cli-titlebar-text">Terminal</span>
+        </div>
+        <div class="cli-body">
+          <button class="cli-copy-btn" onclick="copyCliCommands(this)">Copy</button>
+          <div class="cli-line"><span class="cli-comment"># Step 1: Log in to your account</span></div>
+          <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli@latest login</span></div>
+          <div class="cli-line">&nbsp;</div>
+          <div class="cli-line"><span class="cli-comment"># Step 2: Deploy to your VPS</span></div>
+          <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli@latest init</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Details -->
+    <div class="dash-card">
+      <div class="dash-card-header">
+        <div class="dash-card-title">
+          <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Account Details
+        </div>
+      </div>
+      <div class="info-row"><span class="info-label">Name</span><span class="info-value">${c.firstName || ''} ${c.lastName || ''}</span></div>
+      <div class="info-row"><span class="info-label">Email</span><span class="info-value">${c.email || ''}</span></div>
+      <div class="info-row"><span class="info-label">Email Verified</span><span class="info-value" style="color: ${c.emailVerified ? 'var(--accent-green)' : 'var(--accent-amber)'};">${c.emailVerified ? 'Verified' : 'Pending'}</span></div>
+      <div class="info-row"><span class="info-label">Plan</span><span class="info-value"><span class="tier-badge tier-free">FREE</span></span></div>
+      <div class="info-row"><span class="info-label">License Key</span><span class="info-value" style="color: var(--text-tertiary);">None &mdash; Free tier</span></div>
+    </div>
+  `;
+}
+
+function renderPro(c) {
+  const body = document.getElementById('dash-body');
+  const remaining = daysUntil(c.licenseExpiresAt);
+  const key = c.licenseKey || '';
+
+  body.innerHTML = `
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Current Plan</div>
+        <div class="stat-value" style="font-size: 22px; background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Pro</div>
+        <div class="stat-sub">Unlimited rules &middot; seats &middot; all triggers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">License Expires</div>
+        <div class="stat-value" style="font-size: 22px;">${formatDate(c.licenseExpiresAt)}</div>
+        <div class="stat-sub" style="color: var(--accent-green);">${remaining} day${remaining !== 1 ? 's' : ''} remaining</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Deployments</div>
+        <div class="stat-value">${c.deployments || 0}</div>
+        <div class="stat-sub">${c.fingerprint || 'No deployment yet'}</div>
+      </div>
+    </div>
+
+    <!-- License Key -->
+    <div class="dash-card">
+      <div class="dash-card-header">
+        <div class="dash-card-title">
+          <svg viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          License Key
+        </div>
+        <span class="tier-badge tier-pro">PRO</span>
+      </div>
+      <div class="license-display">
+        <span class="license-key" id="license-key-display"><span class="license-masked">${maskKey(key)}</span></span>
+        <button class="btn-reveal" id="btn-reveal" onclick="toggleLicenseKey()">Reveal</button>
+        <button class="btn-copy" onclick="copyLicenseKey(this)">Copy</button>
+      </div>
+      <div class="license-meta">
+        <div class="license-meta-item"><strong>Status:</strong> <span style="color: var(--accent-green);">Active</span></div>
+        <div class="license-meta-item"><strong>Issued:</strong> ${formatDate(c.licenseIssuedAt || c.createdAt)}</div>
+        <div class="license-meta-item"><strong>Expires:</strong> ${formatDate(c.licenseExpiresAt)}</div>
+        ${c.fingerprint ? '<div class="license-meta-item"><strong>Bound to:</strong> ' + c.fingerprint + '</div>' : ''}
+      </div>
+    </div>
+
+    <!-- Two column: CLI + Account -->
+    <div class="dash-two-col">
+      <div class="dash-card" style="animation-delay: 0.25s;">
+        <div class="dash-card-header">
+          <div class="dash-card-title">
+            <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            CLI Quickstart
+          </div>
+        </div>
+        <div class="cli-block">
+          <div class="cli-titlebar">
+            <span class="cli-dot cli-dot-r"></span><span class="cli-dot cli-dot-y"></span><span class="cli-dot cli-dot-g"></span>
+            <span class="cli-titlebar-text">Terminal</span>
+          </div>
+          <div class="cli-body">
+            <button class="cli-copy-btn" onclick="copyCliCommands(this)">Copy</button>
+            <div class="cli-line"><span class="cli-comment"># Log in &amp; deploy</span></div>
+            <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli login</span></div>
+            <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli init</span></div>
+            <div class="cli-line">&nbsp;</div>
+            <div class="cli-line"><span class="cli-comment"># Pro license auto-detected</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-card" style="animation-delay: 0.35s;">
+        <div class="dash-card-header">
+          <div class="dash-card-title">
+            <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Account Details
+          </div>
+        </div>
+        <div class="info-row"><span class="info-label">Name</span><span class="info-value">${c.firstName || ''} ${c.lastName || ''}</span></div>
+        <div class="info-row"><span class="info-label">Email</span><span class="info-value">${c.email || ''}</span></div>
+        <div class="info-row"><span class="info-label">Verified</span><span class="info-value" style="color: var(--accent-green);">Yes</span></div>
+        <div class="info-row"><span class="info-label">Billing</span><span class="info-value" style="color: var(--accent-blue); cursor: pointer;" onclick="handleBilling()">Manage &rarr;</span></div>
+      </div>
+    </div>
+  `;
+}
+
+let licenseRevealed = false;
+function toggleLicenseKey() {
+  const display = document.getElementById('license-key-display');
+  const btn = document.getElementById('btn-reveal');
+  licenseRevealed = !licenseRevealed;
+  if (licenseRevealed) {
+    display.textContent = customer.licenseKey || '';
+    btn.textContent = 'Hide';
+  } else {
+    display.innerHTML = '<span class="license-masked">' + maskKey(customer.licenseKey) + '</span>';
+    btn.textContent = 'Reveal';
+  }
+}
+
+function copyLicenseKey(btn) {
+  navigator.clipboard.writeText(customer.licenseKey || '').then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+function copyCliCommands(btn) {
+  const text = 'npx @lead-routing/cli login\nnpx @lead-routing/cli init';
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+async function loadDashboard() {
+  const token = localStorage.getItem('lr_token');
+  if (!token) {
+    window.location.href = '/login.html';
+    return;
+  }
+
+  try {
+    const res = await fetch(API + '/v1/auth/me', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+
+    if (res.status === 401) {
+      localStorage.removeItem('lr_token');
+      localStorage.removeItem('lr_customer');
+      window.location.href = '/login.html';
+      return;
+    }
+
+    const data = await res.json();
+    customer = data.customer || data;
+
+    // Update localStorage with fresh data
+    localStorage.setItem('lr_customer', JSON.stringify(customer));
+
+    // Set header
+    document.getElementById('dash-avatar').textContent = getInitials(customer.firstName, customer.lastName).toUpperCase();
+    const tierBadge = customer.tier === 'pro'
+      ? '<span class="tier-badge tier-pro">PRO</span>'
+      : '<span class="tier-badge tier-free">FREE</span>';
+    document.getElementById('dash-name').innerHTML = (customer.firstName || '') + ' ' + (customer.lastName || '') + ' ' + tierBadge;
+    document.getElementById('dash-email').textContent = customer.email || '';
+
+    // Actions
+    const actions = document.getElementById('dash-actions');
+    if (customer.tier === 'pro') {
+      actions.innerHTML = `
+        <button class="btn-sm" onclick="handleBilling()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          Manage Billing
+        </button>
+        <button class="btn-sm btn-sm-danger" onclick="logout()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </button>`;
+    } else {
+      actions.innerHTML = `
+        <button class="btn-sm" onclick="handleUpgrade()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Upgrade
+        </button>
+        <button class="btn-sm btn-sm-danger" onclick="logout()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </button>`;
+    }
+
+    // Render based on tier
+    if (customer.tier === 'pro') {
+      renderPro(customer);
+    } else {
+      renderFree(customer);
+    }
+
+    // Show content
+    document.getElementById('dash-loading').style.display = 'none';
+    document.getElementById('dash-content').style.display = 'block';
+
+    // Auto-trigger upgrade if redirected with ?upgrade=true
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgrade') === 'true' && customer.tier === 'free') {
+      handleUpgrade();
+    }
+  } catch (err) {
+    document.getElementById('dash-loading').innerHTML = '<div style="text-align:center;"><p style="color:#ef4444;font-size:14px;">Failed to load dashboard. Please try again.</p><a href="/login.html" class="btn-secondary" style="width:auto;margin-top:16px;">Back to Login</a></div>';
+  }
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

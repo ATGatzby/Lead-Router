@@ -3,9 +3,15 @@ import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { parseFilters } from "../filters";
 import { sanitizeCsvCell } from "@/lib/csv";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 export async function GET(req: NextRequest) {
   try {
+    const limits = getTierLimits();
+    if (!limits.analytics) {
+      return upgradeRequiredResponse("Analytics");
+    }
+
     const orgId = await getOrgIdFromHeaders();
     const filters = parseFilters(req.nextUrl.searchParams);
     const view = req.nextUrl.searchParams.get("view") || "overview";

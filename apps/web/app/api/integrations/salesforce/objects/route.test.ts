@@ -10,9 +10,22 @@ const mockPrisma = vi.hoisted(() => ({
     update: vi.fn(),
   },
 }));
+const mockGetTierLimits = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({ getOrgIdFromHeaders: mockGetOrgIdFromHeaders }));
 vi.mock("@lead-routing/db", () => ({ prisma: mockPrisma }));
+vi.mock("@/lib/license", () => ({
+  getTierLimits: mockGetTierLimits,
+  upgradeRequiredResponse: (feature: string) =>
+    Response.json(
+      {
+        error: "upgrade_required",
+        message: `${feature} requires a Pro license. Upgrade at https://openedgeai.tech/pricing`,
+        tier: "free",
+      },
+      { status: 402 },
+    ),
+}));
 
 import { GET, POST } from "./route";
 
@@ -21,6 +34,12 @@ import { GET, POST } from "./route";
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetOrgIdFromHeaders.mockResolvedValue("org-1");
+  // Default to pro tier (all objects allowed) so existing tests pass unchanged
+  mockGetTierLimits.mockReturnValue({
+    allowedTriggers: ["LEAD", "CONTACT", "ACCOUNT"],
+    weightedDistribution: true,
+    analytics: true,
+  });
 });
 
 // ─── GET Tests ───────────────────────────────────────────────────────────────
@@ -118,5 +137,85 @@ describe("POST /api/integrations/salesforce/objects", () => {
 
     expect(res.status).toBe(500);
     expect(body.error).toBe("Internal server error");
+  });
+});
+
+// ─── Tier Gating Tests ─────────────────────────────────────────────────────
+
+describe("POST /api/integrations/salesforce/objects — free tier gating", () => {
+  function makeRequest(body: unknown): NextRequest {
+    return new NextRequest("http://localhost/api/integrations/salesforce/objects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  beforeEach(() => {
+    // Free tier: only LEAD allowed
+    mockGetTierLimits.mockReturnValue({
+      allowedTriggers: ["LEAD"],
+      weightedDistribution: false,
+      analytics: false,
+    });
+  });
+
+  it("free tier: enabling Lead object succeeds", async () => {
+    const config = { Lead: { enabled: true } };
+    mockPrisma.organization.update.mockResolvedValue({ objectConfig: config });
+
+    const res = await POST(makeRequest({ objectConfig: config }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.objectConfig).toEqual(config);
+  });
+
+  it("free tier: enabling Contact object returns 402", async () => {
+    const res = await POST(
+      makeRequest({ objectConfig: { Contact: { enabled: true } } }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe("upgrade_required");
+    expect(body.message).toContain("Contact");
+  });
+
+  it("free tier: enabling Account object returns 402", async () => {
+    const res = await POST(
+      makeRequest({ objectConfig: { Account: { enabled: true } } }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe("upgrade_required");
+    expect(body.message).toContain("Account");
+  });
+
+  it("free tier: disabling Contact object is allowed (enabled: false)", async () => {
+    const config = { Contact: { enabled: false } };
+    mockPrisma.organization.update.mockResolvedValue({ objectConfig: config });
+
+    const res = await POST(makeRequest({ objectConfig: config }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.objectConfig).toEqual(config);
+  });
+
+  it("free tier: mixed config with Contact enabled returns 402", async () => {
+    const res = await POST(
+      makeRequest({
+        objectConfig: {
+          Lead: { enabled: true },
+          Contact: { enabled: true },
+        },
+      }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe("upgrade_required");
   });
 });

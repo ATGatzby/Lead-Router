@@ -5,6 +5,8 @@ export interface EngineEnvConfig {
   internalApiKey: string
   enginePort?: number
   logLevel?: string
+  licenseKey?: string
+  licenseTier: string
 }
 
 export function renderEnvEngine(c: EngineEnvConfig): string {
@@ -28,5 +30,10 @@ export function renderEnvEngine(c: EngineEnvConfig): string {
     ``,
     `# Internal API key (Bearer token for analytics endpoints)`,
     `INTERNAL_API_KEY=${c.internalApiKey}`,
+    ``,
+    `# License`,
+    `LICENSE_KEY=${c.licenseKey ?? ''}`,
+    `LICENSE_TIER=${c.licenseTier}`,
+    `LICENSE_API_URL=https://lead-routing-license.artyagi2011.workers.dev`,
   ].join('\n')
 }

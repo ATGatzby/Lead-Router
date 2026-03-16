@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // PUT /api/teams/:id/weights — bulk update member weights
 export async function PUT(
@@ -11,6 +12,12 @@ export async function PUT(
     const { id: teamId } = await params;
     const actor = await getActorFromHeaders();
     const { orgId, userId: actorId, userName: actorName } = actor;
+
+    // ── License tier gating ──────────────────────────────────────────────
+    const limits = getTierLimits();
+    if (!limits.weightedDistribution) {
+      return upgradeRequiredResponse("Weighted distribution");
+    }
 
     // Verify team belongs to org
     const team = await prisma.roundRobinTeam.findFirst({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // POST /api/users/:id/license — enable a user's license
 export async function POST(
@@ -25,6 +26,15 @@ export async function POST(
     }
     if (user.isLicensed) {
       return NextResponse.json({ message: "Already licensed" });
+    }
+
+    // ── License tier seat limit ────────────────────────────────────────
+    const limits = getTierLimits();
+    if (limits.maxSeats !== Infinity) {
+      const licensedCount = await prisma.user.count({ where: { orgId, isLicensed: true } });
+      if (licensedCount >= limits.maxSeats) {
+        return upgradeRequiredResponse(`Licensing more than ${limits.maxSeats} users`);
+      }
     }
 
     // Seat cap check

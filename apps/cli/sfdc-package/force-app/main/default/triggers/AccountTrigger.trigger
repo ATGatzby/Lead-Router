@@ -15,11 +15,6 @@ trigger AccountTrigger on Account (after insert, after update) {
 
     if (Trigger.isUpdate && settings.Account_Update_Enabled__c) {
         for (Account a : Trigger.new) {
-            Account old = Trigger.oldMap.get(a.Id);
-            // Skip if the routing engine just stamped this record
-            if (a.Routing_Action__c != old.Routing_Action__c
-                && a.Routing_Action__c != null
-                && a.Routing_Action__c.startsWith('assigned')) continue;
             updateIds.add(a.Id);
         }
     }

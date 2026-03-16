@@ -107,6 +107,11 @@ model Organization {
   aiBaseUrl        String?   // custom endpoint URL (null = default)
   aiCustomHeaders  Json?     // custom headers for self-hosted proxies
   aiChatCount      Int       @default(0)
+  // License activation (from web UI)
+  licenseKey         String?
+  licenseTier        String?   // "free" | "pro"
+  licenseValidUntil  DateTime?
+  licenseActivatedAt DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

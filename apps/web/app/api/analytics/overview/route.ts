@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { parseFilters, buildAggregateQuery } from "../filters";
+import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 interface AggRow {
   total: bigint;
@@ -31,6 +32,11 @@ function pctDelta(current: number, previous: number): number | null {
  */
 export async function GET(req: NextRequest) {
   try {
+    const limits = getTierLimits();
+    if (!limits.analytics) {
+      return upgradeRequiredResponse("Analytics");
+    }
+
     const orgId = await getOrgIdFromHeaders();
     const filters = parseFilters(req.nextUrl.searchParams);
 

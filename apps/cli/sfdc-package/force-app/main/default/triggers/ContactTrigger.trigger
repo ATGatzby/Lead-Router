@@ -15,11 +15,6 @@ trigger ContactTrigger on Contact (after insert, after update) {
 
     if (Trigger.isUpdate && settings.Contact_Update_Enabled__c) {
         for (Contact c : Trigger.new) {
-            Contact old = Trigger.oldMap.get(c.Id);
-            // Skip if the routing engine just stamped this record
-            if (c.Routing_Action__c != old.Routing_Action__c
-                && c.Routing_Action__c != null
-                && c.Routing_Action__c.startsWith('assigned')) continue;
             updateIds.add(c.Id);
         }
     }

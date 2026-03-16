@@ -18,6 +18,8 @@ import { startServices } from '../steps/start-services.js'
 import { verifyHealth } from '../steps/verify-health.js'
 import { SshConnection } from '../utils/ssh.js'
 import { findInstallDir, readConfig } from '../utils/config.js'
+import { requireAuth, type StoredCredentials } from '../utils/auth.js'
+import { formatTierBadge } from '../utils/license.js'
 
 export interface InitOptions {
   dryRun?: boolean
@@ -122,9 +124,31 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   }
 
   // ── Full init flow ───────────────────────────────────────────────────────────
+
+  // ── Auth check ──
+  let auth: StoredCredentials
   try {
-    // Step 1 — Install Salesforce Package
-    log.step('Step 1/8  Install Salesforce Package')
+    auth = await requireAuth()
+  } catch (err) {
+    log.error(err instanceof Error ? err.message : 'Authentication required')
+    note(
+      'Run one of the following:\n\n' +
+      `  ${chalk.cyan('lead-routing signup')}   Create a new account\n` +
+      `  ${chalk.cyan('lead-routing login')}    Log in to existing account`,
+      'Account Required'
+    )
+    process.exit(1)
+  }
+
+  log.success(`Logged in as ${auth.customer.firstName} ${auth.customer.lastName} — ${formatTierBadge(auth.customer.tier)}`)
+
+  try {
+    // Step 1 — License tier (from account)
+    log.step('Step 1/9  License validation')
+    const licenseResult = { tier: auth.customer.tier as 'free' | 'pro', key: undefined as string | undefined }
+
+    // Step 2 — Install Salesforce Package
+    log.step('Step 2/9  Install Salesforce Package')
     note(
       'The Lead Router managed package installs the required Connected App,\n' +
         'triggers, and custom objects in your Salesforce org.\n\n' +
@@ -149,12 +173,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       log.success('Salesforce package installed')
     }
 
-    // Step 2 — Local prerequisites (Node.js)
-    log.step('Step 2/8  Checking local prerequisites')
+    // Step 3 — Local prerequisites (Node.js)
+    log.step('Step 3/9  Checking local prerequisites')
     await checkPrerequisites()
 
-    // Step 3 — SSH connection details + immediate connection test
-    log.step('Step 3/8  SSH connection')
+    // Step 4 — SSH connection details + immediate connection test
+    log.step('Step 4/9  SSH connection')
     const sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
@@ -173,8 +197,8 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       }
     }
 
-    // Step 4 — App configuration
-    log.step('Step 4/8  Configuration')
+    // Step 5 — App configuration
+    log.step('Step 5/9  Configuration')
     const cfg = await collectConfig({
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
@@ -183,9 +207,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     // DNS pre-flight
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
-    // Step 5 — Generate config files locally
-    log.step('Step 5/8  Generating config files')
-    const { dir, adminSecret } = generateFiles(cfg, sshCfg)
+    // Step 6 — Generate config files locally
+    log.step('Step 6/9  Generating config files')
+    const { dir } = generateFiles(cfg, sshCfg, {
+      licenseKey: licenseResult.key,
+      licenseTier: licenseResult.tier,
+    })
 
     note(
       `Local config directory: ${chalk.cyan(dir)}\n` +
@@ -203,18 +230,18 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       return
     }
 
-    // Step 6 — Remote setup (already connected from step 3)
-    log.step('Step 6/8  Remote setup')
+    // Step 7 — Remote setup (already connected from step 4)
+    log.step('Step 7/9  Remote setup')
     const remoteDir = await ssh.resolveHome(sshCfg.remoteDir)
     await checkRemotePrerequisites(ssh)
     await uploadFiles(ssh, dir, remoteDir)
 
-    // Step 7 — Start services on remote server
-    log.step('Step 7/8  Starting services')
+    // Step 8 — Start services on remote server
+    log.step('Step 8/9  Starting services')
     await startServices(ssh, remoteDir)
 
-    // Step 8 — Health check on public HTTPS URLs
-    log.step('Step 8/8  Verifying health')
+    // Step 9 — Health check on public HTTPS URLs
+    log.step('Step 9/9  Verifying health')
     await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
 
     // Remove ADMIN_PASSWORD from .env.web now that the seed has run
@@ -243,9 +270,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         '\n\n' +
         `  Dashboard:      ${chalk.cyan(cfg.appUrl)}\n` +
         `  Routing engine: ${chalk.cyan(cfg.engineUrl)}\n\n` +
-        `  Admin email:    ${chalk.white(cfg.adminEmail)}\n` +
-        `  Admin secret:   ${chalk.yellow(adminSecret)}\n` +
-        `                  ${chalk.dim('run `lead-routing config show` to retrieve later')}\n\n` +
+        `  Admin email:    ${chalk.white(cfg.adminEmail)}\n\n` +
         chalk.bold('  Next steps:\n') +
         `  ${chalk.cyan('1.')} Open ${chalk.cyan(cfg.appUrl)} and log in\n` +
         `  ${chalk.cyan('2.')} Go to Integrations → Salesforce → Connect\n` +
