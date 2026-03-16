@@ -41,6 +41,7 @@ vi.mock("ioredis", () => ({
   Redis: vi.fn().mockImplementation(() => ({
     on: vi.fn(),
     set: mockRedisSet,
+    get: vi.fn().mockResolvedValue(null),
   })),
 }));
 
