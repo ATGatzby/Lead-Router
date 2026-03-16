@@ -63,7 +63,7 @@ function NewRouteContent() {
           frequency: "DAILY",
           scheduleTime: "06:00",
           scheduleTimezone: "UTC",
-          batchSize: 100,
+          batchSize: 500,
           searchMaxRecords: null,
           skipRecentlyRouted: true,
           isDryRun: false,
