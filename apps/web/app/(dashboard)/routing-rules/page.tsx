@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
+import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
 
 // ─── License Types ──────────────────────────────────────────────────────────
 
@@ -142,7 +143,7 @@ function formatLastRun(rule: Rule): string {
 
 // ─── New Route Dropdown ────────────────────────────────────────────────────
 
-function NewRouteDropdown({ atLimit = false }: { atLimit?: boolean }) {
+function NewRouteDropdown({ atLimit = false, onAIGenerate }: { atLimit?: boolean; onAIGenerate?: () => void }) {
   const router = useRouter();
 
   if (atLimit) {
@@ -189,9 +190,9 @@ function NewRouteDropdown({ atLimit = false }: { atLimit?: boolean }) {
           <Search className="h-4 w-4 mr-2 text-teal-600 dark:text-teal-400" />
           Scheduled Route
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => router.push("/routing-rules/new?type=realtime&ai=1")}>
+        <DropdownMenuItem onClick={() => onAIGenerate?.()}>
           <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
-          AI Generate
+          Use AI to Create Routes
           <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
             PRO
           </Badge>
@@ -210,6 +211,9 @@ export default function RoutingRulesPage() {
   // Filter & search state
   const [filterType, setFilterType] = useState<FilterType>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // AI route generator
+  const [showAIRules, setShowAIRules] = useState(false);
 
   // Delete dialog
   const [deleteRule, setDeleteRule] = useState<Rule | null>(null);
@@ -550,7 +554,7 @@ export default function RoutingRulesPage() {
             />
             Sync Fields
           </Button>
-          <NewRouteDropdown atLimit={atRuleLimit} />
+          <NewRouteDropdown atLimit={atRuleLimit} onAIGenerate={() => setShowAIRules(true)} />
         </div>
       </div>
 
@@ -591,7 +595,7 @@ export default function RoutingRulesPage() {
           <p className="text-xs text-muted-foreground">
             Create your first route to start automatically assigning records.
           </p>
-          <NewRouteDropdown atLimit={atRuleLimit} />
+          <NewRouteDropdown atLimit={atRuleLimit} onAIGenerate={() => setShowAIRules(true)} />
         </div>
       )}
 
@@ -881,6 +885,15 @@ export default function RoutingRulesPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ── AI Route Generator ── */}
+      {showAIRules && (
+        <AgentChatPanel
+          context="routing-rules"
+          onMutationComplete={() => { qc.invalidateQueries({ queryKey: ["rules"] }); qc.invalidateQueries({ queryKey: ["license"] }); }}
+          onClose={() => setShowAIRules(false)}
+        />
       )}
 
       {/* Delete Confirm Dialog */}

@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CardSkeleton } from "@/components/skeletons/card-skeleton";
-import { AITeamGenerator } from "@/components/teams/AITeamGenerator";
+import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,12 +57,6 @@ export default function RoundRobinsPage() {
   // AI team generator
   const [showAITeamGen, setShowAITeamGen] = useState(false);
   const aiEnabled = true;
-
-  const handleAITeamCreated = (teamId: string) => {
-    qc.invalidateQueries({ queryKey: ["teams"] });
-    setShowAITeamGen(false);
-    router.push(`/round-robins/${teamId}`);
-  };
 
   // Delete dialog
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -165,7 +159,7 @@ export default function RoundRobinsPage() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowAITeamGen(true)}>
                 <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
-                AI Create Team
+                Use AI to Create Teams
                 <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
                   PRO
                 </Badge>
@@ -211,7 +205,7 @@ export default function RoundRobinsPage() {
                 className="border-violet-500/30 text-violet-600 hover:text-violet-700 hover:bg-violet-500/5"
               >
                 <Sparkles className="h-4 w-4" />
-                AI Create
+                Use AI to Create Teams
                 <Badge className="ml-1 bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
                   PRO
                 </Badge>
@@ -349,8 +343,9 @@ export default function RoundRobinsPage() {
 
       {/* ── AI Team Generator ──────────────────────────────────────────────── */}
       {showAITeamGen && (
-        <AITeamGenerator
-          onCreated={handleAITeamCreated}
+        <AgentChatPanel
+          context="teams"
+          onMutationComplete={() => { qc.invalidateQueries({ queryKey: ["teams"] }); }}
           onClose={() => setShowAITeamGen(false)}
         />
       )}

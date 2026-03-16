@@ -20,6 +20,7 @@ export default async function AiAssistantPage() {
       hasAiKey={!!org.aiApiKey}
       aiProvider={org.aiProvider}
       aiModelName={org.aiModelName}
+      context="global"
     />
   );
 }

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 import { prisma } from "@lead-routing/db";
 import { decryptField } from "@/lib/crypto";
-import { TOOLS, toolsToOpenAI, executeTool } from "@/lib/ai/tools";
+import { TOOLS, toolsToOpenAI, executeTool, getToolsForContext } from "@/lib/ai/tools";
+import { composeSystemPrompt } from "@/lib/ai/prompts";
+import type { AgentContext } from "@/lib/ai/contexts";
 
 const APP_SECRET = process.env.APP_SECRET ?? process.env.SESSION_SECRET!;
 
@@ -76,13 +78,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const messages: ChatMessage[] = body.messages ?? [];
     const modelOverride: string | undefined = body.model;
+    const context: AgentContext = body.context ?? "global";
+
+    const systemPrompt = await composeSystemPrompt(orgId, context);
+    const contextTools = getToolsForContext(context);
 
     // Route to the correct provider
     let responseText: string;
     if (org.aiProvider === "claude") {
-      responseText = await handleClaude(apiKey, modelOverride ?? org.aiModelName, messages, orgId);
+      responseText = await handleClaude(apiKey, modelOverride ?? org.aiModelName, messages, orgId, contextTools, systemPrompt);
     } else if (org.aiProvider === "gemini") {
-      responseText = await handleGemini(apiKey, modelOverride ?? org.aiModelName, messages, orgId);
+      responseText = await handleGemini(apiKey, modelOverride ?? org.aiModelName, messages, orgId, contextTools, systemPrompt);
     } else {
       // openai or custom
       responseText = await handleOpenAI(
@@ -91,7 +97,9 @@ export async function POST(req: NextRequest) {
         messages,
         orgId,
         org.aiBaseUrl,
-        org.aiCustomHeaders as Record<string, string> | null
+        org.aiCustomHeaders as Record<string, string> | null,
+        contextTools,
+        systemPrompt
       );
     }
 
@@ -123,7 +131,9 @@ async function handleClaude(
   apiKey: string,
   model: string | null,
   messages: ChatMessage[],
-  orgId: string
+  orgId: string,
+  tools: any[],
+  systemPrompt: string
 ): Promise<string> {
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const client = new Anthropic({ apiKey });
@@ -136,9 +146,9 @@ async function handleClaude(
   let response = await client.messages.create({
     model: model ?? "claude-sonnet-4-5-20250514",
     max_tokens: 4096,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: claudeMessages,
-    tools: TOOLS as any,
+    tools: tools as any,
   });
 
   // Tool use loop
@@ -167,13 +177,13 @@ async function handleClaude(
     response = await client.messages.create({
       model: model ?? "claude-sonnet-4-5-20250514",
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
         ...claudeMessages,
         { role: "assistant", content: response.content },
         { role: "user", content: toolResults },
       ],
-      tools: TOOLS as any,
+      tools: tools as any,
     });
   }
 
@@ -190,7 +200,9 @@ async function handleOpenAI(
   messages: ChatMessage[],
   orgId: string,
   baseUrl: string | null,
-  customHeaders: Record<string, string> | null
+  customHeaders: Record<string, string> | null,
+  tools: any[],
+  systemPrompt: string
 ): Promise<string> {
   const OpenAI = (await import("openai")).default;
   const client = new OpenAI({
@@ -201,7 +213,7 @@ async function handleOpenAI(
   });
 
   const openaiMessages: any[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ];
 
@@ -209,7 +221,7 @@ async function handleOpenAI(
     model: model ?? "gpt-4o",
     max_tokens: 4096,
     messages: openaiMessages,
-    tools: toolsToOpenAI(TOOLS),
+    tools: toolsToOpenAI(tools),
   });
 
   // Tool use loop
@@ -240,7 +252,7 @@ async function handleOpenAI(
       model: model ?? "gpt-4o",
       max_tokens: 4096,
       messages: openaiMessages,
-      tools: toolsToOpenAI(TOOLS),
+      tools: toolsToOpenAI(tools),
     });
   }
 
@@ -253,14 +265,16 @@ async function handleGemini(
   apiKey: string,
   model: string | null,
   messages: ChatMessage[],
-  orgId: string
+  orgId: string,
+  tools: any[],
+  systemPrompt: string
 ): Promise<string> {
   const { GoogleGenAI } = await import("@google/genai");
   const ai = new GoogleGenAI({ apiKey });
 
   // Build Gemini tool declarations (cast to any — Gemini SDK expects its own Type enum for schema types)
   const geminiTools: any[] = [{
-    functionDeclarations: TOOLS.map((t) => ({
+    functionDeclarations: tools.map((t) => ({
       name: t.name,
       description: t.description,
       parameters: t.input_schema as any,
@@ -277,7 +291,7 @@ async function handleGemini(
     model: model ?? "gemini-2.5-flash",
     contents,
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
       tools: geminiTools,
     },
   });
@@ -322,7 +336,7 @@ async function handleGemini(
       model: model ?? "gemini-2.5-flash",
       contents,
       config: {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: systemPrompt,
         tools: geminiTools,
       },
     });

@@ -8,6 +8,7 @@ const TABS = [
   { href: "/settings", label: "General" },
   { href: "/settings/notifications", label: "Webhooks" },
   { href: "/settings/ai", label: "AI Assistant" },
+  { href: "/settings/ai/prompts", label: "AI Prompts" },
   { href: "/settings/license", label: "License" },
 ];
 
