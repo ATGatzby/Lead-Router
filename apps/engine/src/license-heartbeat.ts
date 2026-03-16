@@ -34,7 +34,7 @@ export function initLicenseHeartbeat(redisUrl: string): void {
   // Separate Redis client for storing results (not tied to BullMQ lifecycle)
   storageRedis = new Redis({
     ...connection,
-    maxRetriesPerRequest: undefined, // normal client, not BullMQ
+    maxRetriesPerRequest: 20, // normal client, not BullMQ — use ioredis default
     enableReadyCheck: false,
   });
   storageRedis.on("error", (err: unknown) => {

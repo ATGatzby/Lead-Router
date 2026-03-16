@@ -33,6 +33,7 @@ export async function POST(
           include: { conditions: { orderBy: { sortOrder: "asc" } } },
         },
         matchConfig: true,
+        triggerConditions: { orderBy: { sortOrder: "asc" } },
       },
     });
     if (!source) {
@@ -122,6 +123,18 @@ export async function POST(
                 accountAssigneeTeamId: source.matchConfig.accountAssigneeTeamId,
                 accountAssigneeQueueId: source.matchConfig.accountAssigneeQueueId,
               },
+            }
+          : undefined,
+        triggerConditions: source.triggerConditions.length > 0
+          ? {
+              create: source.triggerConditions.map((tc) => ({
+                groupId: tc.groupId,
+                fieldName: tc.fieldName,
+                fieldType: tc.fieldType,
+                operator: tc.operator,
+                value: tc.value,
+                sortOrder: tc.sortOrder,
+              })),
             }
           : undefined,
       },

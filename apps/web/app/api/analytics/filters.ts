@@ -19,8 +19,13 @@ export function parseFilters(params: URLSearchParams): AnalyticsFilters {
   const assigneeId = params.get("assigneeId") || null;
   const objectType = params.get("objectType") || null;
 
-  const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 86_400_000);
-  const toDate = to ? new Date(to) : new Date();
+  let fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 86_400_000);
+  let toDate = to ? new Date(to) : new Date();
+
+  // Fall back to defaults for invalid date strings
+  if (isNaN(fromDate.getTime())) fromDate = new Date(Date.now() - 30 * 86_400_000);
+  if (isNaN(toDate.getTime())) toDate = new Date();
+
   fromDate.setUTCHours(0, 0, 0, 0);
   toDate.setUTCHours(23, 59, 59, 999);
 
