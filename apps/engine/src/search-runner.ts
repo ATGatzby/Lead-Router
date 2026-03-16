@@ -57,10 +57,15 @@ export async function runScheduledRoute(ruleId: string, orgId: string): Promise<
       const bulkSoql = buildSearchSOQL(rule.objectType, searchCriteria, 0, true); // omitLimit=true
       const matchConfig = (rule as any).matchConfig || null;
 
+      // Auto-scale batch size based on record count if user didn't configure one
+      const userBatchSize = (rule as any).searchBatchSize as number | null;
+      const effectiveBatchSize = userBatchSize || (totalCount >= 10_000 ? 10_000 : 500);
+      console.log(`[search-runner] Bulk path — batch size: ${effectiveBatchSize} (user: ${userBatchSize ?? 'auto'})`);
+
       const result = await runBulkSearch(conn, bulkSoql, ruleId, orgId, rule.objectType, matchConfig, {
         runId: run.id,
         maxRecords: (rule as any).searchMaxRecords || undefined,
-        batchSize: (rule as any).searchBatchSize || undefined,
+        batchSize: effectiveBatchSize,
       });
 
       // Update rule stats from bulk result
