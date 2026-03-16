@@ -117,8 +117,6 @@ describe("GET /bulk-run/:runId/status", () => {
 
     expect(res.statusCode).toBe(200);
     expect(json.status).toBe("RUNNING");
-    expect(json.phase).toBe("writing");
-    expect(json.writePending).toBe(42);
     expect(json.recordsProcessed).toBe(100);
     expect(json.recordsRouted).toBe(80);
     expect(json.recordsFailed).toBe(5);
@@ -127,20 +125,21 @@ describe("GET /bulk-run/:runId/status", () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  it("includes phase and writePending fields with defaults when Redis data is sparse", async () => {
+  it("returns correct counts when Redis data is sparse", async () => {
     mockHgetall.mockResolvedValue({
       status: "RUNNING",
       processed: "10",
       routed: "5",
       failed: "0",
-      // phase and writePending missing
     });
 
     const res = await injectStatus("run-456");
     const json = JSON.parse(res.body);
 
-    expect(json.phase).toBe("routing"); // default
-    expect(json.writePending).toBe(0); // default
+    expect(json.status).toBe("RUNNING");
+    expect(json.recordsProcessed).toBe(10);
+    expect(json.recordsRouted).toBe(5);
+    expect(json.recordsFailed).toBe(0);
   });
 
   it("falls back to DB when Redis has no data", async () => {
@@ -163,8 +162,6 @@ describe("GET /bulk-run/:runId/status", () => {
 
     expect(res.statusCode).toBe(200);
     expect(json.status).toBe("COMPLETED");
-    expect(json.phase).toBe("complete");
-    expect(json.writePending).toBe(0);
     expect(json.recordsFound).toBe(200);
     expect(json.recordsProcessed).toBe(200);
     expect(json.recordsRouted).toBe(180);
