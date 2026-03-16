@@ -875,18 +875,16 @@ export default function LicenseUsersPage() {
               <><Plug className="h-3.5 w-3.5 mr-1.5" /> Sync from Salesforce</>
             )}
           </Button>
-          {process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onMouseDown={() => setShowAILicense(true)}
-              className="border-violet-500/30 text-violet-600 hover:text-violet-700 hover:bg-violet-500/5 dark:text-violet-400 dark:hover:text-violet-300"
-            >
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              AI License
-              <Badge className="ml-1.5 bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">PRO</Badge>
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onMouseDown={() => setShowAILicense(true)}
+            className="border-violet-500/30 text-violet-600 hover:text-violet-700 hover:bg-violet-500/5 dark:text-violet-400 dark:hover:text-violet-300"
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            AI License
+            <Badge className="ml-1.5 bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">PRO</Badge>
+          </Button>
           <Badge variant="outline" className="gap-1.5 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-800">
             <Zap className="h-3 w-3" />
             Salesforce Connected
