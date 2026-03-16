@@ -27,6 +27,7 @@ import { Filter } from "lucide-react"
 import { ConditionBuilder } from "@/components/condition-builder"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { TriggerConfig, ObjectType, TriggerEvent } from "../types"
+import { AITriggerGenerator } from "./AITriggerGenerator"
 
 interface FieldsResponse {
   fields: FieldSchema[]
@@ -38,6 +39,8 @@ interface Props {
   trigger: TriggerConfig
   onSave: (trigger: TriggerConfig) => void
 }
+
+const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true"
 
 export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Props) {
   const [triggerName, setTriggerName] = useState(trigger.triggerName)
@@ -90,11 +93,21 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
     onOpenChange(false)
   }
 
+  const handleApplyAITrigger = (aiTrigger: {
+    objectType: ObjectType
+    triggerEvent: TriggerEvent
+    triggerConditions: ConditionGroup[]
+  }) => {
+    setObjectType(aiTrigger.objectType)
+    setTriggerEvent(aiTrigger.triggerEvent)
+    setTriggerConditions(aiTrigger.triggerConditions)
+  }
+
   const criteriaCount = triggerConditions.flatMap((g) => g.conditions).length
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-lg">
+      <SheetContent side="right" className="w-full sm:max-w-[50vw]">
         <SheetHeader>
           <SheetTitle>Configure Trigger</SheetTitle>
           <SheetDescription>
@@ -103,6 +116,17 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
         </SheetHeader>
 
         <SheetBody className="space-y-5">
+          {aiEnabled && (
+            <>
+              <AITriggerGenerator
+                objectType={objectType}
+                existingConditions={triggerConditions}
+                onApply={handleApplyAITrigger}
+              />
+              <Separator />
+            </>
+          )}
+
           {/* Trigger name */}
           <div className="space-y-1.5">
             <Label htmlFor="trigger-name">Name</Label>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { GitFork, Plus, Pencil, Trash2, Users } from "lucide-react";
+import { GitFork, Plus, Pencil, Trash2, Users, ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CardSkeleton } from "@/components/skeletons/card-skeleton";
+import { AITeamGenerator } from "@/components/teams/AITeamGenerator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +53,16 @@ export default function RoundRobinsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
+
+  // AI team generator
+  const [showAITeamGen, setShowAITeamGen] = useState(false);
+  const aiEnabled = process.env.NEXT_PUBLIC_ENABLE_AI_GENERATOR === "true";
+
+  const handleAITeamCreated = (teamId: string) => {
+    qc.invalidateQueries({ queryKey: ["teams"] });
+    setShowAITeamGen(false);
+    router.push(`/round-robins/${teamId}`);
+  };
 
   // Delete dialog
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -132,10 +149,35 @@ export default function RoundRobinsPage() {
             Create pools of reps for fair, sequential lead distribution.
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
-          New Team
-        </Button>
+        {aiEnabled ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                New Team
+                <ChevronDown className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                <Users className="h-4 w-4 mr-2 text-primary" />
+                Create Team
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowAITeamGen(true)}>
+                <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
+                AI Create Team
+                <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
+                  PRO
+                </Badge>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            New Team
+          </Button>
+        )}
       </div>
 
       {/* Team list */}
@@ -156,10 +198,26 @@ export default function RoundRobinsPage() {
           </div>
           <p className="text-muted-foreground text-sm">No teams yet.</p>
           <p className="text-xs text-muted-foreground">Teams distribute leads evenly among members using round-robin.</p>
-          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Create your first team
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Create your first team
+            </Button>
+            {aiEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAITeamGen(true)}
+                className="border-violet-500/30 text-violet-600 hover:text-violet-700 hover:bg-violet-500/5"
+              >
+                <Sparkles className="h-4 w-4" />
+                AI Create
+                <Badge className="ml-1 bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
+                  PRO
+                </Badge>
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -288,6 +346,14 @@ export default function RoundRobinsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── AI Team Generator ──────────────────────────────────────────────── */}
+      {showAITeamGen && (
+        <AITeamGenerator
+          onCreated={handleAITeamCreated}
+          onClose={() => setShowAITeamGen(false)}
+        />
+      )}
 
       {/* ── Delete Dialog ────────────────────────────────────────────────────── */}
       <Dialog

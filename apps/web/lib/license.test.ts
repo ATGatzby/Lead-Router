@@ -53,6 +53,7 @@ describe('getTierLimits', () => {
       weightedDistribution: false,
       analytics: false,
       auditLog: false,
+      aiRuleGenerator: false,
     })
   })
 
@@ -66,6 +67,7 @@ describe('getTierLimits', () => {
       weightedDistribution: true,
       analytics: true,
       auditLog: true,
+      aiRuleGenerator: true,
     })
   })
 

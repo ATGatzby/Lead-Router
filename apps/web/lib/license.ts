@@ -8,6 +8,7 @@ export interface TierLimits {
   weightedDistribution: boolean;
   analytics: boolean;
   auditLog: boolean;
+  aiRuleGenerator: boolean;
 }
 
 const FREE_LIMITS: TierLimits = {
@@ -18,6 +19,7 @@ const FREE_LIMITS: TierLimits = {
   weightedDistribution: false,
   analytics: false,
   auditLog: false,
+  aiRuleGenerator: false,
 };
 
 const PRO_LIMITS: TierLimits = {
@@ -28,6 +30,7 @@ const PRO_LIMITS: TierLimits = {
   weightedDistribution: true,
   analytics: true,
   auditLog: true,
+  aiRuleGenerator: true,
 };
 
 // Module-level override — set by /api/license/activate or on startup from DB
