@@ -64,10 +64,11 @@ function NewRouteContent() {
           scheduleTime: "06:00",
           scheduleTimezone: "UTC",
           batchSize: 100,
+          searchMaxRecords: null,
           skipRecentlyRouted: true,
           isDryRun: false,
         }
-      : undefined,
+      : null,
     matchConfig: null,
     paths: [],
     defaultOwner: null,
