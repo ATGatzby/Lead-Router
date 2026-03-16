@@ -21,6 +21,10 @@ import {
   listSessions,
   getBranchPerformance,
 } from "./queries";
+import { MUTATION_TOOLS } from "./mutation-tools";
+import type { AgentContext } from "./contexts";
+import { CONTEXT_READ_TOOLS } from "./contexts";
+import * as mutations from "./mutations";
 
 // Claude tool format
 export const TOOLS = [
@@ -265,8 +269,23 @@ export const TOOLS = [
   },
 ];
 
+export function getToolsForContext(context: AgentContext) {
+  // Filter read tools by context
+  const allowedReadTools = CONTEXT_READ_TOOLS[context];
+  const readTools = allowedReadTools.length === 0
+    ? TOOLS  // "global" context gets all read tools
+    : TOOLS.filter(t => allowedReadTools.includes(t.name));
+
+  // Filter mutation tools by context
+  const mutationTools = MUTATION_TOOLS.filter(t =>
+    t.contexts.includes(context)
+  ).map(({ destructive, contexts, ...tool }) => tool); // Strip metadata, keep Claude schema
+
+  return [...readTools, ...mutationTools];
+}
+
 // Convert Claude tools to OpenAI function calling format
-export function toolsToOpenAI(tools: typeof TOOLS) {
+export function toolsToOpenAI(tools: { name: string; description: string; input_schema: any }[]) {
   return tools.map((t) => ({
     type: "function" as const,
     function: {
@@ -326,6 +345,17 @@ export async function executeTool(
       return getBranchPerformance(orgId, args as any);
     case "list_sessions":
       return listSessions(orgId, args as any);
+    // Mutation tools
+    case "license_users": return mutations.licenseUsers(orgId, args);
+    case "delicense_users": return mutations.delicenseUsers(orgId, args);
+    case "create_team": return mutations.createTeam(orgId, args);
+    case "update_team": return mutations.updateTeam(orgId, args);
+    case "delete_team": return mutations.deleteTeam(orgId, args);
+    case "manage_team_members": return mutations.manageTeamMembers(orgId, args);
+    case "update_team_weights": return mutations.updateTeamWeights(orgId, args);
+    case "create_rule": return mutations.createRule(orgId, args);
+    case "toggle_rule": return mutations.toggleRule(orgId, args);
+    case "delete_rule": return mutations.deleteRule(orgId, args);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

@@ -5,15 +5,21 @@ import { BrainCircuit } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ChartBlock, { parseChartSpec } from "./ChartBlock";
+import { ConfirmationCard, parseConfirmationSpec } from "./ConfirmationCard";
+import { FeedbackButtons } from "./FeedbackButtons";
 
 interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
   toolCalls?: { name: string; description?: string }[];
   userInitials?: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  userMessage?: string;
+  context?: string;
 }
 
-export function MessageBubble({ role, content, toolCalls, userInitials = "U" }: MessageBubbleProps) {
+export function MessageBubble({ role, content, toolCalls, userInitials = "U", onConfirm, onCancel, userMessage, context }: MessageBubbleProps) {
   return (
     <div className={cn("flex gap-3", role === "user" && "flex-row-reverse")}>
       {/* Avatar */}
@@ -62,6 +68,17 @@ export function MessageBubble({ role, content, toolCalls, userInitials = "U" }: 
                   const spec = parseChartSpec(String(child.props.children).trim());
                   if (spec) return <ChartBlock spec={spec} />;
                 }
+                // Check for confirmation blocks
+                if (child?.props?.className === "language-confirmation") {
+                  const spec = parseConfirmationSpec(String(child.props.children).trim());
+                  if (spec) {
+                    return <ConfirmationCard
+                      spec={spec}
+                      onConfirm={() => onConfirm?.()}
+                      onCancel={() => onCancel?.()}
+                    />;
+                  }
+                }
                 return <pre>{children}</pre>;
               },
               code({ className, children, ...props }) {
@@ -73,6 +90,13 @@ export function MessageBubble({ role, content, toolCalls, userInitials = "U" }: 
           </ReactMarkdown>
         </div>
       </div>
+      {role === "assistant" && (
+        <FeedbackButtons
+          userMessage={userMessage ?? ""}
+          aiResponse={content}
+          context={context}
+        />
+      )}
     </div>
   );
 }

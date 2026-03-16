@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { PaywallOverlay } from "./PaywallOverlay";
 import { SuggestionGrid } from "./SuggestionGrid";
 import { MessageBubble } from "./MessageBubble";
+import { CONTEXT_SUGGESTIONS } from "./ContextSuggestions";
+import type { AgentContext } from "@/lib/ai/contexts";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -21,9 +23,10 @@ interface ChatWindowProps {
   hasAiKey: boolean;
   aiProvider: string | null;
   aiModelName: string | null;
+  context?: string;
 }
 
-export function ChatWindow({ plan, hasAiKey, aiProvider, aiModelName }: ChatWindowProps) {
+export function ChatWindow({ plan, hasAiKey, aiProvider, aiModelName, context = "global" }: ChatWindowProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -43,7 +46,7 @@ export function ChatWindow({ plan, hasAiKey, aiProvider, aiModelName }: ChatWind
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: newMessages, context }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -278,7 +281,7 @@ export function ChatWindow({ plan, hasAiKey, aiProvider, aiModelName }: ChatWind
               <p className="max-w-md text-center text-sm text-muted-foreground leading-relaxed">
                 Query your lead routing performance, analyze team workload, get conversion insights, and understand your rules — all in natural language.
               </p>
-              <SuggestionGrid onSelect={sendMessage} />
+              <SuggestionGrid onSelect={sendMessage} suggestions={CONTEXT_SUGGESTIONS[(context as AgentContext) ?? "global"]} />
             </div>
           ) : (
             <div className="flex flex-col gap-5 pb-4">

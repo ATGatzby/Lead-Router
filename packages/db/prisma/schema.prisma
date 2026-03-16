@@ -129,6 +129,9 @@ model Organization {
   conversionTracking      ConversionTracking[]
   companyAliases          CompanyAlias[]
   bulkSearchRuns          BulkSearchRun[]
+  aiCustomPrompts         AiCustomPrompt[]
+  aiAgentLogs             AiAgentLog[]
+  aiChatFeedback          AiChatFeedback[]
 
   @@map("organizations")
 }
@@ -610,4 +613,61 @@ model BulkSearchRun {
   @@index([orgId, ruleId])
   @@index([ruleId, status])
   @@map("bulk_search_runs")
+}
+
+model AiCustomPrompt {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type      String   // "instruction" | "template" | "alias" | "memory"
+  name      String
+  content   String
+  context   String?  // null = global, "license-users" | "teams" | "routing-rules"
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, type, isActive])
+  @@map("ai_custom_prompts")
+}
+
+model AiAgentLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  context     String
+  toolName    String
+  action      String
+  entityType  String
+  entityId    String?
+  entityName  String?
+  input       Json
+  output      Json?
+  status      String
+  error       String?
+  actorId     String
+  actorName   String
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([orgId, context])
+  @@map("ai_agent_logs")
+}
+
+model AiChatFeedback {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  rating       String
+  userMessage  String
+  aiResponse   String
+  toolsUsed    Json?
+  context      String?
+  feedback     String?
+  createdAt    DateTime @default(now())
+
+  @@index([orgId, rating])
+  @@map("ai_chat_feedback")
 }
