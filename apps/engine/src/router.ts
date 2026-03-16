@@ -95,6 +95,8 @@ export interface RoutingPayload {
   fields: Record<string, unknown>;
   /** When set, only evaluate this specific rule (used by scheduled route runs) */
   ruleId?: string;
+  /** Pre-resolved match result from batch matcher (bulk search only) */
+  preResolvedMatch?: { type: string; ownerId: string; recordId: string; action?: string } | null;
 }
 
 export type RoutingResult = "routed" | "unmatched" | "dry_run" | "merged";
@@ -527,7 +529,9 @@ async function routeNewStyle(
 
     if (conn) {
       const matchStart = Date.now();
-      const matchResult = await runMatcher(fields, rule.matchConfig, conn, recordId, orgId);
+      const matchResult = payload.preResolvedMatch !== undefined
+        ? payload.preResolvedMatch
+        : await runMatcher(fields, rule.matchConfig, conn, recordId, orgId);
       if (trace) trace.timing.matchPhaseMs = (trace.timing.matchPhaseMs ?? 0) + (Date.now() - matchStart);
 
       // Build match trace

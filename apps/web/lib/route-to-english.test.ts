@@ -421,7 +421,8 @@ function makeSearchTrigger(overrides: Partial<SearchTriggerConfig> = {}): Search
     frequency: "DAILY",
     scheduleTime: "06:00",
     scheduleTimezone: "UTC",
-    batchSize: 200,
+    batchSize: 500,
+    searchMaxRecords: null,
     skipRecentlyRouted: false,
     isDryRun: false,
     ...overrides,
@@ -496,10 +497,10 @@ describe("search trigger section", () => {
     expect(section.lines.some((l) => l.includes("Batch size: 50") || l.includes("batch size") && l.includes("50"))).toBe(true)
   })
 
-  it("omits batch size when default (200)", () => {
+  it("omits batch size when default (500)", () => {
     const review = routeToEnglish(
       makeState({
-        searchTrigger: makeSearchTrigger({ batchSize: 200 }),
+        searchTrigger: makeSearchTrigger({ batchSize: 500 }),
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!

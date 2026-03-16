@@ -80,6 +80,19 @@ export async function GET(req: NextRequest) {
         triggerConditions: { orderBy: { sortOrder: "asc" } },
         team: { select: { id: true, name: true } },
         queue: { select: { id: true, name: true } },
+        bulkSearchRuns: {
+          where: { status: "RUNNING" },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            recordsFound: true,
+            recordsProcessed: true,
+            recordsRouted: true,
+            recordsFailed: true,
+          },
+        },
       },
     });
 
@@ -134,6 +147,7 @@ export async function GET(req: NextRequest) {
       lastRunDurationMs: (r as any).lastRunDurationMs ?? null,
       totalRuns: (r as any).totalRuns ?? 0,
       totalRecordsRouted: (r as any).totalRecordsRouted ?? 0,
+      activeBulkRun: r.bulkSearchRuns[0] ?? null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -172,6 +186,8 @@ export async function POST(req: NextRequest) {
       scheduleTimezone = null,
       scheduleCron = null,
       searchCriteria = undefined,
+      searchMaxRecords = undefined,
+      searchBatchSize = undefined,
       // New Route Builder fields
       branches = [],
       matchConfig = null,
@@ -235,6 +251,8 @@ export async function POST(req: NextRequest) {
         scheduleTimezone: scheduleTimezone ?? null,
         scheduleCron: scheduleCron ?? null,
         searchCriteria: searchCriteria ?? undefined,
+        searchMaxRecords: searchMaxRecords !== undefined ? (searchMaxRecords ?? null) : null,
+        searchBatchSize: searchBatchSize !== undefined ? (searchBatchSize ?? null) : null,
         triggerName: triggerName || "",
         triggerConditions: {
           create: triggerConditions.map(

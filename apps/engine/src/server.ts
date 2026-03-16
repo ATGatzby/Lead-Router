@@ -6,6 +6,7 @@ import { analyticsPlugin } from "./routes/analytics.js";
 import { scheduledPlugin } from "./routes/scheduled.js";
 import { initScheduler, syncScheduledJobs } from "./scheduler.js";
 import { initLicenseHeartbeat, scheduleLicenseHeartbeat } from "./license-heartbeat.js";
+import { initBulkSearchQueue } from "./bulk-search-queue.js";
 // Import workers to start them (side-effect: registers BullMQ event handlers)
 import "./queue.js";
 import "./batch-queue.js";
@@ -51,6 +52,9 @@ const start = async () => {
     // Subscribe to cache invalidation events from the web app
     const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
     startCacheInvalidationListener(redisUrl);
+
+    // Initialize bulk search queue for micro-batch processing
+    initBulkSearchQueue(redisUrl);
 
     // Initialize scheduler for scheduled routes (cron jobs)
     initScheduler(redisUrl);

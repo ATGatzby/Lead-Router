@@ -30,6 +30,7 @@
 22. [Run Route Experience](#22-run-route-experience)
 23. [Theme & Design System](#23-theme--design-system)
 24. [Licensing & Monetization System](#24-licensing--monetization-system)
+25. [Bulk API 2.0 — Search Trigger Execution](#25-bulk-api-20--search-trigger-execution)
 
 ---
 
@@ -2077,3 +2078,79 @@ Full documentation page with dark theme, providing setup guides, how-to videos, 
 | `customer.subscription.deleted` | Start 30-day grace countdown |
 
 Test mode card: `4242 4242 4242 4242`, any future expiry, any CVC.
+
+---
+
+## 25. Bulk API 2.0 -- Search Trigger Execution
+
+### Overview
+
+The Bulk API system enables "Search Salesforce" trigger rules to execute on-demand against existing Salesforce records. When a user clicks "Run Route" on a search-trigger rule, the system uses the Salesforce Bulk API 2.0 to query matching records and routes them through the engine in configurable batches.
+
+### Architecture
+
+```
+Web UI (Run Route button)
+  --> POST /route (engine) with { bulkSearch: true, runId, maxRecords, batchSize }
+  --> Engine: bulk-search.ts orchestrator
+      --> Salesforce Bulk API 2.0: createJob -> uploadJobData (SOQL) -> pollJobStatus -> getJobResults
+      --> Streams CSV results in batches
+      --> Each batch: batch-matcher.ts evaluates rule criteria -> routes matching records
+      --> Progress tracked in Redis (live) + DB (persistent)
+  --> Web UI polls GET /api/bulk-run/:runId/status for live progress
+```
+
+### Key Files
+
+**Engine (`apps/engine/`):**
+- `src/bulk-search.ts` -- Orchestrator: creates Bulk API 2.0 jobs, streams results, coordinates batch processing
+- `src/batch-matcher.ts` -- Evaluates rule filter criteria against bulk records, determines which records to route
+- `src/bulk-search-queue.ts` -- BullMQ queue/worker for async bulk search job execution
+- `src/server.ts` -- New routes: `POST /bulk-run/:runId/cancel`, `GET /bulk-run/:runId/status`
+
+**Web (`apps/web/`):**
+- `app/api/bulk-run/[runId]/status/route.ts` -- Proxies to engine for live progress, falls back to DB for completed runs
+- `app/api/bulk-run/[runId]/cancel/route.ts` -- Forwards cancel request to engine (sets Redis cancellation flag)
+- `components/route-builder/config/SearchTriggerConfigSheet.tsx` -- UI for configuring maxRecords/batchSize + run progress bar
+
+**Database (`packages/db/`):**
+- Migration: `20260316100000_add_bulk_search_runs` -- Creates `bulk_search_runs` table, adds `searchMaxRecords`/`searchBatchSize` to `routing_rules`
+
+### Data Model
+
+```prisma
+model BulkSearchRun {
+  id                String    @id @default(cuid())
+  orgId             String
+  ruleId            String
+  status            String    @default("RUNNING")  // RUNNING | COMPLETED | FAILED | CANCELLED
+  recordsFound      Int       @default(0)
+  recordsProcessed  Int       @default(0)
+  recordsRouted     Int       @default(0)
+  recordsFailed     Int       @default(0)
+  recordsSkipped    Int       @default(0)
+  error             String?
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  durationMs        Int?
+  maxRecords        Int?
+  batchSize         Int?
+  org               Organization @relation(...)
+  rule              RoutingRule  @relation(...)
+  @@map("bulk_search_runs")
+}
+```
+
+### Cancellation Flow
+
+1. User clicks Cancel in the progress UI
+2. Web API forwards `POST /bulk-run/:runId/cancel` to engine
+3. Engine sets `bulk-cancel:{runId}` key in Redis
+4. Orchestrator checks this flag between batches and stops processing
+5. Run status updated to `CANCELLED` in DB with final counts
+
+### Configuration
+
+- `searchMaxRecords` (per rule) -- Maximum records to process in a single run (default: 10,000)
+- `searchBatchSize` (per rule) -- Records per batch sent to the routing pipeline (default: 200)
+- Both configurable in the SearchTriggerConfigSheet UI

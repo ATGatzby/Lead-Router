@@ -59,7 +59,7 @@ const TIMEZONES = [
   "Australia/Sydney",
 ]
 
-const BATCH_SIZES = [50, 100, 200, 400]
+const BATCH_SIZES = [200, 500, 1000]
 
 export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, onSave }: Props) {
   const [triggerName, setTriggerName] = useState(searchTrigger.triggerName)
@@ -69,6 +69,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
   const [scheduleTime, setScheduleTime] = useState(searchTrigger.scheduleTime)
   const [scheduleTimezone, setScheduleTimezone] = useState(searchTrigger.scheduleTimezone)
   const [batchSize, setBatchSize] = useState(searchTrigger.batchSize)
+  const [searchMaxRecords, setSearchMaxRecords] = useState<number | null>(searchTrigger.searchMaxRecords)
   const [skipRecentlyRouted, setSkipRecentlyRouted] = useState(searchTrigger.skipRecentlyRouted)
   const [isDryRun, setIsDryRun] = useState(searchTrigger.isDryRun)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -107,6 +108,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
       setScheduleTime(searchTrigger.scheduleTime)
       setScheduleTimezone(searchTrigger.scheduleTimezone)
       setBatchSize(searchTrigger.batchSize)
+      setSearchMaxRecords(searchTrigger.searchMaxRecords)
       setSkipRecentlyRouted(searchTrigger.skipRecentlyRouted)
       setIsDryRun(searchTrigger.isDryRun)
     }
@@ -122,6 +124,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
       scheduleTime,
       scheduleTimezone,
       batchSize,
+      searchMaxRecords,
       skipRecentlyRouted,
       isDryRun,
     })
@@ -316,9 +319,28 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pt-3">
-              {/* Batch size */}
+              {/* Max records per run */}
               <div className="space-y-1.5">
-                <Label htmlFor="batch-size">Batch size</Label>
+                <Label htmlFor="max-records">Max records per run</Label>
+                <Input
+                  id="max-records"
+                  type="number"
+                  min={1}
+                  placeholder="No limit"
+                  value={searchMaxRecords ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSearchMaxRecords(val === "" ? null : Math.max(1, parseInt(val, 10) || 1));
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Limit how many records are processed per scheduled run. Leave empty for no limit.
+                </p>
+              </div>
+
+              {/* Processing batch size */}
+              <div className="space-y-1.5">
+                <Label htmlFor="batch-size">Processing batch size</Label>
                 <Select
                   value={String(batchSize)}
                   onValueChange={(v) => setBatchSize(Number(v))}
@@ -335,7 +357,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  Records are processed in parallel batches of this size.
+                  Records are processed in batches. Larger batches are faster but use more memory.
                 </p>
               </div>
 
