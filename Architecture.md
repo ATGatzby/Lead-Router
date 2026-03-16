@@ -30,7 +30,7 @@
 22. [Run Route Experience](#22-run-route-experience)
 23. [Theme & Design System](#23-theme--design-system)
 24. [Licensing & Monetization System](#24-licensing--monetization-system)
-25. [Bulk API 2.0 — Search Trigger Execution](#25-bulk-api-20--search-trigger-execution)
+25. [Bulk API 2.0 System — Scheduled Search at Scale](#25-bulk-api-20-system--scheduled-search-at-scale)
 
 ---
 
@@ -1617,7 +1617,7 @@ Both flows converge at `routeRecord()` — same evaluator, branches, match step,
 | File | Purpose |
 |------|---------|
 | `apps/engine/src/soql-builder.ts` | Converts `ConditionGroup[]` → SOQL queries. `buildSearchSOQL()` for data retrieval, `buildCountSOQL()` for preview counts. Includes SOQL injection prevention via `escapeSoqlField()` / `escapeSoqlValue()`. Smart quoting: numeric values and SOQL date literals (`LAST_N_DAYS:7`, `TODAY`) are unquoted. |
-| `apps/engine/src/search-runner.ts` | Core execution logic: `runScheduledRoute(ruleId, orgId)` — loads rule, builds SOQL, paginates SFDC query, routes each record through `routeRecord()` with `eventType: "SEARCH"`, updates rule stats. |
+| `apps/engine/src/search-runner.ts` | Core execution logic: `runScheduledRoute(ruleId, orgId)` — loads rule, builds SOQL, issues COUNT query to decide execution path. **Two-tier execution**: REST path for <2K records (paginates SFDC query, routes each record via `routeRecord()`), Bulk API 2.0 path for >=2K records (delegates to `bulk-search.ts` streaming orchestrator). Updates rule stats on completion. See [§25 Bulk API 2.0](#25-bulk-api-20--search-trigger-execution) for the bulk path. |
 | `apps/engine/src/scheduler.ts` | BullMQ cron job manager: `initScheduler()` creates queue + worker, `syncScheduledJobs()` upserts/removes repeatable jobs based on active scheduled rules. Called on startup and cache invalidation. |
 | `apps/engine/src/routes/scheduled.ts` | Fastify plugin: `POST /run-scheduled` (manual trigger) and `POST /preview-count` (record count without routing). |
 
@@ -2081,42 +2081,73 @@ Test mode card: `4242 4242 4242 4242`, any future expiry, any CVC.
 
 ---
 
-## 25. Bulk API 2.0 -- Search Trigger Execution
+## 25. Bulk API 2.0 System — Scheduled Search at Scale
 
 ### Overview
 
-The Bulk API system enables "Search Salesforce" trigger rules to execute on-demand against existing Salesforce records. When a user clicks "Run Route" on a search-trigger rule, the system uses the Salesforce Bulk API 2.0 to query matching records and routes them through the engine in configurable batches.
+The Bulk API 2.0 system enables "Search Salesforce" trigger rules to process millions of records efficiently. Rather than using the REST API for all queries (which hits Salesforce governor limits at scale), the engine automatically selects the optimal execution path based on record count, streams results without loading them all into memory, and writes owner updates back to Salesforce using Bulk API 2.0 ingest jobs.
 
-### Architecture
+### Architecture — Two-Tier Execution
+
+The system uses a COUNT query to decide the execution path:
 
 ```
-Web UI (Run Route button)
-  --> POST /route (engine) with { bulkSearch: true, runId, maxRecords, batchSize }
-  --> Engine: bulk-search.ts orchestrator
-      --> Salesforce Bulk API 2.0: createJob -> uploadJobData (SOQL) -> pollJobStatus -> getJobResults
-      --> Streams CSV results in batches
-      --> Each batch: batch-matcher.ts evaluates rule criteria -> routes matching records
-      --> Progress tracked in Redis (live) + DB (persistent)
-  --> Web UI polls GET /api/bulk-run/:runId/status for live progress
+Scheduler cron fires (or manual "Run Route")
+  → search-runner.ts: COUNT query against Salesforce
+  → Decision:
+      < 2,000 records → REST path (existing paginated query + per-record routing)
+      ≥ 2,000 records → Bulk API 2.0 path (streaming + batch routing + bulk writes)
 ```
+
+**REST path** (<2K records): Uses `conn.query()` with pagination, routes each record individually via `routeRecord()`, updates owners one at a time. Simple, fast for small datasets.
+
+**Bulk API path** (>=2K records): Full streaming pipeline described below.
+
+### Bulk API Data Flow
+
+```
+search-runner.ts decides Bulk path
+  → Creates BulkSearchRun DB row (status: RUNNING)
+  → bulk-search.ts: conn.bulk2.query(soql) → streaming CSV records
+  → Auto-scaling batch size: 500 for small queries, 10K for ≥10K records
+  → Buffer into micro-batches
+  → Per batch: batchMatchRecords() → IN-clause matching (500x fewer API calls)
+  → Enqueue matched records to bulk-search-queue (BullMQ)
+  → Worker Phase A: routeRecord(skipSfdcWrite=true) → collect (recordId, ownerId, logId) tuples
+  → Worker Phase B: bulkUpdateOwners() → single Bulk API 2.0 ingest job per batch
+  → Reconcile: update routing logs SUCCESS/FAILED based on write results
+  → Redis progress tracking (phase: routing → writing → complete)
+```
+
+Both paths converge at `routeRecord()` — same evaluator, branches, match step, and assignment logic. The key difference: the Bulk path uses `skipSfdcWrite=true` to separate the routing decision from the SFDC write, collecting assignments into a mutable `_assignments` array, then submitting them as a single Bulk API 2.0 update job.
 
 ### Key Files
 
-**Engine (`apps/engine/`):**
-- `src/bulk-search.ts` -- Orchestrator: creates Bulk API 2.0 jobs, streams results, coordinates batch processing
-- `src/batch-matcher.ts` -- Evaluates rule filter criteria against bulk records, determines which records to route
-- `src/bulk-search-queue.ts` -- BullMQ queue/worker for async bulk search job execution
-- `src/server.ts` -- New routes: `POST /bulk-run/:runId/cancel`, `GET /bulk-run/:runId/status`
+| File | Purpose |
+|------|---------|
+| `apps/engine/src/bulk-search.ts` | Bulk API 2.0 streaming orchestrator — streams records from `conn.bulk2.query()`, buffers into micro-batches, runs batch matcher, enqueues to BullMQ. Implements back-pressure (pauses stream when queue depth > 10K pending jobs), stale run detection (skips if existing RUNNING bulk run started within 6 hours), and cancel support (Redis flag checked between micro-batches). |
+| `apps/engine/src/bulk-search-queue.ts` | BullMQ queue + two-phase worker: Phase A collects routing decisions (`skipSfdcWrite`), Phase B submits single Bulk API 2.0 update job per batch. Reconciles routing log statuses (RETRY → SUCCESS/FAILED) based on write results. |
+| `apps/engine/src/batch-matcher.ts` | Batched match queries using IN clauses — 500x reduction in API calls vs per-record matching. Evaluates rule filter criteria against bulk records to determine which records to route. |
+| `apps/engine/src/search-runner.ts` | Entry point: COUNT query → decides REST or Bulk path. REST path handles <2K records inline. Bulk path delegates to `bulk-search.ts`. |
+| `packages/sfdc/src/update-owner.ts` | Added `bulkUpdateOwners()` — Bulk API 2.0 ingest for owner updates. Creates an ingest job, uploads CSV of `(Id, OwnerId)` pairs, closes and polls for completion. Includes `INVALID_FIELD` fallback for orgs with restricted field-level security. |
+| `apps/engine/src/server.ts` | Engine endpoints: `GET /bulk-run/:runId/status`, `POST /bulk-run/:runId/cancel` |
+| `apps/web/app/api/bulk-run/[runId]/status/route.ts` | Proxies to engine for live progress, falls back to DB for completed runs |
+| `apps/web/app/api/bulk-run/[runId]/cancel/route.ts` | Forwards cancel request to engine (sets Redis cancellation flag) |
+| `apps/web/components/route-builder/config/SearchTriggerConfigSheet.tsx` | UI for configuring `searchMaxRecords`/`searchBatchSize` + run progress bar |
 
-**Web (`apps/web/`):**
-- `app/api/bulk-run/[runId]/status/route.ts` -- Proxies to engine for live progress, falls back to DB for completed runs
-- `app/api/bulk-run/[runId]/cancel/route.ts` -- Forwards cancel request to engine (sets Redis cancellation flag)
-- `components/route-builder/config/SearchTriggerConfigSheet.tsx` -- UI for configuring maxRecords/batchSize + run progress bar
+### Key Design Decisions
 
-**Database (`packages/db/`):**
-- Migration: `20260316100000_add_bulk_search_runs` -- Creates `bulk_search_runs` table, adds `searchMaxRecords`/`searchBatchSize` to `routing_rules`
+- **`skipSfdcWrite` flag on RoutingPayload** — Separates the routing decision from the SFDC write. In the Bulk path, `routeRecord()` evaluates conditions and determines the assignee but does NOT call the single-record SFDC update API. Instead, assignments are collected for batch submission.
+- **`_assignments` mutable array** — Side-channel for collecting `(recordId, ownerId, logId)` tuples during Phase A. After all records in a batch are routed, Phase B reads this array and submits a single Bulk API 2.0 ingest job.
+- **Routing logs created with RETRY status** — During Phase A (decision phase), routing logs are written with status `RETRY`. After Phase B (bulk write), logs are updated to `SUCCESS` or `FAILED` based on the Bulk API job results. This ensures logs reflect the actual write outcome, not just the routing decision.
+- **Back-pressure** — The streaming orchestrator pauses the `bulk2.query()` stream when the BullMQ queue depth exceeds 10K pending jobs, preventing memory exhaustion on very large datasets.
+- **Stale run detection** — Before starting a new bulk run, the system checks for any existing `RUNNING` bulk run for the same rule that started within the last 6 hours. If found, the new run is skipped to prevent duplicate processing.
+- **Cancel support** — A Redis key `bulk-cancel:{runId}` is checked between micro-batches. When set, the orchestrator stops streaming, drains in-flight batches, and marks the run as `CANCELLED`.
+- **Auto-scaling batch size** — 500 records per micro-batch for queries returning <10K records, 10K per micro-batch for larger queries. Configurable per rule via `searchBatchSize`.
 
-### Data Model
+### DB Model: BulkSearchRun
+
+Tracks each bulk search execution with status, record counts, timing, and error details.
 
 ```prisma
 model BulkSearchRun {
@@ -2141,16 +2172,45 @@ model BulkSearchRun {
 }
 ```
 
+**New fields on `RoutingRule`**:
+| Field | Type | Purpose |
+|-------|------|---------|
+| `searchMaxRecords` | `Int?` | Cap records per run (default: 10,000) |
+| `searchBatchSize` | `Int?` | Micro-batch size — 200/500/1K/5K/10K (default: 200) |
+
+**Migration**: `20260316100000_add_bulk_search_runs`
+
+### Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `GET /bulk-run/:runId/status` | GET | Live progress: phase, processed, routed, failed, writePending. Engine reads from Redis for in-progress runs. |
+| `POST /bulk-run/:runId/cancel` | POST | Cancel in-progress run. Sets Redis flag, orchestrator checks between micro-batches. |
+| `GET /api/bulk-run/:runId/status` | GET | Web proxy — forwards to engine for live runs, falls back to DB `BulkSearchRun` row for completed runs. |
+| `POST /api/bulk-run/:runId/cancel` | POST | Web proxy — forwards cancel to engine. |
+
 ### Cancellation Flow
 
 1. User clicks Cancel in the progress UI
 2. Web API forwards `POST /bulk-run/:runId/cancel` to engine
 3. Engine sets `bulk-cancel:{runId}` key in Redis
-4. Orchestrator checks this flag between batches and stops processing
-5. Run status updated to `CANCELLED` in DB with final counts
+4. Orchestrator checks this flag between micro-batches and stops streaming
+5. In-flight batches are drained (already-enqueued jobs complete)
+6. Run status updated to `CANCELLED` in DB with final counts
 
-### Configuration
+### Scale Numbers (from load testing)
 
-- `searchMaxRecords` (per rule) -- Maximum records to process in a single run (default: 10,000)
-- `searchBatchSize` (per rule) -- Records per batch sent to the routing pipeline (default: 200)
-- Both configurable in the SearchTriggerConfigSheet UI
+| Records | Engine Processing | Memory | SFDC API Calls (no match) | Estimated E2E |
+|---------|-------------------|--------|---------------------------|---------------|
+| 1M | 3.8s | 136 MB | ~100 bulk jobs | ~5-10 min |
+| 10M | 36s | 190 MB | ~1,000 bulk jobs | ~20-30 min |
+| 15M | 35s | 174 MB | ~1,500 bulk jobs | ~20-45 min |
+
+Engine processing time covers streaming + matching + enqueuing. Estimated E2E includes Salesforce Bulk API 2.0 job processing time (SFDC processes bulk jobs asynchronously, typically 1-5 min per job depending on org load).
+
+### Configuration (via UI)
+
+Both settings are configurable per rule in the SearchTriggerConfigSheet advanced section:
+
+- **`searchMaxRecords`** — Maximum records to process in a single run. Options: 1K / 5K / 10K / 50K / 100K / 500K / 1M / Unlimited. Default: 10,000.
+- **`searchBatchSize`** — Micro-batch size for streaming processing. Options: 200 / 500 / 1K / 5K / 10K. Default: 200. Larger batches reduce overhead but increase memory per batch.

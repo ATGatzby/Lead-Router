@@ -2147,3 +2147,194 @@ describe("ruleId targeting", () => {
     expect(mockEvaluateRule).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// skipSfdcWrite mode (bulk search deferred writes)
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("routeRecord — skipSfdcWrite mode", () => {
+  // Import setCooldown so we can assert on it
+  let mockSetCooldown: ReturnType<typeof vi.fn>;
+  beforeEach(async () => {
+    const cooldownMod = await import("./cooldown.js");
+    mockSetCooldown = vi.mocked(cooldownMod.setCooldown);
+  });
+
+  // ── Legacy (flat) rule with skipSfdcWrite ────────────────────────────────
+
+  it("skipSfdcWrite=true: updateOwner NOT called, _assignments populated", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
+
+    const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];
+    const payload = makePayload({
+      skipSfdcWrite: true,
+      _assignments: assignments,
+    });
+
+    const result = await routeRecord(payload, Date.now());
+
+    expect(result).toBe("routed");
+    expect(mockUpdateOwner).not.toHaveBeenCalled();
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0]).toEqual({
+      recordId: "00Q000000000001",
+      ownerId: "005SFDC_USER",
+      logId: "log-1",
+    });
+  });
+
+  it("skipSfdcWrite=true: routing log created with RETRY status (not SUCCESS)", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
+
+    const payload = makePayload({
+      skipSfdcWrite: true,
+      _assignments: [],
+    });
+
+    await routeRecord(payload, Date.now());
+
+    // The log is created with RETRY status (not updated to SUCCESS — that happens after bulk write)
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "RETRY",
+        }),
+      })
+    );
+
+    // routingLog.update should NOT be called with status: SUCCESS
+    // (it may be called for decisionTrace, but NOT for status change)
+    const updateCalls = mockPrisma.routingLog.update.mock.calls;
+    const statusUpdateCalls = updateCalls.filter(
+      (call: any) => call[0]?.data?.status !== undefined
+    );
+    expect(statusUpdateCalls).toHaveLength(0);
+  });
+
+  it("skipSfdcWrite=true: cooldown still set", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
+
+    const payload = makePayload({
+      skipSfdcWrite: true,
+      _assignments: [],
+    });
+
+    await routeRecord(payload, Date.now());
+
+    expect(mockSetCooldown).toHaveBeenCalledWith("org-1", "00Q000000000001");
+  });
+
+  it("skipSfdcWrite=false (default): updateOwner called normally", async () => {
+    const rule = makeLegacyRule();
+    mockGetActiveRules.mockReturnValue([rule]);
+    mockEvaluateRule.mockReturnValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-1" });
+    mockGetOrgConnection.mockResolvedValue({});
+
+    const result = await routeRecord(makePayload(), Date.now());
+
+    expect(result).toBe("routed");
+    expect(mockUpdateOwner).toHaveBeenCalledTimes(1);
+    // Log should be updated to SUCCESS
+    expect(mockPrisma.routingLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: "SUCCESS" },
+      })
+    );
+  });
+
+  // ── Branch routing with skipSfdcWrite ────────────────────────────────────
+
+  it("skipSfdcWrite=true with branch routing: _assignments populated correctly", async () => {
+    const branch = makeBranch({
+      id: "branch-ent",
+      label: "Enterprise",
+      assignmentType: "USER",
+      assigneeUserId: "user-1",
+    });
+    const rule = makeNewStyleRule({
+      branches: [branch],
+      conditions: [],
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    // The branch evaluator must match
+    mockEvaluateRuleDetailed.mockResolvedValue({ matched: true, groups: [] });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-branch" });
+
+    const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];
+    const payload = makePayload({
+      skipSfdcWrite: true,
+      _assignments: assignments,
+    });
+
+    const result = await routeRecord(payload, Date.now());
+
+    expect(result).toBe("routed");
+    expect(mockUpdateOwner).not.toHaveBeenCalled();
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0]).toEqual({
+      recordId: "00Q000000000001",
+      ownerId: "005SFDC_USER",
+      logId: "log-branch",
+    });
+  });
+
+  // ── Default owner with skipSfdcWrite ─────────────────────────────────────
+
+  it("skipSfdcWrite=true with default owner: _assignments populated correctly", async () => {
+    // Rule with no matching branches but a default owner
+    const rule = makeNewStyleRule({
+      branches: [makeBranch({
+        conditions: [{ groupId: "g1", fieldName: "Company", operator: "equals", value: "NotAcme" }],
+      })],
+      defaultOwnerType: "USER",
+      defaultOwnerUserId: "user-default",
+    });
+    mockGetActiveRules.mockReturnValue([rule]);
+    // Branch does NOT match
+    mockEvaluateRuleDetailed.mockResolvedValue({ matched: false, groups: [] });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Default Alice" });
+    mockPrisma.routingLog.create.mockResolvedValue({ id: "log-default" });
+
+    const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];
+    const payload = makePayload({
+      skipSfdcWrite: true,
+      _assignments: assignments,
+    });
+
+    const result = await routeRecord(payload, Date.now());
+
+    expect(result).toBe("routed");
+    expect(mockUpdateOwner).not.toHaveBeenCalled();
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0]).toEqual({
+      recordId: "00Q000000000001",
+      ownerId: "005SFDC_USER",
+      logId: "log-default",
+    });
+
+    // Log should be created with RETRY status
+    expect(mockPrisma.routingLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pathLabel: "Default Owner",
+          status: "RETRY",
+        }),
+      })
+    );
+  });
+});
