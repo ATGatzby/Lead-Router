@@ -1016,7 +1016,7 @@ export function RouteBuilder({
   // ── English view helpers ────────────────────────────────────────────────────
   const englishErrorCount = useMemo(() => {
     const review = routeToEnglish(state)
-    return review.warnings.filter((w) => w.severity === "error").length
+    return (review?.warnings ?? []).filter((w) => w.severity === "error").length
   }, [state])
 
   const handleFocusPath = useCallback((pathId?: string) => {

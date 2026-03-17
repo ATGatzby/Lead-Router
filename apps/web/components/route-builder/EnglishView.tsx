@@ -64,9 +64,9 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
     }
   }, [])
 
-  const errorCount = review.warnings.filter((w) => w.severity === "error").length
-  const warningCount = review.warnings.filter((w) => w.severity === "warning").length
-  const infoCount = review.warnings.filter((w) => w.severity === "info").length
+  const errorCount = (review?.warnings ?? []).filter((w) => w.severity === "error").length
+  const warningCount = (review?.warnings ?? []).filter((w) => w.severity === "warning").length
+  const infoCount = (review?.warnings ?? []).filter((w) => w.severity === "info").length
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -175,7 +175,7 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
         )}
 
         {/* Warnings */}
-        {review.warnings.length > 0 && (
+        {(review?.warnings ?? []).length > 0 && (
           <>
             <Divider />
             <div className="pt-1">
@@ -208,7 +208,7 @@ export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
 
               {warningsExpanded && (
                 <div className="space-y-1">
-                  {review.warnings.map((w, i) => (
+                  {(review?.warnings ?? []).map((w, i) => (
                     <WarningRow
                       key={i}
                       warning={w}

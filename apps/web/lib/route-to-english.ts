@@ -127,15 +127,15 @@ export function conditionToText(condition: Condition): string {
 }
 
 function conditionGroupToText(group: ConditionGroup): string {
-  if (group.conditions.length === 0) return "";
+  if ((group.conditions ?? []).length === 0) return "";
 
-  const parts = group.conditions.map(conditionToText);
+  const parts = (group.conditions ?? []).map(conditionToText);
   const joiner = group.conjunction === "AND" ? " and " : " or ";
   return parts.join(joiner);
 }
 
 function conditionsToText(groups: ConditionGroup[]): string {
-  const nonEmpty = groups.filter((g) => g.conditions.length > 0);
+  const nonEmpty = groups.filter((g) => (g.conditions ?? []).length > 0);
   if (nonEmpty.length === 0) return "";
 
   if (nonEmpty.length === 1) {
@@ -148,15 +148,15 @@ function conditionsToText(groups: ConditionGroup[]): string {
 }
 
 function hasConditions(groups: ConditionGroup[]): boolean {
-  return groups.some((g) => g.conditions.length > 0);
+  return groups.some((g) => (g.conditions ?? []).length > 0);
 }
 
 function serializeConditions(groups: ConditionGroup[]): string {
   const normalized = groups
-    .filter((g) => g.conditions.length > 0)
+    .filter((g) => (g.conditions ?? []).length > 0)
     .map((g) => ({
       conjunction: g.conjunction,
-      conditions: g.conditions
+      conditions: (g.conditions ?? [])
         .map((c) => `${c.fieldApiName}|${c.operator}|${c.value}`)
         .sort(),
     }))

@@ -289,10 +289,40 @@ function _apiRuleToBuilderState(rule: any): RouteBuilderState {
   // Search trigger config
   let searchTrigger: RouteBuilderState["searchTrigger"] = null
   if (rule.routeType === "SCHEDULED" || rule.triggerEvent === "SEARCH") {
+    // Convert searchCriteria from DB JSON to ConditionGroup[] format
+    // The AI may store flat conditions [{groupId, fieldName, ...}] instead of ConditionGroup[] [{id, conjunction, conditions: [...]}]
+    let searchCriteriaGroups: import("@/components/condition-builder/types").ConditionGroup[] = []
+    if (Array.isArray(rule.searchCriteria)) {
+      // Check if it's already in ConditionGroup format (has .conditions sub-array)
+      const isGroupFormat = rule.searchCriteria.length > 0 && Array.isArray(rule.searchCriteria[0]?.conditions)
+      if (isGroupFormat) {
+        searchCriteriaGroups = rule.searchCriteria
+      } else {
+        // Convert flat conditions to grouped format (same logic as triggerConditions above)
+        const scGroupMap = new Map<string, import("@/components/condition-builder/types").ConditionGroup>()
+        for (const sc of rule.searchCriteria) {
+          if (!sc.fieldName) continue // skip invalid entries
+          const gid = sc.groupId ?? crypto.randomUUID()
+          if (!scGroupMap.has(gid)) {
+            scGroupMap.set(gid, { id: gid, conjunction: "AND" as const, conditions: [] })
+          }
+          scGroupMap.get(gid)!.conditions.push({
+            id: crypto.randomUUID(),
+            groupId: gid,
+            fieldApiName: sc.fieldName,
+            fieldType: (sc.fieldType ?? "TEXT") as import("@/components/condition-builder/types").FieldType,
+            operator: sc.operator,
+            value: sc.value ?? "",
+          })
+        }
+        searchCriteriaGroups = Array.from(scGroupMap.values())
+      }
+    }
+
     searchTrigger = {
       triggerName: rule.triggerName ?? "",
       objectType: rule.objectType ?? "LEAD",
-      searchCriteria: Array.isArray(rule.searchCriteria) ? rule.searchCriteria : [],
+      searchCriteria: searchCriteriaGroups,
       frequency: rule.scheduleFrequency ?? null,
       scheduleTime: rule.scheduleTime ?? "06:00",
       scheduleTimezone: rule.scheduleTimezone ?? "UTC",

@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function FilterStepCard({ conditions, onEdit }: Props) {
-  const conditionCount = conditions.reduce((sum, g) => sum + g.conditions.length, 0)
+  const conditionCount = conditions.reduce((sum, g) => sum + (g.conditions ?? []).length, 0)
   const isCatchAll = conditionCount === 0
 
   return (

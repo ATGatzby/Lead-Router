@@ -131,7 +131,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
     onOpenChange(false)
   }
 
-  const criteriaCount = searchCriteria.flatMap((g) => g.conditions).length
+  const criteriaCount = (searchCriteria ?? []).flatMap((g) => (g.conditions ?? [])).length
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
