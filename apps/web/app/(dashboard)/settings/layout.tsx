@@ -9,6 +9,7 @@ const TABS = [
   { href: "/settings/notifications", label: "Webhooks" },
   { href: "/settings/ai", label: "AI Assistant" },
   { href: "/settings/ai/prompts", label: "AI Prompts" },
+  { href: "/settings/ai/performance", label: "AI Performance" },
   { href: "/settings/license", label: "License" },
 ];
 
@@ -24,10 +25,12 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
       <div className="flex gap-1 border-b">
         {TABS.map((tab) => {
-          const active =
-            tab.href === "/settings"
-              ? pathname === "/settings"
-              : pathname.startsWith(tab.href);
+          // For /settings/ai, only match exact path (not sub-pages like /ai/prompts)
+          const isExactOnly =
+            tab.href === "/settings" || tab.href === "/settings/ai";
+          const active = isExactOnly
+            ? pathname === tab.href
+            : pathname.startsWith(tab.href);
           return (
             <Link
               key={tab.href}

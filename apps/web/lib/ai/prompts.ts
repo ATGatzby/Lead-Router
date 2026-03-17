@@ -52,6 +52,10 @@ export async function composeSystemPrompt(orgId: string, context: AgentContext):
   const customInstructions = await getCustomInstructions(orgId, context);
   if (customInstructions) prompt += customInstructions;
 
+  // Layer 5: Past mistakes (auto-learning from negative feedback)
+  const mistakes = await getRecentMistakes(orgId, context);
+  if (mistakes) prompt += mistakes;
+
   return prompt;
 }
 
@@ -84,6 +88,35 @@ async function getCustomInstructions(orgId: string, context: AgentContext): Prom
     return result;
   } catch {
     // Table might not exist yet if migration hasn't run
+    return "";
+  }
+}
+
+async function getRecentMistakes(orgId: string, context: AgentContext): Promise<string> {
+  try {
+    const negatives = await prisma.aiChatFeedback.findMany({
+      where: {
+        orgId,
+        rating: "negative",
+        feedback: { not: null },
+        ...(context !== "global" ? { context } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { userMessage: true, feedback: true },
+    });
+
+    if (negatives.length === 0) return "";
+
+    const mistakes = negatives.map(
+      (n) =>
+        `- User asked: "${n.userMessage.slice(0, 100)}" → Problem: ${n.feedback}`
+    );
+
+    return `\n\nPAST MISTAKES TO AVOID (based on user feedback):
+${mistakes.join("\n")}
+Learn from these mistakes. If a similar request comes up, adjust your approach accordingly.`;
+  } catch {
     return "";
   }
 }

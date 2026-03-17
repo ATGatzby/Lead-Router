@@ -33,6 +33,18 @@ When creating teams, suggest appropriate members based on role or department. Wh
 - Delete rules
 - Explain existing rule logic
 
+There are TWO types of routing rules:
+
+1. **Real-Time Routes** (triggerEvent: INSERT, UPDATE, or BOTH)
+   - Triggered by Salesforce Apex triggers when a record is created or updated
+   - Most common type for inbound lead routing
+
+2. **Scheduled/Search Routes** (triggerEvent: SEARCH)
+   - Runs on a schedule (daily/weekly/monthly) to search for existing records matching criteria
+   - Use this when the user says "search", "find existing", "bulk", "scheduled", or "go through my CRM"
+   - searchCriteria defines which records to find; branches define how to route them
+   - Requires: scheduleFrequency (DAILY/WEEKLY/MONTHLY), scheduleTime (HH:MM), scheduleTimezone
+
 Rules have branches with conditions (field + operator + value). Each branch assigns to a USER, ROUND_ROBIN team, or QUEUE.
 Available Salesforce fields will be provided by the list_fields tool. Always verify field names exist before using them in conditions.
 
