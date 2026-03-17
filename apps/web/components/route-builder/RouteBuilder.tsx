@@ -199,7 +199,7 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "filter": {
       const path = state.paths.find((p) => p.id === node.pathId)
       if (!path) return "No path"
-      const allConds = path.conditions.flatMap((g) => g.conditions)
+      const allConds = Array.isArray(path.conditions) ? path.conditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
       const count = allConds.length
       if (count === 0) return "No conditions (catch-all)"
       const first = allConds[0]
