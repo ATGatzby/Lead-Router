@@ -103,7 +103,7 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
     setTriggerConditions(aiTrigger.triggerConditions)
   }
 
-  const criteriaCount = triggerConditions.flatMap((g) => g.conditions).length
+  const criteriaCount = (triggerConditions ?? []).flatMap((g) => (g.conditions ?? [])).length
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>

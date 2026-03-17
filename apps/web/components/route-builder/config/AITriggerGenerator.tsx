@@ -291,7 +291,7 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
     setState("preview")
   }, [result])
 
-  const hasExisting = existingConditions.some((g) => g.conditions.length > 0)
+  const hasExisting = existingConditions.some((g) => (g.conditions ?? []).length > 0)
 
   const handleApply = useCallback(() => {
     if (!result) return
@@ -307,11 +307,11 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
     if (!result) return
     // Merge new conditions INTO the first existing AND group if possible,
     // otherwise append as new groups
-    const merged = [...existingConditions.map((g) => ({ ...g, conditions: [...g.conditions] }))]
+    const merged = [...existingConditions.map((g) => ({ ...g, conditions: [...(g.conditions ?? [])] }))]
     for (const newGroup of result.triggerConditions) {
       if (newGroup.conjunction === "AND" && merged.length > 0 && merged[0].conjunction === "AND") {
         // Append conditions into the first AND group
-        merged[0].conditions.push(...newGroup.conditions)
+        merged[0].conditions.push(...(newGroup.conditions ?? []))
       } else {
         // Different conjunction — add as separate group
         merged.push(newGroup)
@@ -532,17 +532,17 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
                       </div>
 
                       {/* Conditions */}
-                      {result.triggerConditions.length > 0 && (
+                      {(result.triggerConditions ?? []).length > 0 && (
                         <div className="space-y-1.5 pt-1">
                           <span className="text-xs text-muted-foreground">Conditions</span>
-                          {result.triggerConditions.map((group, gi) => (
+                          {(result.triggerConditions ?? []).map((group, gi) => (
                             <div key={`grp-${gi}`} className="space-y-1">
                               {gi > 0 && (
                                 <span className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider">
                                   OR
                                 </span>
                               )}
-                              {group.conditions.map((cond, ci) => (
+                              {(group.conditions ?? []).map((cond, ci) => (
                                 <div key={`cond-${gi}-${ci}`} className="flex items-baseline gap-1.5 flex-wrap text-xs">
                                   {ci > 0 && (
                                     <span className="text-[10px] font-semibold text-muted-foreground uppercase">

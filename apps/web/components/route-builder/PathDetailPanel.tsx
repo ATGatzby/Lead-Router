@@ -56,7 +56,7 @@ function ConditionToken({ condition }: { condition: Condition }) {
 function ConditionGroupDisplay({ group }: { group: ConditionGroup }) {
   return (
     <div className="flex flex-col gap-1">
-      {group.conditions.map((cond, i) => (
+      {(group.conditions ?? []).map((cond, i) => (
         <div key={cond.id} className="flex items-start gap-1.5">
           {i > 0 && (
             <span className="text-[10px] uppercase font-semibold text-muted-foreground mt-1 min-w-[28px]">
@@ -144,13 +144,13 @@ export function PathDetailPanel({
         {/* Path conditions detail */}
         {section.type === "path" && path && (
           <>
-            {path.conditions.length > 0 ? (
+            {(path.conditions ?? []).length > 0 ? (
               <div>
                 <h4 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">
                   Conditions
                 </h4>
                 <div className="space-y-3">
-                  {path.conditions.map((group, i) => (
+                  {(path.conditions ?? []).map((group, i) => (
                     <div key={group.id}>
                       {i > 0 && (
                         <div className="flex items-center gap-2 my-2">
@@ -252,13 +252,13 @@ export function PathDetailPanel({
                 )}
               </div>
             </div>
-            {trigger.triggerConditions.length > 0 && trigger.triggerConditions.some(g => g.conditions.length > 0) && (
+            {(trigger.triggerConditions ?? []).length > 0 && (trigger.triggerConditions ?? []).some(g => (g.conditions ?? []).length > 0) && (
               <div>
                 <h4 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">
                   Criteria
                 </h4>
                 <div className="space-y-3">
-                  {trigger.triggerConditions.filter(g => g.conditions.length > 0).map((group, i) => (
+                  {(trigger.triggerConditions ?? []).filter(g => (g.conditions ?? []).length > 0).map((group, i) => (
                     <div key={group.id}>
                       {i > 0 && (
                         <div className="flex items-center gap-2 my-2">
@@ -324,13 +324,13 @@ export function PathDetailPanel({
                 )}
               </div>
             </div>
-            {searchTrigger.searchCriteria.length > 0 && searchTrigger.searchCriteria.some(g => g.conditions.length > 0) && (
+            {(searchTrigger.searchCriteria ?? []).length > 0 && (searchTrigger.searchCriteria ?? []).some(g => (g.conditions ?? []).length > 0) && (
               <div>
                 <h4 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">
                   Search Criteria
                 </h4>
                 <div className="space-y-3">
-                  {searchTrigger.searchCriteria.filter(g => g.conditions.length > 0).map((group, i) => (
+                  {(searchTrigger.searchCriteria ?? []).filter(g => (g.conditions ?? []).length > 0).map((group, i) => (
                     <div key={group.id}>
                       {i > 0 && (
                         <div className="flex items-center gap-2 my-2">
