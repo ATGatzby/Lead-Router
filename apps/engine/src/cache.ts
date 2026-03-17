@@ -74,6 +74,13 @@ export interface CachedRule {
   defaultOwnerUserId: string | null;
   defaultOwnerTeamId: string | null;
   defaultOwnerQueueId: string | null;
+  // Trigger conditions (pre-filter: record must match these to enter the rule)
+  triggerConditions: Array<{
+    groupId: string;
+    fieldName: string;
+    operator: string;
+    value: string | null;
+  }>;
   // Scheduled route fields
   routeType: string; // "REALTIME" | "SCHEDULED"
   searchCriteria: Array<{
@@ -110,6 +117,7 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
     orderBy: { priority: "asc" },
     include: {
       conditions: { orderBy: { sortOrder: "asc" } },
+      triggerConditions: { orderBy: { sortOrder: "asc" } },
       branches: {
         orderBy: { priority: "asc" },
         include: { conditions: { orderBy: { sortOrder: "asc" } } },
@@ -135,6 +143,12 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
       fieldName: c.fieldName,
       operator: c.operator,
       value: c.value,
+    })),
+    triggerConditions: r.triggerConditions.map((tc) => ({
+      groupId: tc.groupId,
+      fieldName: tc.fieldName,
+      operator: tc.operator,
+      value: tc.value,
     })),
     branches: r.branches.map((b) => ({
       id: b.id,
