@@ -28,7 +28,7 @@ interface TraceRuleEval {
   ruleId: string;
   ruleName: string;
   priority: number;
-  outcome: "MATCHED" | "UNMATCHED" | "SKIPPED_TRIGGER_EVENT";
+  outcome: "MATCHED" | "UNMATCHED" | "SKIPPED_TRIGGER_EVENT" | "SKIPPED_TRIGGER_CRITERIA";
   matchPhase?: {
     config: Record<string, unknown>;
     checks: TraceMatchCheck[];
@@ -420,6 +420,18 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
         });
       }
     } else if (r.triggerEvent === "BOTH" || r.triggerEvent === eventType) {
+      // Evaluate trigger conditions — if the rule has trigger criteria,
+      // the record must match them before the rule is considered eligible
+      if (r.triggerConditions && r.triggerConditions.length > 0) {
+        const triggerMatch = await evaluateRule(fields, r.triggerConditions, orgId);
+        if (!triggerMatch) {
+          trace.rulesEvaluated.push({
+            ruleId: r.id, ruleName: r.name, priority: r.priority,
+            outcome: "SKIPPED_TRIGGER_CRITERIA",
+          });
+          continue;
+        }
+      }
       eligibleRules.push(r);
     } else {
       trace.rulesEvaluated.push({
