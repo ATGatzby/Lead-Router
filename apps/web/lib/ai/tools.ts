@@ -355,6 +355,8 @@ export async function executeTool(
     case "delete_team":
     case "manage_team_members":
     case "update_team_weights":
+    case "create_flow":
+    case "switch_routing_mode":
     case "create_rule":
     case "toggle_rule":
     case "delete_rule": {
@@ -373,6 +375,8 @@ export async function executeTool(
         delete_team: mutations.deleteTeam,
         manage_team_members: mutations.manageTeamMembers,
         update_team_weights: mutations.updateTeamWeights,
+        create_flow: mutations.createFlow,
+        switch_routing_mode: mutations.switchRoutingMode,
         create_rule: mutations.createRule,
         toggle_rule: mutations.toggleRule,
         delete_rule: mutations.deleteRule,

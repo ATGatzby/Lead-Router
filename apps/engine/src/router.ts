@@ -14,6 +14,7 @@ import { normalizeCompanyName, fuzzyCompanyMatch } from "./lib/fuzzy.js";
 import { checkAliasCache, cacheAliasResult } from "./lib/alias-cache.js";
 import { resolveCompanySimilarity } from "./lib/ai-client.js";
 import { setCooldown, isInCooldown } from "./cooldown.js";
+import { getRoutingMode } from "./flow-cache.js";
 
 // ─── Decision Trace types ─────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ interface AssigneeInfo {
   teamName?: string;
 }
 
-async function resolveAssigneeFromFields(
+export async function resolveAssigneeFromFields(
   assignmentType: string,
   assigneeUserId: string | null,
   assigneeTeamId: string | null,
@@ -367,8 +368,16 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
   const { orgId, objectType, eventType: rawEventType, recordId, fields, ruleId: targetRuleId } = payload;
   // Cast to `any` because "SEARCH" isn't in the Prisma TriggerEvent enum yet (schema not regenerated)
   const eventType = rawEventType as any;
-  const trace = createTrace(payload);
   const routeStartMs = startMs ?? Date.now();
+
+  // ── Check if this org+object uses FLOW mode ────────────────────────────
+  const routingMode = getRoutingMode(orgId, objectType);
+  if (routingMode === "FLOW") {
+    const { routeFlowRecord } = await import("./flow-router.js");
+    return routeFlowRecord(payload, routeStartMs);
+  }
+
+  const trace = createTrace(payload);
 
   // ── Layer 3: Cooldown check for UPDATE events ──────────────────────────
   if (eventType === "UPDATE") {

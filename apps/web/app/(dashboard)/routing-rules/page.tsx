@@ -21,6 +21,7 @@ import {
   Square,
   FlaskConical,
   Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -224,6 +225,53 @@ export default function RoutingRulesPage() {
   const [completedRuleId, setCompletedRuleId] = useState<string | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressStartRef = useRef<number>(0);
+
+  // Routing mode state
+  const [objectType, setObjectType] = useState<ObjectType>("LEAD");
+  const [switchToMode, setSwitchToMode] = useState<"CLASSIC" | "FLOW" | null>(null);
+
+  const routingModeQuery = useQuery<{ modes: Record<string, "CLASSIC" | "FLOW"> }>({
+    queryKey: ["routing-mode"],
+    queryFn: async () => {
+      const res = await fetch("/api/routing-mode");
+      if (!res.ok) return { modes: { LEAD: "CLASSIC", CONTACT: "CLASSIC", ACCOUNT: "CLASSIC" } };
+      return res.json();
+    },
+  });
+
+  const routingModeMutation = useMutation({
+    mutationFn: async ({ objectType, mode }: { objectType: ObjectType; mode: "CLASSIC" | "FLOW" }) => {
+      const res = await fetch("/api/routing-mode", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectType, mode }),
+      });
+      if (!res.ok) throw new Error("Failed to switch routing mode");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["routing-mode"] });
+      setSwitchToMode(null);
+      toast.success("Routing mode updated");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const currentMode = routingModeQuery.data?.modes?.[objectType] ?? "CLASSIC";
+
+  const handleModeSwitch = (mode: "CLASSIC" | "FLOW") => {
+    if (mode === currentMode) return;
+    if (mode === "FLOW") {
+      setSwitchToMode("FLOW");
+    } else {
+      setSwitchToMode("CLASSIC");
+    }
+  };
+
+  const confirmModeSwitch = () => {
+    if (!switchToMode) return;
+    routingModeMutation.mutate({ objectType, mode: switchToMode });
+  };
 
   // Bulk run polling state
   const [activeBulkRunId, setActiveBulkRunId] = useState<string | null>(null);
@@ -577,16 +625,114 @@ export default function RoutingRulesPage() {
         </div>
       )}
 
+      {/* Object Type Tabs + Routing Mode Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {(["LEAD", "CONTACT", "ACCOUNT"] as const).map((ot) => (
+            <button
+              key={ot}
+              onClick={() => setObjectType(ot)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
+                objectType === ot
+                  ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-200 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
+              )}
+            >
+              {objectLabel(ot)}s
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+            <button
+              onClick={() => handleModeSwitch("CLASSIC")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
+                currentMode === "CLASSIC"
+                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-200 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-400"
+              )}
+            >
+              Classic Routes
+            </button>
+            <button
+              onClick={() => handleModeSwitch("FLOW")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
+                currentMode === "FLOW"
+                  ? "bg-violet-600 text-white shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-400"
+              )}
+            >
+              Flow Builder
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Flow Builder Active State */}
+      {currentMode === "FLOW" && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+            <Sparkles className="w-8 h-8 text-violet-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-200">Flow Builder Active</h3>
+          <p className="text-sm text-zinc-500 text-center max-w-md">
+            This object type is using the visual Flow Builder for routing.
+            Classic routes are paused while Flow Builder is active.
+          </p>
+          <a
+            href={`/flow-builder/${objectType}`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold shadow-lg shadow-violet-500/20 transition-colors"
+          >
+            Open Flow Builder
+            <ArrowRight className="w-4 h-4" />
+          </a>
+        </div>
+      )}
+
+      {/* Mode Switch Confirmation Dialog */}
+      <Dialog
+        open={!!switchToMode}
+        onOpenChange={(open) => { if (!open) setSwitchToMode(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Switch to {switchToMode === "FLOW" ? "Flow Builder" : "Classic Routes"}?
+            </DialogTitle>
+            <DialogDescription>
+              {switchToMode === "FLOW"
+                ? "Switching to Flow Builder will pause all classic routes for this object type. You can switch back at any time."
+                : "Switching to Classic Routes will deactivate the Flow Builder for this object type. Your flow configuration will be preserved."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSwitchToMode(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmModeSwitch}
+              disabled={routingModeMutation.isPending}
+              className={switchToMode === "FLOW" ? "bg-violet-600 hover:bg-violet-700 text-white" : ""}
+            >
+              {routingModeMutation.isPending ? "Switching..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Loading / Error */}
-      {rulesQuery.isLoading && <TableSkeleton rows={4} columns={4} />}
-      {rulesQuery.isError && (
+      {currentMode === "CLASSIC" && rulesQuery.isLoading && <TableSkeleton rows={4} columns={4} />}
+      {currentMode === "CLASSIC" && rulesQuery.isError && (
         <div className="text-center py-16 text-destructive text-sm">
           Failed to load rules. Try refreshing.
         </div>
       )}
 
       {/* Empty state */}
-      {rulesQuery.isSuccess && rules.length === 0 && (
+      {currentMode === "CLASSIC" && rulesQuery.isSuccess && rules.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <div className="h-20 w-20 rounded-full bg-muted/50 flex items-center justify-center">
             <ArrowRightLeft className="h-10 w-10 text-muted-foreground/30" />
@@ -600,7 +746,7 @@ export default function RoutingRulesPage() {
       )}
 
       {/* Filter bar + Card list */}
-      {rules.length > 0 && (
+      {currentMode === "CLASSIC" && rules.length > 0 && (
         <>
           {/* Filter Bar */}
           <div className="flex items-center justify-between">

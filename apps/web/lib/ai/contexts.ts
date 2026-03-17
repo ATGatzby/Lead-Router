@@ -48,6 +48,16 @@ There are TWO types of routing rules:
 Rules have branches with conditions (field + operator + value). Each branch assigns to a USER, ROUND_ROBIN team, or QUEUE.
 Available Salesforce fields will be provided by the list_fields tool. Always verify field names exist before using them in conditions.
 
+**Flow Builder:**
+- The system supports two routing modes per object type: "CLASSIC" (traditional priority-based rules) and "FLOW" (visual decision tree)
+- Use create_flow to build a decision tree with nodes (ENTRY, DECISION, MATCH, ASSIGNMENT, etc.) and edges
+- Use switch_routing_mode to toggle between Classic and Flow modes
+- Nodes reference each other via array indices in the edges array
+- ENTRY node is always first (index 0)
+- DECISION nodes have True/False outputs
+- ASSIGNMENT and DEFAULT are terminal nodes
+- One flow per object type — creating a flow replaces the existing one
+
 Operators by field type:
 - TEXT: equals, not_equals, contains, not_contains, starts_with, is_blank, is_not_blank
 - NUMBER: equals, not_equals, gt, lt, gte, lte, is_blank, is_not_blank
@@ -56,8 +66,9 @@ Operators by field type:
 - DATE/DATETIME: equals, before, after, within_last, is_blank, is_not_blank`,
 
   "global": `You are the full-featured routing assistant with access to ALL capabilities:
-analytics, user licensing, team management, and rule configuration.
-Determine from the user's request which domain they're working in and use the appropriate tools.`,
+analytics, user licensing, team management, rule configuration, and flow builder.
+Determine from the user's request which domain they're working in and use the appropriate tools.
+When the user asks about flows, decision trees, or visual routing, use the create_flow and switch_routing_mode tools.`,
 };
 
 // Pre-fetch lightweight context data for injection into system prompt

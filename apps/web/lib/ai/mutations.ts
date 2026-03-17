@@ -1451,3 +1451,209 @@ export async function deleteRule(orgId: string, args: Record<string, unknown>) {
 
   return result;
 }
+
+// ─── Flow Builder mutations ─────────────────────────────────────────────────
+
+export async function createFlow(orgId: string, args: Record<string, unknown>) {
+  const startTime = Date.now();
+  const objectType = args.objectType as string;
+  const name =
+    (args.name as string) ??
+    `${objectType.charAt(0) + objectType.slice(1).toLowerCase()} Routing Flow`;
+  const triggerEvent = (args.triggerEvent as string) ?? "BOTH";
+  const inputNodes = (args.nodes as any[]) ?? [];
+  const inputEdges = (args.edges as any[]) ?? [];
+  const confirm = (args.confirm as boolean) ?? false;
+
+  if (!confirm) {
+    const result = {
+      action: "create_flow",
+      preview: true,
+      objectType,
+      name,
+      triggerEvent,
+      nodeCount: inputNodes.length,
+      edgeCount: inputEdges.length,
+      nodeTypes: inputNodes.map((n: any) => n.type),
+      message: `Will create a ${objectType} routing flow "${name}" with ${inputNodes.length} nodes and ${inputEdges.length} edges. Confirm to proceed.`,
+    };
+
+    await logAiAction({
+      orgId,
+      context: "routing-rules",
+      toolName: "create_flow",
+      action: "CREATE_PREVIEW",
+      entityType: "RoutingFlow",
+      entityId: null,
+      entityName: name,
+      input: args,
+      output: result,
+      status: "preview",
+      startTime,
+    });
+
+    return result;
+  }
+
+  // Generate node IDs
+  const nodeIds = inputNodes.map((_: any, i: number) => `node-${Date.now()}-${i}`);
+
+  // Build nodes with positions (auto-layout later)
+  const nodes = inputNodes.map((n: any, i: number) => ({
+    id: nodeIds[i],
+    type: n.type,
+    label: n.label ?? n.type,
+    positionX: 400,
+    positionY: i * 150,
+    config: n.config ?? {},
+  }));
+
+  // Build edges using index references
+  const edges = inputEdges.map((e: any, i: number) => ({
+    id: `edge-${Date.now()}-${i}`,
+    fromId: nodeIds[e.fromIndex],
+    toId: nodeIds[e.toIndex],
+    label: e.label ?? null,
+  }));
+
+  // Upsert flow (one per org+objectType)
+  const flow = await prisma.routingFlow.upsert({
+    where: { orgId_objectType: { orgId, objectType: objectType as any } },
+    create: {
+      orgId,
+      objectType: objectType as any,
+      name,
+      triggerEvent: triggerEvent as any,
+      status: "DRAFT",
+      nodes: { create: nodes },
+      edges: { create: edges },
+    },
+    update: {
+      name,
+      triggerEvent: triggerEvent as any,
+      version: { increment: 1 },
+      // Delete existing nodes/edges first
+      nodes: { deleteMany: {} },
+      edges: { deleteMany: {} },
+    },
+  });
+
+  // If updating (version > 1), create nodes/edges separately since deleteMany + create in same update is tricky
+  if (flow.version > 1) {
+    await prisma.flowNode.createMany({
+      data: nodes.map((n: any) => ({ ...n, flowId: flow.id })),
+    });
+    await prisma.flowEdge.createMany({
+      data: edges.map((e: any) => ({ ...e, flowId: flow.id })),
+    });
+  }
+
+  // Invalidate cache
+  const { invalidateFlowCache } = await import("@/lib/invalidate-flow-cache");
+  await invalidateFlowCache(orgId, objectType);
+
+  const result = {
+    action: "create_flow",
+    confirmed: true,
+    flowId: flow.id,
+    objectType,
+    name,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    message: `Created ${objectType} routing flow "${name}" with ${nodes.length} nodes. Open the Flow Builder to view and edit it.`,
+  };
+
+  await logAiAction({
+    orgId,
+    context: "routing-rules",
+    toolName: "create_flow",
+    action: "CREATE",
+    entityType: "RoutingFlow",
+    entityId: flow.id,
+    entityName: name,
+    input: args,
+    output: result,
+    status: "confirmed",
+    startTime,
+  });
+
+  return result;
+}
+
+export async function switchRoutingMode(orgId: string, args: Record<string, unknown>) {
+  const startTime = Date.now();
+  const objectType = args.objectType as string;
+  const mode = args.mode as string;
+  const confirm = (args.confirm as boolean) ?? false;
+
+  if (!confirm) {
+    const result = {
+      action: "switch_routing_mode",
+      preview: true,
+      objectType,
+      mode,
+      message:
+        mode === "FLOW"
+          ? `Will switch ${objectType} routing to Flow Builder mode. Classic routes will be paused. Confirm to proceed.`
+          : `Will switch ${objectType} routing back to Classic Routes. The flow will be paused. Confirm to proceed.`,
+    };
+
+    await logAiAction({
+      orgId,
+      context: "routing-rules",
+      toolName: "switch_routing_mode",
+      action: "SWITCH_PREVIEW",
+      entityType: "Organization",
+      entityId: orgId,
+      entityName: null,
+      input: args,
+      output: result,
+      status: "preview",
+      startTime,
+    });
+
+    return result;
+  }
+
+  // Read current mode
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { routingMode: true },
+  });
+  const currentMode = (org?.routingMode as Record<string, string>) ?? {};
+  const updatedMode = { ...currentMode, [objectType]: mode };
+
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: { routingMode: updatedMode },
+  });
+
+  // Invalidate both caches
+  const { invalidateFlowCache } = await import("@/lib/invalidate-flow-cache");
+  await invalidateFlowCache(orgId, objectType);
+  await invalidateRulesCache(orgId, objectType);
+
+  const result = {
+    action: "switch_routing_mode",
+    confirmed: true,
+    objectType,
+    mode,
+    message: `Switched ${objectType} to ${mode === "FLOW" ? "Flow Builder" : "Classic Routes"} mode.`,
+  };
+
+  await logAiAction({
+    orgId,
+    context: "routing-rules",
+    toolName: "switch_routing_mode",
+    action: "SWITCH_MODE",
+    entityType: "Organization",
+    entityId: orgId,
+    entityName: null,
+    input: args,
+    output: result,
+    status: "confirmed",
+    startTime,
+  });
+
+  return result;
+}

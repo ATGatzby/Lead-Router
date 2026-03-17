@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { MUTATION_TOOLS, type MutationToolDef } from "../mutation-tools";
 
 describe("MUTATION_TOOLS", () => {
-  it("defines exactly 10 mutation tools", () => {
-    expect(MUTATION_TOOLS).toHaveLength(10);
+  it("defines exactly 12 mutation tools", () => {
+    expect(MUTATION_TOOLS).toHaveLength(12);
   });
 
   const expectedNames = [
@@ -14,6 +14,8 @@ describe("MUTATION_TOOLS", () => {
     "delete_team",
     "manage_team_members",
     "update_team_weights",
+    "create_flow",
+    "switch_routing_mode",
     "create_rule",
     "toggle_rule",
     "delete_rule",
@@ -57,6 +59,8 @@ describe("MUTATION_TOOLS", () => {
       "update_team",
       "manage_team_members",
       "update_team_weights",
+      "create_flow",
+      "switch_routing_mode",
       "create_rule",
       "toggle_rule",
     ];
@@ -111,9 +115,9 @@ describe("MUTATION_TOOLS", () => {
       }
     });
 
-    it("rule tools belong to routing-rules and global", () => {
+    it("rule and flow tools belong to routing-rules and global", () => {
       const ruleTools = MUTATION_TOOLS.filter((t) =>
-        ["create_rule", "toggle_rule", "delete_rule"].includes(t.name)
+        ["create_rule", "toggle_rule", "delete_rule", "create_flow", "switch_routing_mode"].includes(t.name)
       );
       for (const tool of ruleTools) {
         expect(tool.contexts).toContain("routing-rules");
