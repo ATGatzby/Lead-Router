@@ -221,8 +221,39 @@ export const MUTATION_TOOLS: MutationToolDef[] = [
         },
         triggerEvent: {
           type: "string",
-          enum: ["INSERT", "UPDATE", "BOTH"],
-          description: "When to trigger",
+          enum: ["INSERT", "UPDATE", "BOTH", "SEARCH"],
+          description: "INSERT/UPDATE/BOTH for real-time rules. SEARCH for scheduled rules that find existing records.",
+        },
+        routeType: {
+          type: "string",
+          enum: ["REALTIME", "SCHEDULED"],
+          description: "REALTIME for trigger-based (INSERT/UPDATE/BOTH). SCHEDULED for search-based (SEARCH).",
+        },
+        scheduleFrequency: {
+          type: "string",
+          enum: ["DAILY", "WEEKLY", "MONTHLY"],
+          description: "Required for SEARCH rules. How often to run.",
+        },
+        scheduleTime: {
+          type: "string",
+          description: "Required for SEARCH rules. Time to run in HH:MM format (e.g. '06:00').",
+        },
+        scheduleTimezone: {
+          type: "string",
+          description: "Timezone for schedule (e.g. 'UTC', 'US/Eastern'). Default: UTC.",
+        },
+        searchCriteria: {
+          type: "array",
+          description: "For SEARCH rules: conditions to find records. Same format as branch conditions.",
+          items: {
+            type: "object",
+            properties: {
+              groupId: { type: "string" },
+              fieldName: { type: "string" },
+              operator: { type: "string" },
+              value: { type: "string" },
+            },
+          },
         },
         branches: {
           type: "array",

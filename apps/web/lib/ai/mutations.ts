@@ -1061,6 +1061,13 @@ export async function createRule(orgId: string, args: Record<string, unknown>) {
   const defaultOwnerTeamId = (args.defaultOwnerTeamId as string | null) ?? null;
   const defaultOwnerQueueId = (args.defaultOwnerQueueId as string | null) ?? null;
 
+  // Scheduled/Search route fields
+  const routeType = triggerEvent === "SEARCH" ? "SCHEDULED" : "REALTIME";
+  const scheduleFrequency = (args.scheduleFrequency as string | null) ?? (triggerEvent === "SEARCH" ? "DAILY" : null);
+  const scheduleTime = (args.scheduleTime as string | null) ?? (triggerEvent === "SEARCH" ? "06:00" : null);
+  const scheduleTimezone = (args.scheduleTimezone as string | null) ?? (triggerEvent === "SEARCH" ? "UTC" : null);
+  const searchCriteria = (args.searchCriteria as any[] | null) ?? null;
+
   // Validation
   if (!name) return { error: "name is required" };
   if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
@@ -1151,6 +1158,11 @@ export async function createRule(orgId: string, args: Record<string, unknown>) {
       assigneeUserId: (!isNewStyle && assignmentType === "USER") ? (assigneeUserId ?? null) : null,
       assigneeTeamId: (!isNewStyle && assignmentType === "ROUND_ROBIN") ? (assigneeTeamId ?? null) : null,
       assigneeQueueId: (!isNewStyle && assignmentType === "QUEUE") ? (assigneeQueueId ?? null) : null,
+      routeType: routeType as any,
+      scheduleFrequency,
+      scheduleTime,
+      scheduleTimezone,
+      searchCriteria: searchCriteria ?? undefined,
       isDryRun,
       triggerName: triggerName || "",
       triggerConditions: {
