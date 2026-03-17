@@ -1,6 +1,7 @@
 import { hostname } from "os";
 import Fastify from "fastify";
 import { loadAllRules, startCacheInvalidationListener } from "./cache.js";
+import { loadAllFlows, startFlowCacheInvalidationListener } from "./flow-cache.js";
 import { routePlugin } from "./routes/route.js";
 import { analyticsPlugin } from "./routes/analytics.js";
 import { scheduledPlugin } from "./routes/scheduled.js";
@@ -48,12 +49,14 @@ const start = async () => {
     await app.register(scheduledPlugin);
     await app.register(devSimulatePlugin);
 
-    // Pre-warm rule cache from DB
+    // Pre-warm rule cache and flow cache from DB
     await loadAllRules();
+    await loadAllFlows();
 
     // Subscribe to cache invalidation events from the web app
     const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
     startCacheInvalidationListener(redisUrl);
+    startFlowCacheInvalidationListener(redisUrl);
 
     // Initialize bulk search queue for micro-batch processing
     initBulkSearchQueue(redisUrl);

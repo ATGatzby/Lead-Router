@@ -77,6 +77,24 @@ enum Plan {
   PAID
 }
 
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum FlowNodeType {
+  ENTRY
+  DECISION
+  BRANCH_DECISION
+  MATCH
+  ASSIGNMENT
+  UPDATE_FIELD
+  CREATE_TASK
+  FILTER
+  DEFAULT
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Organization {
@@ -132,6 +150,8 @@ model Organization {
   aiCustomPrompts         AiCustomPrompt[]
   aiAgentLogs             AiAgentLog[]
   aiChatFeedback          AiChatFeedback[]
+  routingMode             Json?
+  routingFlows            RoutingFlow[]
 
   @@map("organizations")
 }
@@ -418,6 +438,8 @@ model RoutingLog {
   branchId           String?           // FK → RoutingBranch for path-level analytics
   createdAt          DateTime        @default(now())
 
+  flowId             String?
+  flowNodePath       Json?
   org                Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branch             RoutingBranch?  @relation(fields: [branchId], references: [id])
   conversionTracking ConversionTracking?
@@ -446,6 +468,64 @@ model AuditLog {
 
   @@index([orgId, createdAt])
   @@map("audit_logs")
+}
+
+model RoutingFlow {
+  id           String         @id @default(cuid())
+  orgId        String
+  objectType   SfdcObjectType
+  name         String         @default("Untitled Flow")
+  status       FlowStatus     @default(DRAFT)
+  triggerEvent TriggerEvent   @default(BOTH)
+  isDryRun     Boolean        @default(false)
+  version      Int            @default(1)
+  publishedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  nodes FlowNode[]
+  edges FlowEdge[]
+
+  @@unique([orgId, objectType])
+  @@map("routing_flows")
+}
+
+model FlowNode {
+  id        String       @id @default(cuid())
+  flowId    String
+  type      FlowNodeType
+  label     String?
+  positionX Float        @default(0)
+  positionY Float        @default(0)
+  config    Json?
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  flow     RoutingFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  outEdges FlowEdge[]  @relation("FromNode")
+  inEdges  FlowEdge[]  @relation("ToNode")
+
+  @@map("flow_nodes")
+}
+
+model FlowEdge {
+  id           String   @id @default(cuid())
+  flowId       String
+  fromId       String
+  toId         String
+  label        String?
+  sourceHandle String?
+  targetHandle String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  flow RoutingFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  from FlowNode   @relation("FromNode", fields: [fromId], references: [id], onDelete: Cascade)
+  to   FlowNode   @relation("ToNode", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@map("flow_edges")
 }
 
 model SfdcQueue {

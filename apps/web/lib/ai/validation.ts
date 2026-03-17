@@ -86,6 +86,41 @@ export const updateTeamWeightsSchema = z.object({
   ),
 });
 
+// ─── Flow Builder ──────────────────────────────────────────────────────────
+
+const flowNodeSchema = z.object({
+  type: z.enum(["ENTRY", "DECISION", "BRANCH_DECISION", "MATCH", "ASSIGNMENT", "UPDATE_FIELD", "CREATE_TASK", "FILTER", "DEFAULT"]),
+  label: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional().default({}),
+});
+
+const flowEdgeSchema = z.object({
+  fromIndex: z.number(),
+  toIndex: z.number(),
+  label: z.string().optional(),
+});
+
+export const createFlowSchema = z.object({
+  confirm: z.boolean().optional().default(false),
+  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT"], {
+    error: "objectType must be LEAD, CONTACT, or ACCOUNT",
+  }),
+  name: z.string().optional(),
+  triggerEvent: z.enum(["INSERT", "UPDATE", "BOTH"]).optional().default("BOTH"),
+  nodes: z.array(flowNodeSchema).optional().default([]),
+  edges: z.array(flowEdgeSchema).optional().default([]),
+});
+
+export const switchRoutingModeSchema = z.object({
+  confirm: z.boolean().optional().default(false),
+  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT"], {
+    error: "objectType must be LEAD, CONTACT, or ACCOUNT",
+  }),
+  mode: z.enum(["CLASSIC", "FLOW"], {
+    error: "mode must be CLASSIC or FLOW",
+  }),
+});
+
 // ─── Routing Rules ──────────────────────────────────────────────────────────
 
 const branchSchema = z.object({
@@ -182,6 +217,8 @@ const SCHEMAS: Record<string, z.ZodType<any>> = {
   delete_team: deleteTeamSchema,
   manage_team_members: manageTeamMembersSchema,
   update_team_weights: updateTeamWeightsSchema,
+  create_flow: createFlowSchema,
+  switch_routing_mode: switchRoutingModeSchema,
   create_rule: createRuleSchema,
   toggle_rule: toggleRuleSchema,
   delete_rule: deleteRuleSchema,

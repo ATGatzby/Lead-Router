@@ -205,6 +205,103 @@ export const MUTATION_TOOLS: MutationToolDef[] = [
     contexts: ["teams", "global"],
   },
 
+  // === FLOW BUILDER TOOLS ===
+  {
+    name: "create_flow",
+    description:
+      "Create or update a routing flow for an object type. Builds a decision tree with nodes and edges. Use this when the user asks to create a flow, set up flow-based routing, or build a decision tree.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        objectType: { type: "string", enum: ["LEAD", "CONTACT", "ACCOUNT"] },
+        name: { type: "string", description: "Flow name" },
+        triggerEvent: {
+          type: "string",
+          enum: ["INSERT", "UPDATE", "BOTH"],
+          description: "When to trigger",
+        },
+        nodes: {
+          type: "array",
+          description:
+            "Flow nodes. Each has type, label, and type-specific config.",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: [
+                  "ENTRY",
+                  "DECISION",
+                  "BRANCH_DECISION",
+                  "MATCH",
+                  "ASSIGNMENT",
+                  "UPDATE_FIELD",
+                  "CREATE_TASK",
+                  "FILTER",
+                  "DEFAULT",
+                ],
+              },
+              label: { type: "string" },
+              config: {
+                type: "object",
+                description: "Node-specific configuration",
+              },
+            },
+          },
+        },
+        edges: {
+          type: "array",
+          description:
+            "Connections between nodes. Each has fromIndex (index in nodes array), toIndex, and optional label (True/False/Found/Not Found/Default).",
+          items: {
+            type: "object",
+            properties: {
+              fromIndex: {
+                type: "number",
+                description: "Index of source node in nodes array",
+              },
+              toIndex: {
+                type: "number",
+                description: "Index of target node in nodes array",
+              },
+              label: {
+                type: "string",
+                description:
+                  "Edge label: True, False, Found, Not Found, Default, etc.",
+              },
+            },
+          },
+        },
+        confirm: {
+          type: "boolean",
+          description: "false=preview, true=execute",
+        },
+      },
+      required: ["objectType", "confirm"],
+    },
+    destructive: false,
+    contexts: ["routing-rules", "global"],
+  },
+  {
+    name: "switch_routing_mode",
+    description:
+      "Switch between Classic Routes and Flow Builder for an object type. Use when user asks to enable/disable the flow builder or switch routing modes.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        objectType: {
+          type: "string",
+          enum: ["LEAD", "CONTACT", "ACCOUNT"],
+        },
+        mode: { type: "string", enum: ["CLASSIC", "FLOW"] },
+        confirm: { type: "boolean" },
+      },
+      required: ["objectType", "mode", "confirm"],
+    },
+    destructive: false,
+    contexts: ["routing-rules", "global"],
+  },
+
   // === RULE TOOLS ===
   {
     name: "create_rule",
