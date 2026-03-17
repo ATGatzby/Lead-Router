@@ -116,6 +116,34 @@ export function builderToApiBody(
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function apiRuleToBuilderState(rule: any): RouteBuilderState {
+  try {
+    return _apiRuleToBuilderState(rule)
+  } catch (err) {
+    console.error("[apiRuleToBuilderState] Conversion failed, returning safe defaults:", err)
+    return {
+      name: rule?.name ?? "Untitled Route",
+      routeType: rule?.routeType ?? "REALTIME",
+      trigger: {
+        triggerName: rule?.triggerName ?? "",
+        objectType: rule?.objectType ?? "LEAD",
+        triggerEvent: rule?.triggerEvent ?? "INSERT",
+        isDryRun: rule?.isDryRun ?? false,
+        triggerConditions: [],
+      },
+      searchTrigger: null,
+      matchConfig: null,
+      paths: [{
+        id: crypto.randomUUID(),
+        label: "Path A",
+        conditions: [],
+        action: { assignmentType: null, assigneeId: null, assigneeName: null },
+      }],
+      defaultOwner: null,
+    }
+  }
+}
+
+function _apiRuleToBuilderState(rule: any): RouteBuilderState {
   // Resolve default owner from the three possible ID columns
   let defaultOwner: RouteBuilderState["defaultOwner"] = null
   if (rule.defaultOwnerType) {
