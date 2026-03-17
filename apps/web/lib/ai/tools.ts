@@ -25,6 +25,7 @@ import { MUTATION_TOOLS } from "./mutation-tools";
 import type { AgentContext } from "./contexts";
 import { CONTEXT_READ_TOOLS } from "./contexts";
 import * as mutations from "./mutations";
+import { validateMutationArgs } from "./validation";
 
 // Claude tool format
 export const TOOLS = [
@@ -346,16 +347,38 @@ export async function executeTool(
     case "list_sessions":
       return listSessions(orgId, args as any);
     // Mutation tools
-    case "license_users": return mutations.licenseUsers(orgId, args);
-    case "delicense_users": return mutations.delicenseUsers(orgId, args);
-    case "create_team": return mutations.createTeam(orgId, args);
-    case "update_team": return mutations.updateTeam(orgId, args);
-    case "delete_team": return mutations.deleteTeam(orgId, args);
-    case "manage_team_members": return mutations.manageTeamMembers(orgId, args);
-    case "update_team_weights": return mutations.updateTeamWeights(orgId, args);
-    case "create_rule": return mutations.createRule(orgId, args);
-    case "toggle_rule": return mutations.toggleRule(orgId, args);
-    case "delete_rule": return mutations.deleteRule(orgId, args);
+    // Mutation tools — validate args before executing
+    case "license_users":
+    case "delicense_users":
+    case "create_team":
+    case "update_team":
+    case "delete_team":
+    case "manage_team_members":
+    case "update_team_weights":
+    case "create_rule":
+    case "toggle_rule":
+    case "delete_rule": {
+      // Validate args against Zod schema — if invalid, return error for AI to self-correct
+      const validation = validateMutationArgs(toolName, args);
+      if (!validation.valid) {
+        return { error: validation.error };
+      }
+      // Use validated (cleaned/defaulted) args
+      const validatedArgs = validation.data;
+      const mutationFn: Record<string, (orgId: string, args: Record<string, unknown>) => Promise<unknown>> = {
+        license_users: mutations.licenseUsers,
+        delicense_users: mutations.delicenseUsers,
+        create_team: mutations.createTeam,
+        update_team: mutations.updateTeam,
+        delete_team: mutations.deleteTeam,
+        manage_team_members: mutations.manageTeamMembers,
+        update_team_weights: mutations.updateTeamWeights,
+        create_rule: mutations.createRule,
+        toggle_rule: mutations.toggleRule,
+        delete_rule: mutations.deleteRule,
+      };
+      return mutationFn[toolName](orgId, validatedArgs);
+    }
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

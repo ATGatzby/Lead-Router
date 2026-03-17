@@ -174,14 +174,18 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "trigger": {
       if (!state.trigger) return "Not configured"
       const base = state.trigger.triggerName || triggerEventLabel(state.trigger.objectType, state.trigger.triggerEvent)
-      const criteriaCount = state.trigger.triggerConditions.flatMap(g => g.conditions).length
+      const criteriaCount = Array.isArray(state.trigger.triggerConditions)
+        ? state.trigger.triggerConditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : [g]).length
+        : 0
       return criteriaCount > 0 ? `${base} · ${criteriaCount} criteria` : base
     }
     case "searchTrigger": {
       if (!state.searchTrigger) return "Not configured"
       const freq = state.searchTrigger.frequency ? state.searchTrigger.frequency.charAt(0) + state.searchTrigger.frequency.slice(1).toLowerCase() : "One-time"
       const obj = state.searchTrigger.objectType === "LEAD" ? "Lead" : state.searchTrigger.objectType === "CONTACT" ? "Contact" : "Account"
-      const criteriaCount = state.searchTrigger.searchCriteria.flatMap(g => g.conditions).length
+      const criteriaCount = Array.isArray(state.searchTrigger.searchCriteria)
+        ? state.searchTrigger.searchCriteria.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : [g]).length
+        : 0
       return criteriaCount > 0 ? `${freq} · ${obj} · ${criteriaCount} criteria` : `${freq} · ${obj}`
     }
     case "match": {
