@@ -56,29 +56,36 @@ export function builderToApiBody(
         }
       : null,
 
-    branches: state.paths.map((path, i) => ({
-      id: path.id,
-      label: path.label,
-      priority: i,
-      assignmentType: path.action.assignmentType,
-      assigneeUserId:
-        path.action.assignmentType === "USER" ? path.action.assigneeId : null,
-      assigneeTeamId:
-        path.action.assignmentType === "ROUND_ROBIN" ? path.action.assigneeId : null,
-      assigneeQueueId:
-        path.action.assignmentType === "QUEUE" ? path.action.assigneeId : null,
-      steps: path.steps ?? null,
-      conditions: path.conditions.flatMap((group, gi) =>
-        group.conditions.map((cond, ci) => ({
-          groupId: group.id,
-          fieldName: cond.fieldApiName,
-          fieldType: cond.fieldType ?? "TEXT",
-          operator: cond.operator,
-          value: cond.value || null,
-          sortOrder: gi * 100 + ci,
-        }))
-      ),
-    })),
+    branches: state.paths.map((path, i) => {
+      // For V2 paths (with steps[]), derive conditions from steps[0] to keep one source of truth
+      const filterStep = path.steps?.find(s => s.type === "filter")
+      const conditionSource = (filterStep?.type === "filter" && filterStep.conditions?.length > 0)
+        ? filterStep.conditions
+        : path.conditions
+      return {
+        id: path.id,
+        label: path.label,
+        priority: i,
+        assignmentType: path.action.assignmentType,
+        assigneeUserId:
+          path.action.assignmentType === "USER" ? path.action.assigneeId : null,
+        assigneeTeamId:
+          path.action.assignmentType === "ROUND_ROBIN" ? path.action.assigneeId : null,
+        assigneeQueueId:
+          path.action.assignmentType === "QUEUE" ? path.action.assigneeId : null,
+        steps: path.steps ?? null,
+        conditions: conditionSource.flatMap((group: any, gi: number) =>
+          (group.conditions ?? []).map((cond: any, ci: number) => ({
+            groupId: group.id ?? group.groupId,
+            fieldName: cond.fieldApiName ?? cond.fieldName,
+            fieldType: cond.fieldType ?? "TEXT",
+            operator: cond.operator,
+            value: cond.value || null,
+            sortOrder: gi * 100 + ci,
+          }))
+        ),
+      }
+    }),
 
     defaultOwnerType: state.defaultOwner?.assignmentType ?? null,
     defaultOwnerUserId:
