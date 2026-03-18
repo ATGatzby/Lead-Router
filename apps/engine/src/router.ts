@@ -113,6 +113,149 @@ function toSfdcObjectName(objectType: string): string {
   return objectType.charAt(0) + objectType.slice(1).toLowerCase();
 }
 
+// ─── Recursive step execution for nested splits ──────────────────────────────
+
+interface StepExecContext {
+  fields: Record<string, unknown>;
+  recordId: string;
+  objectType: string;
+  orgId: string;
+  isDryRun: boolean;
+}
+
+interface StepExecResult {
+  assignmentType: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
+}
+
+/**
+ * Recursively execute a steps[] array. Handles filter, updateField, createTask,
+ * assign, and split (with nested sub-paths up to any depth).
+ *
+ * Returns assignment info from the first "assign" step encountered (at any depth),
+ * or null if no assign step was reached.
+ */
+async function executeSteps(
+  steps: any[],
+  ctx: StepExecContext
+): Promise<StepExecResult | null> {
+  for (const step of steps) {
+    switch (step.type) {
+      case "filter":
+        // Filter conditions are evaluated by the caller before entering this path — skip
+        continue;
+
+      case "updateField":
+        if (!ctx.isDryRun && step.fieldApiName) {
+          try {
+            const conn = await getOrgConnection(ctx.orgId);
+            await conn
+              .sobject(toSfdcObjectName(ctx.objectType))
+              .update({ Id: ctx.recordId, [step.fieldApiName as string]: step.fieldValue });
+          } catch (err) {
+            console.error(`[router] UPDATE_FIELD step failed for ${ctx.recordId}:`, err);
+          }
+        }
+        continue;
+
+      case "createTask":
+        if (!ctx.isDryRun) {
+          try {
+            const conn = await getOrgConnection(ctx.orgId);
+            const taskData: Record<string, unknown> = {
+              Subject: step.subject ?? "",
+              Priority: (step.priority as string) ?? "Normal",
+              Status: (step.status as string) ?? "Not Started",
+              Description: (step.description as string) ?? "",
+            };
+            if (ctx.objectType === "LEAD" || ctx.objectType === "CONTACT") {
+              taskData.WhoId = ctx.recordId;
+            } else {
+              taskData.WhatId = ctx.recordId;
+            }
+            if (step.dueDateOffset) {
+              const due = new Date();
+              due.setDate(due.getDate() + Number(step.dueDateOffset));
+              taskData.ActivityDate = due.toISOString().split("T")[0];
+            }
+            await conn.sobject("Task").create(taskData);
+          } catch (err) {
+            console.error(`[router] CREATE_TASK step failed for ${ctx.recordId}:`, err);
+          }
+        }
+        continue;
+
+      case "assign":
+        // Return assignment info — the caller handles the actual SFDC owner update
+        return {
+          assignmentType: step.assignmentType ?? null,
+          assigneeId: step.assigneeId ?? null,
+          assigneeName: step.assigneeName ?? null,
+        };
+
+      case "split": {
+        const splitPaths: any[] = step.paths ?? [];
+        let matched = false;
+
+        for (const subPath of splitPaths) {
+          const subSteps: any[] = subPath.steps ?? [];
+
+          // Evaluate the sub-path's filter step (if any)
+          const filterStep = subSteps.find((s: any) => s.type === "filter");
+          if (filterStep?.conditions?.length > 0) {
+            // Flatten ConditionGroup[] to flat conditions for evaluateRule
+            const flatConditions = Array.isArray(filterStep.conditions)
+              ? filterStep.conditions.flatMap((g: any) =>
+                  Array.isArray(g?.conditions)
+                    ? g.conditions.map((c: any) => ({
+                        groupId: g.id ?? g.groupId ?? "default",
+                        fieldName: c.fieldApiName ?? c.fieldName,
+                        fieldType: c.fieldType ?? "TEXT",
+                        operator: c.operator,
+                        value: c.value ?? null,
+                      }))
+                    : [{
+                        groupId: g.groupId ?? "default",
+                        fieldName: g.fieldApiName ?? g.fieldName,
+                        fieldType: g.fieldType ?? "TEXT",
+                        operator: g.operator,
+                        value: g.value ?? null,
+                      }]
+                )
+              : [];
+
+            if (flatConditions.length > 0) {
+              const evalResult = await evaluateRule(ctx.fields, flatConditions, ctx.orgId);
+              if (!evalResult) continue; // sub-path doesn't match — try next
+            }
+          }
+
+          // Sub-path matched — recursively execute its steps
+          const result = await executeSteps(subSteps, ctx);
+          if (result) return result; // propagate assignment info up
+          matched = true;
+          break; // first matching sub-path wins
+        }
+
+        // No sub-path matched — check for split-level default owner
+        if (!matched && step.defaultOwner) {
+          return {
+            assignmentType: step.defaultOwner.assignmentType ?? null,
+            assigneeId: step.defaultOwner.assigneeId ?? null,
+            assigneeName: step.defaultOwner.assigneeName ?? null,
+          };
+        }
+        continue;
+      }
+    }
+  }
+
+  return null; // no assign step found
+}
+
+// ─── End recursive step execution ────────────────────────────────────────────
+
 interface AssigneeInfo {
   sfdcOwnerId: string;
   assigneeId: string;   // internal DB ID (for logging)
@@ -891,112 +1034,64 @@ async function routeNewStyle(
     if (evalResult.matched) {
       ruleTrace.outcome = "MATCHED";
 
-      // ── Multi-step branch execution ──
+      // ── Multi-step branch execution (recursive — handles nested splits) ──
       if (branch.steps && branch.steps.length > 0) {
-        for (const step of branch.steps) {
-          switch (step.type) {
-            case "filter":
-              // Filter conditions already evaluated to match this branch — skip
-              continue;
-            case "updateField":
-              if (!rule.isDryRun) {
-                try {
-                  const sObjectName = toSfdcObjectName(objectType);
-                  const stepConn = await getOrgConnection(orgId);
-                  await stepConn
-                    .sobject(sObjectName)
-                    .update({ Id: recordId, [step.fieldApiName as string]: step.fieldValue });
-                } catch (err) {
-                  console.error(`[router] UPDATE_FIELD step failed for ${recordId}:`, err);
-                }
+        const stepResult = await executeSteps(branch.steps, {
+          fields,
+          recordId,
+          objectType,
+          orgId,
+          isDryRun: rule.isDryRun,
+        });
+        // If a nested assign step returned assignment info, use it to override branch-level assignment
+        // (This allows nested splits to determine the final assignee)
+        if (stepResult?.assignmentType) {
+          // Resolve the assignee from the step result
+          const nestedAssignee = await resolveAssigneeFromFields(
+            stepResult.assignmentType,
+            stepResult.assignmentType === "USER" ? stepResult.assigneeId : null,
+            stepResult.assignmentType === "ROUND_ROBIN" ? stepResult.assigneeId : null,
+            stepResult.assignmentType === "QUEUE" ? stepResult.assigneeId : null,
+            orgId,
+          );
+          if (nestedAssignee) {
+            // Use the nested assignee instead of the branch-level one
+            const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
+            const log = await prisma.routingLog.create({
+              data: {
+                orgId, sfdcRecordId: recordId, objectType, eventType,
+                ruleId: rule.id, ruleName: rule.name,
+                pathLabel: branchLabel, branchId: branch.id,
+                assigneeId: nestedAssignee.sfdcOwnerId, assigneeName: nestedAssignee.assigneeName,
+                assignmentType: nestedAssignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
+                teamId: nestedAssignee.teamId, teamName: nestedAssignee.teamName,
+                isDryRun: rule.isDryRun, status: "RETRY",
+                routingDurationMs: startMs ? Date.now() - startMs : null,
+                recordSnapshot: stripPii(fields) as any,
+              },
+            });
+
+            if (!rule.isDryRun) {
+              try {
+                const conn = await getOrgConnection(orgId);
+                await setCooldown(orgId, recordId);
+                await updateOwner(conn, toSfdcObjectName(objectType), recordId, nestedAssignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+                await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
+                fireWebhook(orgId, {
+                  event: `${objectType}_ROUTED`,
+                  ruleId: rule.id,
+                  ruleName: rule.name,
+                  recordId,
+                  assignee: nestedAssignee,
+                });
+              } catch (err: any) {
+                console.error(`[router] nested assignment failed for ${recordId}:`, err);
+                await prisma.routingLog.update({ where: { id: log.id }, data: { status: "ERROR", errorMessage: err?.message ?? String(err) } });
               }
-              continue;
-            case "createTask":
-              if (!rule.isDryRun) {
-                try {
-                  const stepConn = await getOrgConnection(orgId);
-                  const taskData: Record<string, unknown> = {
-                    Subject: step.subject,
-                    Priority: (step.priority as string) ?? "Normal",
-                    Status: (step.status as string) ?? "Not Started",
-                    Description: (step.description as string) ?? "",
-                  };
-                  if (objectType === "LEAD" || objectType === "CONTACT") {
-                    taskData.WhoId = recordId;
-                  } else {
-                    taskData.WhatId = recordId;
-                  }
-                  if (step.dueDateOffset) {
-                    const due = new Date();
-                    due.setDate(due.getDate() + Number(step.dueDateOffset));
-                    taskData.ActivityDate = due.toISOString().split("T")[0];
-                  }
-                  await stepConn.sobject("Task").create(taskData);
-                } catch (err) {
-                  console.error(`[router] CREATE_TASK step failed for ${recordId}:`, err);
-                }
-              }
-              continue;
-            case "assign":
-              // Handled by existing assignment logic below
-              break;
-            case "split": {
-              // Recursive split: evaluate each sub-path's filter and execute the first match
-              const splitStep = step as { type: "split"; paths: any[]; defaultOwner: any };
-              if (splitStep.paths && splitStep.paths.length > 0) {
-                for (const subPath of splitStep.paths) {
-                  const subSteps = subPath.steps ?? [];
-                  // Find the first filter step to evaluate
-                  const filterStep = subSteps.find((s: any) => s.type === "filter");
-                  if (filterStep && filterStep.conditions && filterStep.conditions.length > 0) {
-                    const subEval = evaluateRule(filterStep.conditions, fields);
-                    if (!subEval.matched) continue;
-                  }
-                  // Sub-path matched — execute its non-filter steps
-                  for (const subStep of subSteps) {
-                    if (subStep.type === "filter") continue; // already evaluated
-                    if (subStep.type === "updateField" && !rule.isDryRun) {
-                      try {
-                        const sObjectName = toSfdcObjectName(objectType);
-                        const stepConn = await getOrgConnection(orgId);
-                        await stepConn
-                          .sobject(sObjectName)
-                          .update({ Id: recordId, [subStep.fieldApiName as string]: subStep.fieldValue });
-                      } catch (err) {
-                        console.error(`[router] nested UPDATE_FIELD step failed for ${recordId}:`, err);
-                      }
-                    }
-                    if (subStep.type === "createTask" && !rule.isDryRun) {
-                      try {
-                        const stepConn = await getOrgConnection(orgId);
-                        const taskData: Record<string, unknown> = {
-                          Subject: subStep.subject,
-                          Priority: (subStep.priority as string) ?? "Normal",
-                          Status: (subStep.status as string) ?? "Not Started",
-                          Description: (subStep.description as string) ?? "",
-                        };
-                        if (objectType === "LEAD" || objectType === "CONTACT") {
-                          taskData.WhoId = recordId;
-                        } else {
-                          taskData.WhatId = recordId;
-                        }
-                        if (subStep.dueDateOffset) {
-                          const due = new Date();
-                          due.setDate(due.getDate() + Number(subStep.dueDateOffset));
-                          taskData.ActivityDate = due.toISOString().split("T")[0];
-                        }
-                        await stepConn.sobject("Task").create(taskData);
-                      } catch (err) {
-                        console.error(`[router] nested CREATE_TASK step failed for ${recordId}:`, err);
-                      }
-                    }
-                    // Nested splits handled recursively by the same switch in a future iteration
-                  }
-                  break; // First matching sub-path wins
-                }
-              }
-              continue;
+            } else {
+              await prisma.routingLog.update({ where: { id: log.id }, data: { status: "DRY_RUN" } });
             }
+            return { matched: true, trace: ruleTrace };
           }
         }
       }

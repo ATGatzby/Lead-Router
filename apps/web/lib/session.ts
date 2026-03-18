@@ -1,5 +1,5 @@
 import { getIronSession, IronSession } from "iron-session";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export interface SessionData {
   orgId: string;
@@ -33,6 +33,20 @@ const MAX_SESSION_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 export async function requireSession(): Promise<SessionData> {
   const session = await getSession();
   if (!session.orgId) {
+    // Fall back to Bearer token auth headers (injected by proxy.ts for API tokens)
+    const hdrs = await headers();
+    const orgId = hdrs.get("x-org-id");
+    const userId = hdrs.get("x-user-id");
+    const userName = hdrs.get("x-user-name");
+    if (orgId && userId) {
+      return {
+        orgId,
+        appUserId: userId,
+        userEmail: "",
+        userName: userName || "API Token",
+        role: "ADMIN", // API tokens get ADMIN access
+      } as SessionData;
+    }
     throw new Error("Not authenticated");
   }
   // Enforce maximum token age (30 days) even if cookie hasn't expired
