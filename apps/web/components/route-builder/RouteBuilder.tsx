@@ -832,6 +832,9 @@ export function RouteBuilder({
     y: number
   } | null>(null)
 
+  // Track the last path the user interacted with (for registry click targeting)
+  const lastActivePathIdRef = useRef<string | null>(null)
+
   // ── Step management helpers ────────────────────────────────────────────────
 
   function createDefaultStep(type: PathStepType): PathStep {
@@ -1111,6 +1114,8 @@ export function RouteBuilder({
     if (dragRef.current?.hasMoved) return
     const node = nodes.find((n) => n.id === nodeId)
     if (!node) return
+    // Track last active path for registry click targeting
+    if (node.pathId) lastActivePathIdRef.current = node.pathId
     if ((node.type === "filter" || node.type === "assign") && node.pathId) {
       setActiveSheet({ type: node.type, nodeId: node.id, pathId: node.pathId })
     } else if (node.type === "updateField" && node.pathId && node.stepIndex !== undefined) {
@@ -1285,7 +1290,8 @@ export function RouteBuilder({
           })
         } else {
           // Add assign to the first path
-          handleAddStepToPath(state.paths[0].id, "assign")
+          const targetId = lastActivePathIdRef.current ?? state.paths[0].id
+          handleAddStepToPath(targetId, "assign")
         }
         return
       }
@@ -1337,7 +1343,8 @@ export function RouteBuilder({
             return newState
           })
         } else {
-          handleAddStepToPath(state.paths[0].id, "split")
+          const targetId = lastActivePathIdRef.current ?? state.paths[0].id
+          handleAddStepToPath(targetId, "split")
         }
         return
       }
@@ -1367,7 +1374,8 @@ export function RouteBuilder({
           })
         } else {
           // Add to the first path
-          handleAddStepToPath(state.paths[0].id, stepType as PathStepType)
+          const targetId = lastActivePathIdRef.current ?? state.paths[0].id
+          handleAddStepToPath(targetId, stepType as PathStepType)
         }
         return
       }
@@ -1778,6 +1786,7 @@ export function RouteBuilder({
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation()
+                    lastActivePathIdRef.current = path.id
                     setAddStepDropdown({
                       pathId: path.id,
                       x: lastNode.x,
