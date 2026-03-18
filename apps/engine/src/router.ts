@@ -231,10 +231,9 @@ async function executeSteps(
         for (const subPath of splitPaths) {
           const subSteps: any[] = subPath.steps ?? [];
 
-          // Evaluate the sub-path's filter conditions
-          // Check both steps[0].conditions (V2) and subPath.conditions (legacy/UI)
+          // Evaluate the sub-path's filter conditions from steps[0] (single source of truth)
           const filterStep = subSteps.find((s: any) => s.type === "filter");
-          const rawConditions = filterStep?.conditions ?? subPath.conditions ?? [];
+          const rawConditions = filterStep?.conditions ?? [];
 
           const flatConditions = flattenConditionGroups(rawConditions);
 
