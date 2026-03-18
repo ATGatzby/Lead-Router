@@ -163,85 +163,77 @@ const NODE_META: Record<
 
 // ─── Derive edges from nodes ───────────────────────────────────────────────────
 //
-// Walks the tree structure to generate edges between connected nodes.
+// Walks the state tree to generate edges. Each edge connects two node IDs.
 //
 
-/** Generate edges for a set of paths (recursive) */
+/** Get the canvas node ID for a step at (pathId, stepIndex) */
+function stepNodeId(pathId: string, stepIndex: number): string {
+  return `s_${pathId}_${stepIndex}`
+}
+
+/** Generate all edges for a set of paths and their nested splits */
 function edgesForPaths(
   paths: RoutePath[],
-  nodes: CanvasNode[],
-  splitNodeId: string | null,  // the split pill above these paths (null if single path)
-  exitNodeId: string | null,   // node that all branches converge to after this group
+  nodeMap: Map<string, CanvasNode>,
+  fanOutId: string | null,     // node that fans out to each path's first step (split pill or parent node)
+  exitNodeId: string | null,   // node below this group (default owner, next step in parent)
 ): CanvasEdge[] {
   const edges: CanvasEdge[] = []
 
   for (const path of paths) {
     const steps = path.steps ?? []
-    let prevNodeId = splitNodeId
+    let prevId: string | null = fanOutId
 
     for (let si = 0; si < steps.length; si++) {
       const step = steps[si]
 
       if (step.type === "split") {
-        // Find the split pill node for this nested split
-        const splitPillId = `split_${path.id}_${si}`
-        const splitPill = nodes.find(n => n.id === splitPillId)
-
-        // Connect previous node → split pill (or first sub-path if single)
-        if (prevNodeId && splitPill) {
-          edges.push({ fromId: prevNodeId, toId: splitPill.id })
-        } else if (prevNodeId && !splitPill && step.paths.length === 1) {
-          // Single sub-path, no split pill — connect to first step of the sub-path
-          const firstSubStep = nodes.find(n => n.pathId === step.paths[0].id && n.stepIndex === 0)
-          if (firstSubStep) edges.push({ fromId: prevNodeId, toId: firstSubStep.id })
-        }
-
-        // Determine what comes after this nested split
+        // Nested split step
+        const nestedSplitPillId = `split_${path.id}_${si}`
         const nestedDOId = `do_${path.id}_${si}`
-        const nestedDO = nodes.find(n => n.id === nestedDOId)
-        // The next step in this path after the split
-        const nextStepId = si + 1 < steps.length ? `s_${path.id}_${si + 1}` : null
-        const nextStepNode = nextStepId ? nodes.find(n => n.id === nextStepId) : null
-        const nestedExitId = nestedDO?.id ?? nextStepNode?.id ?? exitNodeId
+        const hasNestedDO = nodeMap.has(nestedDOId)
 
-        // Recurse into nested paths
-        edges.push(...edgesForPaths(
-          step.paths,
-          nodes,
-          splitPill ? splitPill.id : (prevNodeId ?? null),
-          nestedExitId,
-        ))
-
-        // Nested default owner → next step after split
-        if (nestedDO && nextStepNode) {
-          edges.push({ fromId: nestedDO.id, toId: nextStepNode.id })
-        } else if (nestedDO && !nextStepNode && exitNodeId) {
-          edges.push({ fromId: nestedDO.id, toId: exitNodeId })
+        // prev → nested split pill (if multi-path) or → first sub-path step (if single)
+        if (step.paths.length > 1 && nodeMap.has(nestedSplitPillId)) {
+          if (prevId) edges.push({ fromId: prevId, toId: nestedSplitPillId })
+          // Recurse — split pill fans out, sub-paths converge to nested DO or next step
+          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
+          const nestedExit = hasNestedDO ? nestedDOId : (nextStepInParent && nodeMap.has(nextStepInParent) ? nextStepInParent : exitNodeId)
+          edges.push(...edgesForPaths(step.paths, nodeMap, nestedSplitPillId, nestedExit))
+        } else if (step.paths.length === 1) {
+          // Single sub-path — no split pill, connect directly
+          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
+          const nestedExit = hasNestedDO ? nestedDOId : (nextStepInParent && nodeMap.has(nextStepInParent) ? nextStepInParent : exitNodeId)
+          edges.push(...edgesForPaths(step.paths, nodeMap, prevId, nestedExit))
         }
 
-        prevNodeId = nestedDO?.id ?? null
-        // If no nested DO, branches connect directly to exit via nestedExitId
-        if (!nestedDO) prevNodeId = null // edges handled by recursion
+        // Nested DO → next step after split in parent
+        if (hasNestedDO) {
+          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
+          if (nextStepInParent && nodeMap.has(nextStepInParent)) {
+            edges.push({ fromId: nestedDOId, toId: nextStepInParent })
+            prevId = nextStepInParent
+          } else {
+            prevId = nestedDOId
+          }
+        } else {
+          prevId = null // branches connect directly to exit
+        }
       } else {
-        const nodeId = `s_${path.id}_${si}`
-        const node = nodes.find(n => n.id === nodeId)
-        if (!node) continue
+        // Regular step
+        const nid = stepNodeId(path.id, si)
+        if (!nodeMap.has(nid)) continue
 
-        // Connect previous → this node
-        if (prevNodeId) {
-          edges.push({ fromId: prevNodeId, toId: node.id })
-        } else if (si === 0 && splitNodeId) {
-          // First step in branch, connect from split
-          edges.push({ fromId: splitNodeId, toId: node.id })
+        if (prevId) {
+          edges.push({ fromId: prevId, toId: nid })
         }
-
-        prevNodeId = node.id
+        prevId = nid
       }
     }
 
-    // Last node in this branch → exit node (fan-in)
-    if (prevNodeId && exitNodeId && prevNodeId !== exitNodeId) {
-      edges.push({ fromId: prevNodeId, toId: exitNodeId })
+    // Last node → exit (fan-in to default owner or parent's next step)
+    if (prevId && exitNodeId && prevId !== exitNodeId) {
+      edges.push({ fromId: prevId, toId: exitNodeId })
     }
   }
 
@@ -253,26 +245,21 @@ function computeEdges(nodes: CanvasNode[], state: RouteBuilderState): CanvasEdge
   const trigger = nodes.find((n) => n.type === "trigger")
   const searchTrigger = nodes.find((n) => n.type === "searchTrigger")
   const match = nodes.find((n) => n.type === "match")
-  // Top-level default owner (id === "defaultOwner")
   const defaultOwnerNode = nodes.find((n) => n.id === "defaultOwner")
-  // Top-level split pill (id === "split")
   const topSplitNode = nodes.find((n) => n.id === "split")
-
   const paths = state.paths
 
-  // Find the first "downstream" node after triggers
+  // trigger/searchTrigger → match/split/first-step
   let firstDownstream: CanvasNode | undefined
   if (match) firstDownstream = match
   else if (topSplitNode) firstDownstream = topSplitNode
-  else if (paths.length === 1) {
-    firstDownstream = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
-  }
+  else if (paths.length === 1) firstDownstream = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
   else if (defaultOwnerNode) firstDownstream = defaultOwnerNode
 
   if (trigger && firstDownstream) edges.push({ fromId: trigger.id, toId: firstDownstream.id })
   if (searchTrigger && firstDownstream) edges.push({ fromId: searchTrigger.id, toId: firstDownstream.id })
 
-  // match → split (or first step, or defaultOwner)
+  // match → split/first-step/defaultOwner
   if (match) {
     if (topSplitNode) {
       edges.push({ fromId: match.id, toId: topSplitNode.id })
@@ -284,10 +271,15 @@ function computeEdges(nodes: CanvasNode[], state: RouteBuilderState): CanvasEdge
     }
   }
 
-  // Generate edges for all paths recursively
+  // All path edges (recursive)
   if (paths.length > 0) {
-    const splitId = topSplitNode?.id ?? (match?.id ?? trigger?.id ?? searchTrigger?.id ?? null)
-    edges.push(...edgesForPaths(paths, nodes, paths.length > 1 ? (topSplitNode?.id ?? null) : null, defaultOwnerNode?.id ?? null))
+    const nodeMap = new Map(nodes.map(n => [n.id, n]))
+    // For multi-path: split pill fans out to each path
+    // For single-path: match/trigger connects directly to first step
+    const fanOutId = paths.length > 1
+      ? (topSplitNode?.id ?? null)
+      : (match?.id ?? trigger?.id ?? searchTrigger?.id ?? null)
+    edges.push(...edgesForPaths(paths, nodeMap, fanOutId, defaultOwnerNode?.id ?? null))
   }
 
   return edges
@@ -572,8 +564,8 @@ function CanvasNodeCard({
 // V3: supports recursive nested splits via PathStepSplit.
 //
 
-const SPLIT_GAP = 40  // horizontal gap between branches within a split
-const SPLIT_PILL_H = 80 // vertical space consumed by a split pill
+const SPLIT_GAP = 50  // horizontal gap between branches within a split
+const SPLIT_PILL_H = 56 // vertical space consumed by a split pill (pill is 32px + gap)
 
 /** Calculate the horizontal width a single path column needs, accounting for nested splits */
 function measurePathWidth(path: RoutePath): number {
@@ -632,6 +624,8 @@ function layoutPaths(
       const step = steps[si]
 
       if (step.type === "split") {
+        // Add extra gap before split to leave room for the "+ Add Step" button above
+        if (si > 0) sy += 48
         // Recursively layout nested split
         const subResult = layoutPaths(step.paths, pathCenterX, sy, depth + 1, path.id, si)
         nodes.push(...subResult.nodes)
@@ -650,6 +644,8 @@ function layoutPaths(
           })
           sy += STEP_GAP_Y
         }
+        // Extra gap after nested split before next step
+        sy += 20
       } else {
         // Regular step node
         nodes.push({
@@ -1725,6 +1721,15 @@ export function RouteBuilder({
             {nodes.map((node) => {
               // Split node renders as a small pill, not a full card
               if (node.type === "split") {
+                // Determine the correct path count for this split
+                let splitPathCount = state.paths.length // top-level default
+                if (node.splitParentPathId && node.splitStepIndex !== undefined) {
+                  const parentPath = findPathById(state.paths, node.splitParentPathId)
+                  const splitStep = parentPath?.steps?.[node.splitStepIndex]
+                  if (splitStep?.type === "split") {
+                    splitPathCount = splitStep.paths.length
+                  }
+                }
                 return (
                   <div
                     key={node.id}
@@ -1740,7 +1745,7 @@ export function RouteBuilder({
                   >
                     <GitBranch className="size-3" />
                     <span className="text-[10px] font-semibold uppercase tracking-wider">
-                      {state.paths.length} path{state.paths.length !== 1 ? "s" : ""}
+                      {splitPathCount} path{splitPathCount !== 1 ? "s" : ""}
                     </span>
                   </div>
                 )
