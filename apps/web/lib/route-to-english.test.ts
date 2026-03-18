@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { routeToEnglish, conditionToText } from "./route-to-english"
+import { routeToEnglish, conditionToText, type EnglishLine } from "./route-to-english"
 import type { RouteBuilderState, SearchTriggerConfig } from "@/components/route-builder/types"
 import { defaultBuilderState, defaultTriggerConfig } from "@/components/route-builder/types"
 import type { Condition, ConditionGroup } from "@/components/condition-builder/types"
+
+/** Extract text from a line (handles both string and EnglishLine) */
+const lt = (line: string | EnglishLine): string => typeof line === "string" ? line : line.text
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -181,7 +184,7 @@ describe("match section", () => {
       })
     )
     const match = review.sections.find((s) => s.type === "match")!
-    expect(match.lines.some((l) => l.includes("fuzzy"))).toBe(true)
+    expect(match.lines.some((l) => lt(l).includes("fuzzy"))).toBe(true)
   })
 
   it("renders per-object actions", () => {
@@ -206,7 +209,7 @@ describe("match section", () => {
       })
     )
     const match = review.sections.find((s) => s.type === "match")!
-    expect(match.lines.some((l) => l.includes("merge records"))).toBe(true)
+    expect(match.lines.some((l) => lt(l).includes("merge records"))).toBe(true)
   })
 })
 
@@ -443,8 +446,8 @@ describe("search trigger section", () => {
     const section = review.sections.find((s) => s.id === "search-trigger")!
     expect(section).toBeDefined()
     expect(section.type).toBe("trigger")
-    expect(section.lines.some((l) => l.includes("daily") && l.includes("06:00") && l.includes("UTC"))).toBe(true)
-    expect(section.lines.some((l) => l.includes("Where"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).includes("daily") && lt(l).includes("06:00") && lt(l).includes("UTC"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).includes("Where"))).toBe(true)
   })
 
   it("renders one-time (null frequency)", () => {
@@ -454,7 +457,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.toLowerCase().includes("one-time") || l.toLowerCase().includes("manual run"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).toLowerCase().includes("one-time") || lt(l).toLowerCase().includes("manual run"))).toBe(true)
   })
 
   it("renders Contact object type", () => {
@@ -464,7 +467,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.includes("Contacts") || l.includes("Contact"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).includes("Contacts") || lt(l).includes("Contact"))).toBe(true)
   })
 
   it("includes dry run line", () => {
@@ -474,7 +477,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.includes("Dry run") || l.includes("dry run"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).includes("Dry run") || lt(l).includes("dry run"))).toBe(true)
   })
 
   it("includes skip recently routed", () => {
@@ -484,7 +487,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.toLowerCase().includes("skipping records") || l.toLowerCase().includes("skip"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).toLowerCase().includes("skipping records") || lt(l).toLowerCase().includes("skip"))).toBe(true)
   })
 
   it("includes non-default batch size", () => {
@@ -494,7 +497,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.includes("Batch size: 50") || l.includes("batch size") && l.includes("50"))).toBe(true)
+    expect(section.lines.some((l) => lt(l).includes("Batch size: 50") || lt(l).includes("batch size") && lt(l).includes("50"))).toBe(true)
   })
 
   it("omits batch size when default (500)", () => {
@@ -504,7 +507,7 @@ describe("search trigger section", () => {
       })
     )
     const section = review.sections.find((s) => s.id === "search-trigger")!
-    expect(section.lines.some((l) => l.toLowerCase().includes("batch size"))).toBe(false)
+    expect(section.lines.some((l) => lt(l).toLowerCase().includes("batch size"))).toBe(false)
   })
 
   it("not present when searchTrigger is null", () => {

@@ -1755,10 +1755,16 @@ export function RouteBuilder({
                 )
               }
 
+              // Show path label on filter nodes (e.g., "Enterprise", "With Email")
+              const pathLabel = (node.type === "filter" && node.pathId)
+                ? (findPathById(state.paths, node.pathId)?.label ?? undefined)
+                : undefined
+
               return (
                 <CanvasNodeCard
                   key={node.id}
                   node={node}
+                  title={pathLabel}
                   subtitle={nodeSubtitle(node, state)}
                   isDragging={draggingId === node.id}
                   glowState={glowForNode(node.type)}
