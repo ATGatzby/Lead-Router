@@ -31,6 +31,7 @@
 23. [Theme & Design System](#23-theme--design-system)
 24. [Licensing & Monetization System](#24-licensing--monetization-system)
 25. [Bulk API 2.0 System — Scheduled Search at Scale](#25-bulk-api-20-system--scheduled-search-at-scale)
+26. [MCP Server (Claude Code Integration)](#26-mcp-server-claude-code-integration)
 
 ---
 
@@ -280,13 +281,15 @@ lead-routing/
 
 ```
 RouteBuilder.tsx (main canvas)
-├── StepRegistry.tsx          — Draggable step sidebar
+├── StepRegistry.tsx          — Clickable + draggable step sidebar (Filter, Assign, Split, Update Field, Create Task, Match, Default Owner)
 ├── Config Sheets (side panels):
 │   ├── TriggerConfigSheet    — Object type + event + trigger criteria (ConditionBuilder) + dry-run
 │   ├── MatchConfigSheet      — Deduplication settings
 │   ├── FilterConfigSheet     — Condition groups (AND/OR logic)
 │   ├── ActionConfigSheet     — User / Round-Robin / Queue assignment
-│   └── DefaultOwnerConfigSheet — Fallback assignment
+│   ├── DefaultOwnerConfigSheet — Fallback assignment
+│   ├── UpdateFieldConfigSheet — SFDC field update config
+│   └── CreateTaskConfigSheet  — SFDC task creation config
 ├── Condition Builder:
 │   ├── ConditionGroup.tsx    — AND group with OR connectors
 │   ├── ConditionRow.tsx      — Field + Operator + Value
@@ -294,8 +297,10 @@ RouteBuilder.tsx (main canvas)
 │   ├── OperatorSelect.tsx    — Context-aware operators by field type
 │   └── ValueInput.tsx        — Text / Number / Date / Picklist
 └── Types:
-    └── types.ts              — RouteBuilderState, MatchConfig, PathAction, etc.
+    └── types.ts              — RouteBuilderState, MatchConfig, PathAction, PathStepSplit, etc.
 ```
+
+**Nested Splits**: The canvas supports recursive branching up to 5 levels. Each split creates child paths that can contain further splits. `buildNodesFromState()` recursively positions nodes; `computeEdgesFromState()` generates all connecting edges. Split pill nodes show path counts at each level. `lastActivePathIdRef` tracks which branch receives StepRegistry clicks. Subtree drag moves all descendant nodes together.
 
 **Canvas Interaction:**
 - Left-click drag on empty canvas pans the viewport (`onMouseDown` + window `mousemove`/`mouseup`)
@@ -311,9 +316,13 @@ interface RouteBuilderState {
   name: string
   trigger: { objectType: "LEAD"|"CONTACT"|"ACCOUNT", triggerEvent: "INSERT"|"UPDATE"|"BOTH", isDryRun: boolean }
   matchConfig: MatchConfig | null
-  paths: RoutePath[]          // Each path = filter conditions + assignment action
+  paths: RoutePath[]          // Each path = filter conditions + assignment action + nested steps
   defaultOwner: DefaultOwner | null
 }
+
+// Paths contain recursive step arrays:
+type PathStep = PathStepFilter | PathStepAssign | PathStepUpdateField | PathStepCreateTask | PathStepSplit
+interface PathStepSplit { type: 'split'; paths: RoutePath[] }  // Recursive — up to 5 levels
 ```
 
 ### 4.4 Utility Libraries (lib/)
@@ -873,6 +882,39 @@ Rule has branches[] OR matchConfig OR defaultOwnerType
 │   (catch-all fallback)  │──▶ resolve assignee → updateOwner()
 └─────────────────────────┘
 ```
+
+### 11.1.1 Nested Splits (Recursive Branching)
+
+Branches can contain nested split steps, enabling recursive decision trees up to 5 levels deep. Each branch's `steps` array may include a `split` step type, which itself contains child paths with their own steps (including further nested splits).
+
+```
+Rule has branches[] with nested splits
+    │
+    ▼
+┌─────────────────────────────────┐
+│   BRANCH EVALUATION             │
+│   For each branch (priority):   │
+│   ├─ Evaluate conditions        │
+│   └─ If match:                  │
+│       executeSteps(steps):      │
+│       ├─ filter → evaluate      │
+│       ├─ assign → resolve       │──▶ updateOwner()
+│       ├─ update_field → SFDC    │
+│       ├─ create_task → SFDC     │
+│       └─ split → recurse:      │
+│           For each child path:  │
+│           ├─ Evaluate conditions│
+│           └─ executeSteps(...)  │──▶ (recursive)
+└─────────────────────────────────┘
+```
+
+**Engine execution** (`router.ts`): The `executeSteps()` function processes a branch's step array sequentially. When it encounters a `split` step, it iterates the split's child paths in priority order, evaluates each path's conditions, and recursively calls `executeSteps()` on the first matching path. This enables arbitrarily deep decision trees within a single route.
+
+**Data model**: The `PathStepSplit` type in `types.ts` contains `paths: RoutePath[]`, where each `RoutePath` has its own `steps: PathStep[]`. The `PathStep` union type includes `filter`, `assign`, `update_field`, `create_task`, and `split`. Tree helper functions (`findPathById`, `updatePathById`, `removePathById`, `flattenAllPaths`, `flattenAllSplits`) operate recursively across the entire tree.
+
+**Canvas layout** (`RouteBuilder.tsx`): `buildNodesFromState()` recursively positions nested split branches. Each split level adds a "split pill" node (small rounded badge showing path count). `computeEdgesFromState()` generates edges connecting all nodes in the tree. Subtree drag moves all descendant nodes together.
+
+**Serialization** (`builder-to-rule.ts`): `builderToApiBody()` and `apiRuleToBuilderState()` preserve nested `path.steps` arrays through save/reload cycles. Previously steps were silently lost on save.
 
 ### 11.2 Legacy Routing
 
@@ -2214,3 +2256,75 @@ Both settings are configurable per rule in the SearchTriggerConfigSheet advanced
 
 - **`searchMaxRecords`** — Maximum records to process in a single run. Options: 1K / 5K / 10K / 50K / 100K / 500K / 1M / Unlimited. Default: 10,000.
 - **`searchBatchSize`** — Micro-batch size for streaming processing. Options: 200 / 500 / 1K / 5K / 10K. Default: 200. Larger batches reduce overhead but increase memory per batch.
+
+---
+
+## 26. MCP Server (Claude Code Integration)
+
+**Package:** `apps/mcp` → `@lead-routing/mcp` (npm)
+**Stack:** `@modelcontextprotocol/sdk`, tsup ESM, Node 20+
+
+### 26.1 Overview
+
+stdio-based MCP server that gives Claude Code full access to the Lead Routing system. Pure HTTP client — no Prisma, no direct DB access. All operations go through the engine and web app APIs.
+
+- **19 tools:** routing (2), rules CRUD (5), teams CRUD (6), users (2), monitoring (3), sync (1)
+- **2 resources:** `lead-routing://rules`, `lead-routing://teams`
+
+### 26.2 Architecture
+
+```
+Claude Code → stdio → MCP Server (local) → HTTP → Engine (/route, /route/batch)
+                                          → HTTP → Web App (/api/rules, /api/teams, etc.)
+```
+
+| Client | Target | Auth Mechanism |
+|--------|--------|----------------|
+| `engine-client.ts` | Engine | HMAC-SHA256 signature (`X-Signature-256` header) |
+| `web-client.ts` | Web App | Bearer token (`Authorization: Bearer lr_...`) |
+
+### 26.3 API Token System
+
+Tokens authenticate MCP server requests to the web app, bypassing iron-session.
+
+| Aspect | Detail |
+|--------|--------|
+| Model | `ApiToken` in Prisma (`tokenHash`, `prefix`, `scopes`, `expiresAt`, `revokedAt`) |
+| Format | `lr_` + 40 hex chars; SHA-256 hash stored in DB |
+| Auth flow | `proxy.ts` checks `Authorization: Bearer` header BEFORE session check — falls through to session if no Bearer present |
+| Session fallback | `requireSession()` falls back to header-based auth for Bearer tokens |
+| Endpoints | `POST/GET/DELETE /api/tokens` + settings UI page |
+
+### 26.4 Preview/Confirm Pattern
+
+All write tools default to `confirm: false`. The first call returns a preview of what would happen; a second call with `confirm: true` executes the operation. Routing tools default to dry-run mode.
+
+### 26.5 Local Audit Logging
+
+- JSON lines at `~/.lead-routing/mcp.log`
+- Logs every tool call: timestamp, tool name, action, input, result, duration
+- 10 MB rotation, 3 files kept
+
+### 26.6 Setup
+
+```bash
+claude mcp add --scope user --transport stdio lead-routing \
+  --env ENGINE_URL=https://engine.example.com \
+  --env APP_URL=https://app.example.com \
+  --env API_TOKEN=lr_... \
+  --env WEBHOOK_SECRET=... \
+  --env SFDC_ORG_ID=00D... \
+  -- npx -y @lead-routing/mcp
+```
+
+### 26.7 Key Files
+
+| File | Purpose |
+|------|---------|
+| `apps/mcp/src/index.ts` | MCP server entry point, tool registration |
+| `apps/mcp/src/clients/engine-client.ts` | HMAC-signed HTTP client for engine |
+| `apps/mcp/src/clients/web-client.ts` | Bearer-authenticated HTTP client for web app |
+| `apps/mcp/src/tools/` | 19 tool handlers |
+| `apps/web/proxy.ts` | Bearer token auth (lines 48-78) |
+| `apps/web/lib/session.ts` | `requireSession()` with Bearer fallback |
+| `apps/web/app/api/tokens/` | Token CRUD endpoints |
