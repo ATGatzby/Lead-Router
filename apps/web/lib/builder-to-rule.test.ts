@@ -350,6 +350,217 @@ describe("apiRuleToBuilderState", () => {
   });
 });
 
+// ── Nested split serialization ─────────────────────────────────────────────
+
+describe("builderToApiBody — nested splits", () => {
+  it("serializes V2 branch with steps including a nested split", () => {
+    const state = makeBuilderState({
+      paths: [
+        {
+          id: "path-1",
+          label: "Split Path",
+          conditions: [
+            {
+              id: "g-top",
+              conjunction: "AND" as const,
+              conditions: [
+                { id: "c-top", groupId: "g-top", fieldApiName: "Region", fieldType: "TEXT" as const, operator: "equals", value: "US" },
+              ],
+            },
+          ],
+          action: { assignmentType: null, assigneeId: null, assigneeName: null },
+          steps: [
+            {
+              type: "filter" as const,
+              conditions: [
+                {
+                  id: "g-top",
+                  conjunction: "AND" as const,
+                  conditions: [
+                    { id: "c-top", groupId: "g-top", fieldApiName: "Region", fieldType: "TEXT" as const, operator: "equals", value: "US" },
+                  ],
+                },
+              ],
+            },
+            {
+              type: "split" as const,
+              paths: [
+                {
+                  id: "sub-a",
+                  label: "Enterprise",
+                  conditions: [
+                    {
+                      id: "g-sub-a",
+                      conjunction: "AND" as const,
+                      conditions: [
+                        { id: "c-sub-a", groupId: "g-sub-a", fieldApiName: "AnnualRevenue", fieldType: "NUMBER" as const, operator: "gt", value: "1000000" },
+                      ],
+                    },
+                  ],
+                  action: { assignmentType: "USER" as const, assigneeId: "user-ent", assigneeName: "Ent Rep" },
+                  steps: [
+                    {
+                      type: "filter" as const,
+                      conditions: [
+                        {
+                          id: "g-sub-a",
+                          conjunction: "AND" as const,
+                          conditions: [
+                            { id: "c-sub-a", groupId: "g-sub-a", fieldApiName: "AnnualRevenue", fieldType: "NUMBER" as const, operator: "gt", value: "1000000" },
+                          ],
+                        },
+                      ],
+                    },
+                    { type: "assign" as const, assignmentType: "USER" as const, assigneeId: "user-ent", assigneeName: "Ent Rep" },
+                  ],
+                },
+                {
+                  id: "sub-b",
+                  label: "SMB",
+                  conditions: [],
+                  action: { assignmentType: "ROUND_ROBIN" as const, assigneeId: "team-smb", assigneeName: "SMB Team" },
+                  steps: [
+                    { type: "filter" as const, conditions: [] },
+                    { type: "assign" as const, assignmentType: "ROUND_ROBIN" as const, assigneeId: "team-smb", assigneeName: "SMB Team" },
+                  ],
+                },
+              ],
+              defaultOwner: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const body = builderToApiBody(state);
+    const branches = body.branches as Array<Record<string, unknown>>;
+
+    expect(branches).toHaveLength(1);
+    expect(branches[0].steps).toBeDefined();
+
+    const steps = branches[0].steps as Array<Record<string, unknown>>;
+    const splitStep = steps.find((s) => s.type === "split") as Record<string, unknown>;
+    expect(splitStep).toBeDefined();
+
+    const subPaths = splitStep.paths as Array<Record<string, unknown>>;
+    expect(subPaths).toHaveLength(2);
+    expect(subPaths[0].label).toBe("Enterprise");
+    expect(subPaths[1].label).toBe("SMB");
+  });
+
+  it("syncConditionsIntoSteps syncs path.conditions into steps[0] filter", () => {
+    const state = makeBuilderState({
+      paths: [
+        {
+          id: "path-sync",
+          label: "Sync Test",
+          conditions: [
+            {
+              id: "g-new",
+              conjunction: "AND" as const,
+              conditions: [
+                { id: "c-new", groupId: "g-new", fieldApiName: "Updated_Field__c", fieldType: "TEXT" as const, operator: "equals", value: "new-value" },
+              ],
+            },
+          ],
+          action: { assignmentType: "USER" as const, assigneeId: "user-1", assigneeName: "User 1" },
+          steps: [
+            {
+              type: "filter" as const,
+              conditions: [
+                {
+                  id: "g-old",
+                  conjunction: "AND" as const,
+                  conditions: [
+                    { id: "c-old", groupId: "g-old", fieldApiName: "Old_Field__c", fieldType: "TEXT" as const, operator: "equals", value: "old-value" },
+                  ],
+                },
+              ],
+            },
+            { type: "assign" as const, assignmentType: "USER" as const, assigneeId: "user-old", assigneeName: "Old User" },
+          ],
+        },
+      ],
+    });
+
+    const body = builderToApiBody(state);
+    const branch = (body.branches as any[])[0];
+
+    // The conditions in the API body should come from synced steps[0],
+    // which should now have the NEW conditions from path.conditions
+    const conditions = branch.conditions as Array<Record<string, unknown>>;
+    expect(conditions).toHaveLength(1);
+    expect(conditions[0].fieldName).toBe("Updated_Field__c");
+    expect(conditions[0].value).toBe("new-value");
+  });
+
+  it("syncConditionsIntoSteps syncs path.action into assign step", () => {
+    const state = makeBuilderState({
+      paths: [
+        {
+          id: "path-action-sync",
+          label: "Action Sync",
+          conditions: [],
+          action: { assignmentType: "ROUND_ROBIN" as const, assigneeId: "team-new", assigneeName: "New Team" },
+          steps: [
+            { type: "filter" as const, conditions: [] },
+            { type: "assign" as const, assignmentType: "USER" as const, assigneeId: "user-old", assigneeName: "Old User" },
+          ],
+        },
+      ],
+    });
+
+    const body = builderToApiBody(state);
+    const branch = (body.branches as any[])[0];
+    const steps = branch.steps as any[];
+    const assignStep = steps.find((s: any) => s.type === "assign");
+
+    // The assign step should be synced with the new action from path.action
+    expect(assignStep.assignmentType).toBe("ROUND_ROBIN");
+    expect(assignStep.assigneeId).toBe("team-new");
+    expect(assignStep.assigneeName).toBe("New Team");
+  });
+
+  it("conditions derived from steps[0] filter, not path.conditions, when steps exist", () => {
+    // When a path has steps, the API body conditions should come from
+    // the filter step (after sync), not directly from path.conditions
+    const state = makeBuilderState({
+      paths: [
+        {
+          id: "path-source",
+          label: "Source Test",
+          // Empty path.conditions
+          conditions: [],
+          action: { assignmentType: null, assigneeId: null, assigneeName: null },
+          steps: [
+            {
+              type: "filter" as const,
+              conditions: [
+                {
+                  id: "g-steps",
+                  conjunction: "AND" as const,
+                  conditions: [
+                    { id: "c-steps", groupId: "g-steps", fieldApiName: "From_Steps__c", fieldType: "TEXT" as const, operator: "equals", value: "step-value" },
+                  ],
+                },
+              ],
+            },
+            { type: "assign" as const, assignmentType: null, assigneeId: null, assigneeName: null },
+          ],
+        },
+      ],
+    });
+
+    const body = builderToApiBody(state);
+    const branch = (body.branches as any[])[0];
+    const conditions = branch.conditions as Array<Record<string, unknown>>;
+
+    // Should use conditions from steps[0] filter since path.conditions is empty
+    expect(conditions).toHaveLength(1);
+    expect(conditions[0].fieldName).toBe("From_Steps__c");
+  });
+});
+
 describe("round-trip conversion", () => {
   it("builderToApiBody -> apiRuleToBuilderState preserves core data", () => {
     const original = makeBuilderState({
@@ -422,6 +633,74 @@ describe("round-trip conversion", () => {
     expect(restored.defaultOwner).not.toBeNull();
     expect(restored.defaultOwner!.assignmentType).toBe("USER");
     expect(restored.defaultOwner!.assigneeId).toBe("user-default");
+  });
+
+  it("preserves nested splits through round-trip", () => {
+    const original = makeBuilderState({
+      name: "Nested Split Round Trip",
+      paths: [
+        {
+          id: "path-rt",
+          label: "Split Path",
+          conditions: [
+            {
+              id: "g-top",
+              conjunction: "AND" as const,
+              conditions: [
+                { id: "c-top", groupId: "g-top", fieldApiName: "Region", fieldType: "TEXT" as const, operator: "equals", value: "US" },
+              ],
+            },
+          ],
+          action: { assignmentType: null, assigneeId: null, assigneeName: null },
+          steps: [
+            {
+              type: "filter" as const,
+              conditions: [
+                {
+                  id: "g-top",
+                  conjunction: "AND" as const,
+                  conditions: [
+                    { id: "c-top", groupId: "g-top", fieldApiName: "Region", fieldType: "TEXT" as const, operator: "equals", value: "US" },
+                  ],
+                },
+              ],
+            },
+            {
+              type: "split" as const,
+              paths: [
+                {
+                  id: "sub-a",
+                  label: "Enterprise",
+                  conditions: [],
+                  action: { assignmentType: "USER" as const, assigneeId: "user-ent", assigneeName: "Ent" },
+                  steps: [
+                    { type: "filter" as const, conditions: [] },
+                    { type: "assign" as const, assignmentType: "USER" as const, assigneeId: "user-ent", assigneeName: "Ent" },
+                  ],
+                },
+              ],
+              defaultOwner: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const apiBody = builderToApiBody(original);
+    const restored = apiRuleToBuilderState(apiBody);
+
+    // The restored state should have the steps preserved (including nested split)
+    expect(restored.paths).toHaveLength(1);
+    expect(restored.paths[0].steps).toBeDefined();
+
+    const steps = restored.paths[0].steps!;
+    const splitStep = steps.find((s) => s.type === "split");
+    expect(splitStep).toBeDefined();
+
+    if (splitStep && splitStep.type === "split") {
+      expect(splitStep.paths).toHaveLength(1);
+      expect(splitStep.paths[0].label).toBe("Enterprise");
+    }
   });
 
   it("handles matchConfig round-trip", () => {

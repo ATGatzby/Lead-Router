@@ -916,6 +916,19 @@ Rule has branches[] with nested splits
 
 **Serialization** (`builder-to-rule.ts`): `builderToApiBody()` and `apiRuleToBuilderState()` preserve nested `path.steps` arrays through save/reload cycles. Previously steps were silently lost on save.
 
+**Conditions sync** (`syncConditionsIntoSteps` in `builder-to-rule.ts`): Single source of truth is `steps[]`. Before serialization, `syncConditionsIntoSteps()` recursively syncs UI-level data into steps:
+- `path.conditions` → `steps[filterIdx].conditions` (the filter step)
+- `path.action` → `steps[assignIdx]` (the assign step)
+- Recurses into any split step's sub-paths
+After sync, `builderToApiBody()` derives the flat `conditions[]` array from `steps[0]` (the filter step), not from `path.conditions` directly. This ensures the engine always reads conditions from the same source that the UI edited.
+
+**Condition flattening** (`flattenConditionGroups` in `router.ts`): The engine normalizes two input formats into a flat array for evaluation:
+1. `ConditionGroup[]` format: `{ id, conjunction, conditions: [{ fieldApiName, ... }] }` → maps `fieldApiName` to `fieldName`
+2. Flat condition format: `{ groupId, fieldName, operator, value }` → passes through
+This allows the engine to handle both Route Builder V2 (ConditionGroup[]) and V1 (flat conditions) without branching.
+
+**Trace data for nested splits**: `executeSteps()` builds a `TraceSplit` object for each split step encountered, containing `TraceSplitPath[]` entries. Each entry records `label`, `matched` boolean, and `conditionGroups` (detailed evaluation results). Nested splits produce nested `TraceSplit` objects, enabling the run detail page to show the full decision tree traversal.
+
 ### 11.2 Legacy Routing
 
 ```

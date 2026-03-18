@@ -75,8 +75,63 @@ describe("operators", () => {
       expect(values).toContain("is_not_blank");
     });
 
+    it("CURRENCY returns same numeric operators as NUMBER", () => {
+      const numberOps = getOperatorsForType("NUMBER");
+      const currencyOps = getOperatorsForType("CURRENCY");
+      expect(currencyOps).toEqual(numberOps);
+    });
+
+    it("DOUBLE returns same numeric operators as NUMBER", () => {
+      const numberOps = getOperatorsForType("NUMBER");
+      const doubleOps = getOperatorsForType("DOUBLE");
+      expect(doubleOps).toEqual(numberOps);
+    });
+
+    it("PERCENT returns same numeric operators as NUMBER", () => {
+      const numberOps = getOperatorsForType("NUMBER");
+      const percentOps = getOperatorsForType("PERCENT");
+      expect(percentOps).toEqual(numberOps);
+    });
+
+    it("INT returns same numeric operators as NUMBER", () => {
+      const numberOps = getOperatorsForType("NUMBER");
+      const intOps = getOperatorsForType("INT");
+      expect(intOps).toEqual(numberOps);
+    });
+
+    it("all numeric types have gt, gte, lt, lte", () => {
+      for (const type of ["NUMBER", "CURRENCY", "DOUBLE", "PERCENT", "INT"]) {
+        const ops = getOperatorsForType(type).map((o) => o.value);
+        expect(ops, `${type} should have gt`).toContain("gt");
+        expect(ops, `${type} should have gte`).toContain("gte");
+        expect(ops, `${type} should have lt`).toContain("lt");
+        expect(ops, `${type} should have lte`).toContain("lte");
+      }
+    });
+
+    it("TEXT does NOT have numeric comparison operators", () => {
+      const ops = getOperatorsForType("TEXT").map((o) => o.value);
+      expect(ops).not.toContain("gt");
+      expect(ops).not.toContain("gte");
+      expect(ops).not.toContain("lt");
+      expect(ops).not.toContain("lte");
+    });
+
+    it("TEXT has fuzzy matching operators", () => {
+      const ops = getOperatorsForType("TEXT").map((o) => o.value);
+      expect(ops).toContain("fuzzy_equals");
+      expect(ops).toContain("sounds_like");
+      expect(ops).toContain("similar_to");
+    });
+
     it("falls back to TEXT operators for unknown field type", () => {
       const ops = getOperatorsForType("UNKNOWN_TYPE");
+      const textOps = getOperatorsForType("TEXT");
+      expect(ops).toEqual(textOps);
+    });
+
+    it("falls back to TEXT operators for empty string type", () => {
+      const ops = getOperatorsForType("");
       const textOps = getOperatorsForType("TEXT");
       expect(ops).toEqual(textOps);
     });
