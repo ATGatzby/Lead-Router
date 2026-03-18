@@ -1668,7 +1668,11 @@ export function RouteBuilder({
           onDrop={handleDrop}
           onWheel={handleWheel}
           onMouseDown={(e) => {
-            setAddStepDropdown(null)
+            // Don't close Add Step dropdown if clicking inside it
+            const target = e.target as HTMLElement
+            if (!target.closest("[data-add-step-dropdown]")) {
+              setAddStepDropdown(null)
+            }
             handleCanvasPanStart(e)
           }}
         >
@@ -1874,6 +1878,7 @@ export function RouteBuilder({
             {addStepDropdown && (
               <div
                 data-canvas-node
+                data-add-step-dropdown
                 style={{
                   position: "absolute",
                   left: addStepDropdown.x,
