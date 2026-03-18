@@ -2,18 +2,33 @@ import type { RouteBuilderState, RoutePath, PathStep } from "@/components/route-
 import { resolveObjectType } from "@/components/route-builder/types"
 
 /**
- * Recursively sync path.conditions → steps[0].conditions for every path in the tree.
- * This ensures the steps JSON always has the latest conditions from the UI,
- * even for nested sub-paths inside splits.
+ * Recursively sync path-level data into steps[] for every path in the tree.
+ * Syncs:
+ * - path.conditions → steps[filterIdx].conditions (filter conditions)
+ * - path.action → steps[assignIdx] (assignment info)
+ * This ensures the steps JSON always has the latest data from the UI.
  */
 function syncConditionsIntoSteps(path: RoutePath): PathStep[] {
   const steps = [...(path.steps ?? [])]
 
-  // Sync this path's conditions into its first filter step
+  // Sync conditions into the first filter step
   if (path.conditions?.length > 0) {
     const filterIdx = steps.findIndex(s => s.type === "filter")
     if (filterIdx >= 0) {
       steps[filterIdx] = { type: "filter", conditions: path.conditions } as PathStep
+    }
+  }
+
+  // Sync action into the assign step (if present)
+  if (path.action?.assignmentType) {
+    const assignIdx = steps.findIndex(s => s.type === "assign")
+    if (assignIdx >= 0) {
+      steps[assignIdx] = {
+        type: "assign",
+        assignmentType: path.action.assignmentType,
+        assigneeId: path.action.assigneeId,
+        assigneeName: path.action.assigneeName,
+      } as PathStep
     }
   }
 
