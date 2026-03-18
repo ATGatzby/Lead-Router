@@ -399,6 +399,298 @@ describe("warnings", () => {
   })
 })
 
+// ── V2 multi-step paths ──────────────────────────────────────────────────
+
+describe("V2 multi-step path sections", () => {
+  it("renders steps in order", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Multi-Step",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              {
+                type: "filter",
+                conditions: [makeGroup([makeCond({ fieldApiName: "Industry", operator: "equals", value: "Tech" })])],
+              },
+              { type: "updateField", fieldApiName: "Status__c", fieldValue: "Routed" },
+              { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Alice" },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    expect(path.lines.some((l) => lt(l).includes("Industry"))).toBe(true)
+    expect(path.lines.some((l) => lt(l).includes("Status__c"))).toBe(true)
+    expect(path.lines.some((l) => lt(l).includes("Alice"))).toBe(true)
+  })
+
+  it("renders path with nested split and sub-path labels", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Split Path",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              {
+                type: "split",
+                paths: [
+                  {
+                    id: "sub-a",
+                    label: "Enterprise",
+                    conditions: [makeGroup([makeCond({ fieldApiName: "Revenue", operator: "gt", value: "1M" })])],
+                    action: { assignmentType: "USER", assigneeId: "u1", assigneeName: "Ent Rep" },
+                    steps: [
+                      {
+                        type: "filter",
+                        conditions: [makeGroup([makeCond({ fieldApiName: "Revenue", operator: "gt", value: "1M" })])],
+                      },
+                      { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Ent Rep" },
+                    ],
+                  },
+                  {
+                    id: "sub-b",
+                    label: "SMB",
+                    conditions: [],
+                    action: { assignmentType: "ROUND_ROBIN", assigneeId: "t1", assigneeName: "SMB Team" },
+                    steps: [
+                      { type: "filter", conditions: [] },
+                      { type: "assign", assignmentType: "ROUND_ROBIN", assigneeId: "t1", assigneeName: "SMB Team" },
+                    ],
+                  },
+                ],
+                defaultOwner: null,
+              },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    // Should mention split
+    expect(path.lines.some((l) => lt(l).includes("Split into 2"))).toBe(true)
+    // Should render sub-path labels
+    expect(path.lines.some((l) => lt(l).includes("Enterprise"))).toBe(true)
+    expect(path.lines.some((l) => lt(l).includes("SMB"))).toBe(true)
+  })
+
+  it("renders 3-level deep split with depth information", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Deep Split",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              {
+                type: "split",
+                paths: [
+                  {
+                    id: "level1",
+                    label: "Level 1",
+                    conditions: [],
+                    action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                    steps: [
+                      { type: "filter", conditions: [] },
+                      {
+                        type: "split",
+                        paths: [
+                          {
+                            id: "level2",
+                            label: "Level 2",
+                            conditions: [makeGroup([makeCond({ fieldApiName: "Size", operator: "gt", value: "100" })])],
+                            action: { assignmentType: "USER", assigneeId: "u1", assigneeName: "Deep User" },
+                            steps: [
+                              {
+                                type: "filter",
+                                conditions: [makeGroup([makeCond({ fieldApiName: "Size", operator: "gt", value: "100" })])],
+                              },
+                              { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Deep User" },
+                            ],
+                          },
+                        ],
+                        defaultOwner: null,
+                      },
+                    ],
+                  },
+                ],
+                defaultOwner: null,
+              },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    // Should have lines for split and nested content
+    expect(path.lines.length).toBeGreaterThan(1)
+    // Should contain the deep path label
+    expect(path.lines.some((l) => lt(l).includes("Level 2"))).toBe(true)
+    // Should contain the deep condition
+    expect(path.lines.some((l) => lt(l).includes("Size"))).toBe(true)
+
+    // Check that EnglishLine depth values are present for nested items
+    const englishLines = path.lines.filter((l): l is EnglishLine => typeof l !== "string")
+    const maxDepth = Math.max(...englishLines.map((l) => l.depth))
+    expect(maxDepth).toBeGreaterThanOrEqual(2)
+  })
+
+  it("renders split with defaultOwner fallback line", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Split With Default",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              {
+                type: "split",
+                paths: [
+                  {
+                    id: "sub-a",
+                    label: "Sub A",
+                    conditions: [makeGroup([makeCond()])],
+                    action: { assignmentType: "USER", assigneeId: "u1", assigneeName: "A" },
+                    steps: [
+                      { type: "filter", conditions: [makeGroup([makeCond()])] },
+                      { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "A" },
+                    ],
+                  },
+                ],
+                defaultOwner: { assignmentType: "QUEUE", assigneeId: "q1", assigneeName: "Fallback Queue" },
+              },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    expect(path.lines.some((l) => lt(l).includes("Default") && lt(l).includes("Fallback Queue"))).toBe(true)
+  })
+
+  it("path with split but no assign anywhere shows warning", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "No Assign Split",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              {
+                type: "split",
+                paths: [
+                  {
+                    id: "sub-a",
+                    label: "Sub A",
+                    conditions: [],
+                    action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                    steps: [
+                      { type: "filter", conditions: [] },
+                      { type: "updateField", fieldApiName: "Status", fieldValue: "Pending" },
+                      // No assign step anywhere
+                    ],
+                  },
+                ],
+                defaultOwner: null,
+              },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    // hasAssignAnywhere should detect missing assign → warning status
+    expect(path.status).toBe("warning")
+  })
+
+  it("path with assign inside nested split: buildPathSection uses hasAssignAnywhere (ok status)", () => {
+    // hasAssignAnywhere recursively finds assign steps inside nested splits.
+    // buildPathSection uses this to determine the section status.
+    // NOTE: detectWarnings uses a non-recursive check (p.steps.some), so it still
+    // emits a "no assignment step" warning. This is a known inconsistency.
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Nested Assign",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              {
+                type: "split",
+                paths: [
+                  {
+                    id: "sub-a",
+                    label: "Sub A",
+                    conditions: [],
+                    action: { assignmentType: "USER", assigneeId: "u1", assigneeName: "Alice" },
+                    steps: [
+                      { type: "filter", conditions: [] },
+                      { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Alice" },
+                    ],
+                  },
+                ],
+                defaultOwner: null,
+              },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    // buildPathSection uses hasAssignAnywhere (recursive) → finds the assign in nested split → status ok
+    expect(path.status).toBe("ok")
+
+    // detectWarnings uses non-recursive p.steps.some → still flags "no assignment step"
+    // This is a known inconsistency between buildPathSection and detectWarnings
+    const noAssignWarning = review.warnings.find(
+      (w) => w.relatedSection === "path-p1" && w.message.includes("no assignment step")
+    )
+    expect(noAssignWarning).toBeDefined()
+  })
+
+  it("renders createTask step in lines", () => {
+    const review = routeToEnglish(
+      makeState({
+        paths: [
+          {
+            id: "p1",
+            label: "Task Path",
+            conditions: [],
+            action: { assignmentType: null, assigneeId: null, assigneeName: null },
+            steps: [
+              { type: "filter", conditions: [] },
+              { type: "createTask", subject: "Follow up", priority: "High", status: "Not Started", dueDateOffset: 3, description: "" },
+              { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Alice" },
+            ],
+          },
+        ],
+      })
+    )
+    const path = review.sections.find((s) => s.type === "path")!
+    expect(path.lines.some((l) => lt(l).includes("Follow up") && lt(l).includes("3 days"))).toBe(true)
+  })
+})
+
 // ── Edge cases ───────────────────────────────────────────────────────────────
 
 describe("edge cases", () => {
