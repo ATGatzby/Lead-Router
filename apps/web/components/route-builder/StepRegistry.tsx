@@ -1,10 +1,10 @@
 "use client"
 
-import { Zap, Search, Filter, AlertTriangle, SearchIcon } from "lucide-react"
+import { Zap, Search, Filter, AlertTriangle, SearchIcon, Pencil, ClipboardList } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CanvasNodeType = "trigger" | "searchTrigger" | "match" | "filter" | "assign" | "defaultOwner"
+export type CanvasNodeType = "trigger" | "searchTrigger" | "match" | "filter" | "assign" | "defaultOwner" | "split" | "updateField" | "createTask"
 
 interface StepDefinition {
   type: CanvasNodeType
@@ -30,6 +30,20 @@ const STEPS: StepDefinition[] = [
     color: "text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900",
   },
   {
+    type: "updateField",
+    icon: Pencil,
+    label: "Update Field",
+    description: "Set a field value on record",
+    color: "text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900",
+  },
+  {
+    type: "createTask",
+    icon: ClipboardList,
+    label: "Create Task",
+    description: "Create a follow-up task",
+    color: "text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900",
+  },
+  {
     type: "defaultOwner",
     icon: AlertTriangle,
     label: "Default Owner",
@@ -43,11 +57,13 @@ const STEPS: StepDefinition[] = [
 interface StepRegistryProps {
   /** Node types already present on the canvas (used for greying out singles) */
   activeTypes: CanvasNodeType[]
+  /** Called when a step is clicked to add it to the canvas */
+  onAddStep?: (type: CanvasNodeType) => void
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function StepRegistry({ activeTypes }: StepRegistryProps) {
+export function StepRegistry({ activeTypes, onAddStep }: StepRegistryProps) {
   return (
     <div className="w-[220px] flex-shrink-0 border-l bg-white dark:bg-gray-950 flex flex-col">
       {/* Panel header */}
@@ -63,7 +79,7 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
           Triggers
         </p>
 
-        {/* Real-Time Trigger — singleton, draggable */}
+        {/* Real-Time Trigger — singleton */}
         {(() => {
           const isAdded = activeTypes.includes("trigger")
           return (
@@ -74,11 +90,12 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
                 e.dataTransfer.setData("stepType", "trigger")
                 e.dataTransfer.effectAllowed = "copy"
               }}
+              onClick={() => !isAdded && onAddStep?.("trigger")}
               className={[
                 "rounded-lg border px-3 py-2.5 transition-colors",
                 isAdded
                   ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
-                  : "border-border bg-white dark:bg-gray-900 hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/50 cursor-grab active:cursor-grabbing",
+                  : "border-border bg-white dark:bg-gray-900 hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/50 cursor-pointer",
               ].join(" ")}
             >
               <div className="flex items-center gap-2.5">
@@ -103,7 +120,7 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
           )
         })()}
 
-        {/* Search Salesforce Trigger — singleton, draggable */}
+        {/* Search Salesforce Trigger — singleton */}
         {(() => {
           const isAdded = activeTypes.includes("searchTrigger")
           return (
@@ -114,11 +131,12 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
                 e.dataTransfer.setData("stepType", "searchTrigger")
                 e.dataTransfer.effectAllowed = "copy"
               }}
+              onClick={() => !isAdded && onAddStep?.("searchTrigger")}
               className={[
                 "rounded-lg border px-3 py-2.5 transition-colors",
                 isAdded
                   ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
-                  : "border-border bg-white dark:bg-gray-900 hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/50 cursor-grab active:cursor-grabbing",
+                  : "border-border bg-white dark:bg-gray-900 hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/50 cursor-pointer",
               ].join(" ")}
             >
               <div className="flex items-center gap-2.5">
@@ -148,7 +166,7 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
           Actions
         </p>
 
-        {/* Draggable step cards */}
+        {/* Step cards — click or drag to add */}
         {STEPS.map((step) => {
           const Icon = step.icon
           // "match" and "defaultOwner" are singletons — grey out if already on canvas
@@ -164,11 +182,12 @@ export function StepRegistry({ activeTypes }: StepRegistryProps) {
                 e.dataTransfer.setData("stepType", step.type)
                 e.dataTransfer.effectAllowed = "copy"
               }}
+              onClick={() => !isAdded && onAddStep?.(step.type)}
               className={[
                 "rounded-lg border px-3 py-2.5 transition-colors",
                 isAdded
                   ? "opacity-40 cursor-not-allowed border-border bg-muted/20 select-none"
-                  : "border-border bg-white dark:bg-gray-900 hover:border-primary hover:bg-primary/5 cursor-grab active:cursor-grabbing",
+                  : "border-border bg-white dark:bg-gray-900 hover:border-primary hover:bg-primary/5 cursor-pointer",
               ].join(" ")}
             >
               <div className="flex items-center gap-2.5">

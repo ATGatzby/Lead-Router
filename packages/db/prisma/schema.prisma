@@ -318,6 +318,7 @@ model RoutingBranch {
   assigneeTeam    RoundRobinTeam?  @relation("BranchAssigneeTeam", fields: [assigneeTeamId], references: [id])
   assigneeQueueId String?
   assigneeQueue   SfdcQueue?       @relation("BranchAssigneeQueue", fields: [assigneeQueueId], references: [id])
+  steps           Json?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 

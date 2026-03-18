@@ -188,6 +188,7 @@ export async function PUT(
             assigneeUserId: b.assignmentType === "USER" ? (b.assigneeUserId ?? null) : null,
             assigneeTeamId: b.assignmentType === "ROUND_ROBIN" ? (b.assigneeTeamId ?? null) : null,
             assigneeQueueId: b.assignmentType === "QUEUE" ? (b.assigneeQueueId ?? null) : null,
+            steps: b.steps ?? undefined,
             conditions: {
               create: b.conditions.map((c: any, ci: number) => ({
                 groupId: c.groupId,

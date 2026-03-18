@@ -21,11 +21,13 @@ export interface CachedFlowEdge {
   fromId: string;
   toId: string;
   label: string | null;
+  sourceHandle: string | null;
 }
 
 export interface CachedFlow {
   id: string;
   orgId: string;
+  name: string;
   objectType: string;
   triggerEvent: string;
   isDryRun: boolean;

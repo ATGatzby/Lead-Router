@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders } from "@/lib/auth";
 
@@ -33,13 +34,13 @@ export async function POST(
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
     }
 
-    // Look up the org's webhook secret for engine auth
+    // Look up the org's sfdcOrgId and webhook secret for engine auth
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { webhookSecret: true },
+      select: { sfdcOrgId: true, webhookSecret: true },
     });
-    if (!org) {
-      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    if (!org?.sfdcOrgId) {
+      return NextResponse.json({ error: "Organization not found or missing Salesforce Org ID" }, { status: 404 });
     }
 
     const engineUrl = process.env.ENGINE_URL;
@@ -50,21 +51,27 @@ export async function POST(
       );
     }
 
-    // Send test event to the engine
+    // Send test event to the engine (must match routePayloadSchema + HMAC sig)
+    const payload = JSON.stringify({
+      sfdcOrgId: org.sfdcOrgId,
+      objectType,
+      eventType: "INSERT",
+      recordId: recordId.trim(),
+      timestamp: new Date().toISOString(),
+      fields: {},
+      isTest: true,
+      routeVia: "FLOW",
+    });
+
+    const hmac = crypto.createHmac("sha256", org.webhookSecret).update(payload).digest("hex");
+
     const response = await fetch(`${engineUrl}/route`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Webhook-Secret": org.webhookSecret,
+        "X-Signature-256": `sha256=${hmac}`,
       },
-      body: JSON.stringify({
-        orgId,
-        objectType,
-        triggerEvent: "INSERT",
-        recordId: recordId.trim(),
-        isTest: true,
-        routeVia: "FLOW",
-      }),
+      body: payload,
     });
 
     if (!response.ok) {
