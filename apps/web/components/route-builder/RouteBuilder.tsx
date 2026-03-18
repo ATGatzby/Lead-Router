@@ -21,8 +21,10 @@ import type {
   SearchTriggerConfig,
   PathStep,
   PathStepType,
+  PathStepSplit,
+  RoutePath,
 } from "./types"
-import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType, migrateStateToV2 } from "./types"
+import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType, migrateStateToV2, findPathById, updatePathById, updateSplitStep, flattenAllPaths, flattenAllSplits, getPathDepth, MAX_SPLIT_DEPTH } from "./types"
 import type { RuleConditions } from "@/components/condition-builder"
 import type { ConditionGroup } from "@/components/condition-builder/types"
 import { EnglishView } from "./EnglishView"
@@ -52,8 +54,11 @@ interface CanvasNode {
   type: CanvasNodeType
   x: number
   y: number
-  pathId?: string  // links filter/assign nodes to a RoutePath
-  stepIndex?: number // index within a path's steps[] array
+  pathId?: string            // links step nodes to a RoutePath
+  stepIndex?: number         // index within a path's steps[] array
+  depth?: number             // nesting level (0 = top-level)
+  splitParentPathId?: string // for split/defaultOwner nodes: parent path ID
+  splitStepIndex?: number    // for split/defaultOwner nodes: index in parent path's steps[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any
 }
@@ -158,92 +163,131 @@ const NODE_META: Record<
 
 // ─── Derive edges from nodes ───────────────────────────────────────────────────
 //
-// Layout: trigger/searchTrigger → match? → split → branches (step chains) → defaultOwner?
+// Walks the tree structure to generate edges between connected nodes.
 //
-function computeEdges(nodes: CanvasNode[]): CanvasEdge[] {
+
+/** Generate edges for a set of paths (recursive) */
+function edgesForPaths(
+  paths: RoutePath[],
+  nodes: CanvasNode[],
+  splitNodeId: string | null,  // the split pill above these paths (null if single path)
+  exitNodeId: string | null,   // node that all branches converge to after this group
+): CanvasEdge[] {
+  const edges: CanvasEdge[] = []
+
+  for (const path of paths) {
+    const steps = path.steps ?? []
+    let prevNodeId = splitNodeId
+
+    for (let si = 0; si < steps.length; si++) {
+      const step = steps[si]
+
+      if (step.type === "split") {
+        // Find the split pill node for this nested split
+        const splitPillId = `split_${path.id}_${si}`
+        const splitPill = nodes.find(n => n.id === splitPillId)
+
+        // Connect previous node → split pill (or first sub-path if single)
+        if (prevNodeId && splitPill) {
+          edges.push({ fromId: prevNodeId, toId: splitPill.id })
+        } else if (prevNodeId && !splitPill && step.paths.length === 1) {
+          // Single sub-path, no split pill — connect to first step of the sub-path
+          const firstSubStep = nodes.find(n => n.pathId === step.paths[0].id && n.stepIndex === 0)
+          if (firstSubStep) edges.push({ fromId: prevNodeId, toId: firstSubStep.id })
+        }
+
+        // Determine what comes after this nested split
+        const nestedDOId = `do_${path.id}_${si}`
+        const nestedDO = nodes.find(n => n.id === nestedDOId)
+        // The next step in this path after the split
+        const nextStepId = si + 1 < steps.length ? `s_${path.id}_${si + 1}` : null
+        const nextStepNode = nextStepId ? nodes.find(n => n.id === nextStepId) : null
+        const nestedExitId = nestedDO?.id ?? nextStepNode?.id ?? exitNodeId
+
+        // Recurse into nested paths
+        edges.push(...edgesForPaths(
+          step.paths,
+          nodes,
+          splitPill ? splitPill.id : (prevNodeId ?? null),
+          nestedExitId,
+        ))
+
+        // Nested default owner → next step after split
+        if (nestedDO && nextStepNode) {
+          edges.push({ fromId: nestedDO.id, toId: nextStepNode.id })
+        } else if (nestedDO && !nextStepNode && exitNodeId) {
+          edges.push({ fromId: nestedDO.id, toId: exitNodeId })
+        }
+
+        prevNodeId = nestedDO?.id ?? null
+        // If no nested DO, branches connect directly to exit via nestedExitId
+        if (!nestedDO) prevNodeId = null // edges handled by recursion
+      } else {
+        const nodeId = `s_${path.id}_${si}`
+        const node = nodes.find(n => n.id === nodeId)
+        if (!node) continue
+
+        // Connect previous → this node
+        if (prevNodeId) {
+          edges.push({ fromId: prevNodeId, toId: node.id })
+        } else if (si === 0 && splitNodeId) {
+          // First step in branch, connect from split
+          edges.push({ fromId: splitNodeId, toId: node.id })
+        }
+
+        prevNodeId = node.id
+      }
+    }
+
+    // Last node in this branch → exit node (fan-in)
+    if (prevNodeId && exitNodeId && prevNodeId !== exitNodeId) {
+      edges.push({ fromId: prevNodeId, toId: exitNodeId })
+    }
+  }
+
+  return edges
+}
+
+function computeEdges(nodes: CanvasNode[], state: RouteBuilderState): CanvasEdge[] {
   const edges: CanvasEdge[] = []
   const trigger = nodes.find((n) => n.type === "trigger")
   const searchTrigger = nodes.find((n) => n.type === "searchTrigger")
   const match = nodes.find((n) => n.type === "match")
-  const splitNode = nodes.find((n) => n.type === "split")
-  const defaultOwnerNode = nodes.find((n) => n.type === "defaultOwner")
+  // Top-level default owner (id === "defaultOwner")
+  const defaultOwnerNode = nodes.find((n) => n.id === "defaultOwner")
+  // Top-level split pill (id === "split")
+  const topSplitNode = nodes.find((n) => n.id === "split")
 
-  // Determine the first node after triggers
-  const afterTrigger = match ?? splitNode ?? defaultOwnerNode
-  if (trigger && afterTrigger) edges.push({ fromId: trigger.id, toId: afterTrigger.id })
-  if (searchTrigger && afterTrigger) edges.push({ fromId: searchTrigger.id, toId: afterTrigger.id })
+  const paths = state.paths
 
-  // Collect unique pathIds from V2 step nodes
-  const pathIds = [...new Set(nodes.filter((n) => n.pathId && n.stepIndex !== undefined).map((n) => n.pathId!))]
-
-  // match → split (or first branch step for single path, or defaultOwner if no paths)
-  if (match && splitNode) {
-    edges.push({ fromId: match.id, toId: splitNode.id })
-  } else if (match && !splitNode && pathIds.length > 0) {
-    // Single path — connect match directly to first step
-    const firstStep = nodes.find((n) => n.pathId === pathIds[0] && n.stepIndex === 0)
-    if (firstStep) edges.push({ fromId: match.id, toId: firstStep.id })
-  } else if (match && !splitNode && defaultOwnerNode) {
-    edges.push({ fromId: match.id, toId: defaultOwnerNode.id })
+  // Find the first "downstream" node after triggers
+  let firstDownstream: CanvasNode | undefined
+  if (match) firstDownstream = match
+  else if (topSplitNode) firstDownstream = topSplitNode
+  else if (paths.length === 1) {
+    firstDownstream = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
   }
+  else if (defaultOwnerNode) firstDownstream = defaultOwnerNode
 
-  // Also handle trigger → first step when no match and no split (single path)
-  if (!match && !splitNode && pathIds.length > 0) {
-    const anchorNode = trigger ?? searchTrigger
-    if (anchorNode) {
-      const firstStep = nodes.find((n) => n.pathId === pathIds[0] && n.stepIndex === 0)
-      if (firstStep) edges.push({ fromId: anchorNode.id, toId: firstStep.id })
-    }
-  }
+  if (trigger && firstDownstream) edges.push({ fromId: trigger.id, toId: firstDownstream.id })
+  if (searchTrigger && firstDownstream) edges.push({ fromId: searchTrigger.id, toId: firstDownstream.id })
 
-  // split → first step of each branch (fan-out)
-  if (splitNode) {
-    for (const pid of pathIds) {
-      const firstStep = nodes.find((n) => n.pathId === pid && n.stepIndex === 0)
-      if (firstStep) edges.push({ fromId: splitNode.id, toId: firstStep.id })
-    }
-
-    // If split exists but no branch steps and defaultOwner exists
-    if (pathIds.length === 0 && defaultOwnerNode) {
-      edges.push({ fromId: splitNode.id, toId: defaultOwnerNode.id })
+  // match → split (or first step, or defaultOwner)
+  if (match) {
+    if (topSplitNode) {
+      edges.push({ fromId: match.id, toId: topSplitNode.id })
+    } else if (paths.length === 1) {
+      const firstStep = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
+      if (firstStep) edges.push({ fromId: match.id, toId: firstStep.id })
+    } else if (defaultOwnerNode && paths.length === 0) {
+      edges.push({ fromId: match.id, toId: defaultOwnerNode.id })
     }
   }
 
-  // Within each branch: step[i] → step[i+1], last step → defaultOwner
-  for (const pid of pathIds) {
-    const branchNodes = nodes
-      .filter((n) => n.pathId === pid && n.stepIndex !== undefined)
-      .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
-    for (let i = 0; i < branchNodes.length - 1; i++) {
-      edges.push({ fromId: branchNodes[i].id, toId: branchNodes[i + 1].id })
-    }
-    // Last step → defaultOwner (fan-in)
-    if (defaultOwnerNode && branchNodes.length > 0) {
-      edges.push({ fromId: branchNodes[branchNodes.length - 1].id, toId: defaultOwnerNode.id })
-    }
-  }
-
-  // Legacy fallback: if no split node, connect filters/assigns the old way
-  if (!splitNode) {
-    const anchorNode = match ?? trigger ?? searchTrigger
-    const filterNodes = nodes.filter((n) => n.type === "filter")
-    const assignNodes = nodes.filter((n) => n.type === "assign")
-    if (anchorNode) {
-      for (const f of filterNodes) {
-        edges.push({ fromId: anchorNode.id, toId: f.id })
-      }
-    }
-    for (const f of filterNodes) {
-      const a = assignNodes.find((n) => n.pathId === f.pathId)
-      if (a) edges.push({ fromId: f.id, toId: a.id })
-    }
-    if (defaultOwnerNode && assignNodes.length > 0) {
-      for (const a of assignNodes) {
-        edges.push({ fromId: a.id, toId: defaultOwnerNode.id })
-      }
-    } else if (defaultOwnerNode && anchorNode && filterNodes.length === 0) {
-      edges.push({ fromId: anchorNode.id, toId: defaultOwnerNode.id })
-    }
+  // Generate edges for all paths recursively
+  if (paths.length > 0) {
+    const splitId = topSplitNode?.id ?? (match?.id ?? trigger?.id ?? searchTrigger?.id ?? null)
+    edges.push(...edgesForPaths(paths, nodes, paths.length > 1 ? (topSplitNode?.id ?? null) : null, defaultOwnerNode?.id ?? null))
   }
 
   return edges
@@ -279,7 +323,7 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
       return checks.length > 0 ? `Checks ${checks.join(", ")}` : "No checks selected"
     }
     case "filter": {
-      const path = state.paths.find((p) => p.id === node.pathId)
+      const path = node.pathId ? findPathById(state.paths, node.pathId) : null
       if (!path) return "No path"
       // V2: read from steps[] if stepIndex is present
       if (node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "filter") {
@@ -300,7 +344,7 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
       return count === 1 ? preview : `${preview} +${count - 1} more`
     }
     case "assign": {
-      const path = state.paths.find((p) => p.id === node.pathId)
+      const path = node.pathId ? findPathById(state.paths, node.pathId) : null
       if (!path) return "No path"
       // V2: read from steps[] if stepIndex is present
       if (node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "assign") {
@@ -320,6 +364,18 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
       return path.action.assigneeName ? `${type}: ${path.action.assigneeName}` : type
     }
     case "defaultOwner": {
+      // Nested default owner — look up from split step
+      if (node.splitParentPathId && node.splitStepIndex !== undefined) {
+        const parentPath = findPathById(state.paths, node.splitParentPathId)
+        const splitStep = parentPath?.steps?.[node.splitStepIndex]
+        if (splitStep?.type === "split" && splitStep.defaultOwner) {
+          const do_ = splitStep.defaultOwner
+          const type = do_.assignmentType === "USER" ? "User" : do_.assignmentType === "ROUND_ROBIN" ? "Round Robin" : "Queue"
+          return do_.assigneeName ? `${type}: ${do_.assigneeName}` : type
+        }
+        return "Not configured"
+      }
+      // Top-level default owner
       if (!state.defaultOwner) return "Not configured"
       const type =
         state.defaultOwner.assignmentType === "USER"
@@ -332,12 +388,21 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
         : type
     }
     case "split": {
+      // For nested splits, look up the split step to get its path count
+      if (node.splitParentPathId && node.splitStepIndex !== undefined) {
+        const parentPath = findPathById(state.paths, node.splitParentPathId)
+        const splitStep = parentPath?.steps?.[node.splitStepIndex]
+        if (splitStep?.type === "split") {
+          return `${splitStep.paths.length} path${splitStep.paths.length !== 1 ? "s" : ""}`
+        }
+      }
+      // Top-level split
       const pathCount = state.paths.length
       return `${pathCount} path${pathCount !== 1 ? "s" : ""}`
     }
     case "updateField": {
       if (node.pathId && node.stepIndex !== undefined) {
-        const path = state.paths.find((p) => p.id === node.pathId)
+        const path = node.pathId ? findPathById(state.paths, node.pathId) : null
         const step = path?.steps?.[node.stepIndex]
         if (step?.type === "updateField" && step.fieldApiName) {
           return `${step.fieldApiName} = ${step.fieldValue || "…"}`
@@ -347,7 +412,7 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     }
     case "createTask": {
       if (node.pathId && node.stepIndex !== undefined) {
-        const path = state.paths.find((p) => p.id === node.pathId)
+        const path = node.pathId ? findPathById(state.paths, node.pathId) : null
         const step = path?.steps?.[node.stepIndex]
         if (step?.type === "createTask" && step.subject) {
           return step.subject
@@ -504,17 +569,116 @@ function CanvasNodeCard({
 // ─── Canvas initialisation from existing state ───────────────────────────────
 //
 // Builds nodes from the loaded route data (no-op for new routes with no paths).
-// V2: supports multi-step branches via path.steps[].
+// V3: supports recursive nested splits via PathStepSplit.
 //
+
+const SPLIT_GAP = 40  // horizontal gap between branches within a split
+const SPLIT_PILL_H = 80 // vertical space consumed by a split pill
+
+/** Calculate the horizontal width a single path column needs, accounting for nested splits */
+function measurePathWidth(path: RoutePath): number {
+  for (const step of (path.steps ?? [])) {
+    if (step.type === "split" && step.paths.length > 0) {
+      const subWidths = step.paths.map(sp => measurePathWidth(sp))
+      return Math.max(NODE_WIDTH, subWidths.reduce((sum, w) => sum + w, 0) + (step.paths.length - 1) * SPLIT_GAP)
+    }
+  }
+  return NODE_WIDTH
+}
+
+interface LayoutResult {
+  nodes: CanvasNode[]
+  maxBottomY: number
+}
+
+/** Recursively layout a set of paths starting at (centerX, startY) */
+function layoutPaths(
+  paths: RoutePath[],
+  centerX: number,
+  startY: number,
+  depth: number,
+  parentPathId?: string,
+  parentStepIndex?: number,
+): LayoutResult {
+  const nodes: CanvasNode[] = []
+  let y = startY
+
+  // Insert split pill if multiple paths
+  if (paths.length > 1) {
+    nodes.push({
+      id: parentPathId ? `split_${parentPathId}_${parentStepIndex}` : "split",
+      type: "split",
+      x: centerX - SPLIT_W / 2,
+      y,
+      depth,
+      splitParentPathId: parentPathId,
+      splitStepIndex: parentStepIndex,
+    })
+    y += SPLIT_PILL_H
+  }
+
+  // Measure widths for horizontal positioning
+  const pathWidths = paths.map(p => measurePathWidth(p))
+  const totalW = pathWidths.reduce((s, w) => s + w, 0) + (paths.length - 1) * SPLIT_GAP
+  let xCursor = centerX - totalW / 2
+  let maxBot = y
+
+  paths.forEach((path, pi) => {
+    const pathCenterX = xCursor + pathWidths[pi] / 2
+    let sy = y
+
+    const steps = path.steps ?? []
+    for (let si = 0; si < steps.length; si++) {
+      const step = steps[si]
+
+      if (step.type === "split") {
+        // Recursively layout nested split
+        const subResult = layoutPaths(step.paths, pathCenterX, sy, depth + 1, path.id, si)
+        nodes.push(...subResult.nodes)
+        sy = subResult.maxBottomY
+
+        // Nested default owner
+        if (step.defaultOwner) {
+          nodes.push({
+            id: `do_${path.id}_${si}`,
+            type: "defaultOwner",
+            x: pathCenterX - NODE_WIDTH / 2,
+            y: sy,
+            depth: depth + 1,
+            splitParentPathId: path.id,
+            splitStepIndex: si,
+          })
+          sy += STEP_GAP_Y
+        }
+      } else {
+        // Regular step node
+        nodes.push({
+          id: `s_${path.id}_${si}`,
+          type: step.type as CanvasNodeType,
+          x: pathCenterX - NODE_WIDTH / 2,
+          y: sy,
+          pathId: path.id,
+          stepIndex: si,
+          depth,
+        })
+        sy += STEP_GAP_Y
+      }
+    }
+
+    maxBot = Math.max(maxBot, sy)
+    xCursor += pathWidths[pi] + SPLIT_GAP
+  })
+
+  return { nodes, maxBottomY: maxBot }
+}
+
 function buildNodesFromState(initialState?: Partial<RouteBuilderState>): CanvasNode[] {
-  // Migrate state to ensure all paths have steps[]
   const migrated = initialState ? migrateStateToV2(initialState as RouteBuilderState) : null
   const hasTrigger = !!migrated?.trigger
   const hasSearchTrigger = !!migrated?.searchTrigger
   const bothTriggers = hasTrigger && hasSearchTrigger
   const nodes: CanvasNode[] = []
   const GAP_Y = 110
-  const BRANCH_HEADER_GAP = 44
 
   const centerX = 400
 
@@ -538,39 +702,9 @@ function buildNodesFromState(initialState?: Partial<RouteBuilderState>): CanvasN
   }
 
   if (paths.length > 0) {
-    // Auto-insert split node only when there are multiple paths
-    if (paths.length > 1) {
-      nodes.push({ id: "split", type: "split", x: centerX - SPLIT_W / 2, y })
-      y += 80
-    }
-
-    const pc = paths.length
-    const totalW = pc * NODE_WIDTH + (pc - 1) * (FILTER_GAP - NODE_WIDTH)
-    const startX = centerX - totalW / 2
-    let maxBot = y
-
-    paths.forEach((path, pi) => {
-      const px = startX + pi * FILTER_GAP
-      const steps = path.steps ?? []
-      let sy = y + BRANCH_HEADER_GAP
-
-      steps.forEach((step, si) => {
-        const nodeType = step.type as CanvasNodeType
-        nodes.push({
-          id: `s_${path.id}_${si}`,
-          type: nodeType,
-          x: px,
-          y: sy,
-          pathId: path.id,
-          stepIndex: si,
-        })
-        sy += STEP_GAP_Y
-      })
-
-      maxBot = Math.max(maxBot, sy)
-    })
-
-    y = maxBot + 60
+    const result = layoutPaths(paths, centerX, y, 0)
+    nodes.push(...result.nodes)
+    y = result.maxBottomY + 40
 
     if (defaultOwner) {
       nodes.push({ id: "defaultOwner", type: "defaultOwner", x: centerX - NODE_WIDTH / 2, y })
@@ -685,7 +819,7 @@ export function RouteBuilder({
 
   // ── Canvas nodes — edges are derived automatically ──────────────────────────
   const [nodes, setNodes] = useState<CanvasNode[]>(() => buildNodesFromState(initialState))
-  const edges = useMemo(() => computeEdges(nodes), [nodes])
+  const edges = useMemo(() => computeEdges(nodes, state), [nodes, state])
 
   // ── Sheet state ─────────────────────────────────────────────────────────────
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null)
@@ -722,6 +856,27 @@ export function RouteBuilder({
           assigneeId: null,
           assigneeName: null,
         }
+      case "split":
+        return {
+          type: "split",
+          paths: [
+            {
+              id: crypto.randomUUID(),
+              label: "Sub-Path 1",
+              conditions: [],
+              action: { assignmentType: null, assigneeId: null, assigneeName: null },
+              steps: [{ type: "filter" as const, conditions: [] }],
+            },
+            {
+              id: crypto.randomUUID(),
+              label: "Sub-Path 2",
+              conditions: [],
+              action: { assignmentType: null, assigneeId: null, assigneeName: null },
+              steps: [{ type: "filter" as const, conditions: [] }],
+            },
+          ],
+          defaultOwner: null,
+        }
     }
   }
 
@@ -729,13 +884,12 @@ export function RouteBuilder({
     setState((prev) => {
       const newState = {
         ...prev,
-        paths: prev.paths.map((p) => {
-          if (p.id !== pathId) return p
+        paths: updatePathById(prev.paths, pathId, (p) => {
           const steps = [...(p.steps ?? [])]
           const newStep = createDefaultStep(stepType)
-          // Insert before the last assign step (unless adding an assign)
+          // Insert before the last assign step (unless adding an assign or split)
           const lastAssignIdx = steps.findLastIndex((s) => s.type === "assign")
-          if (lastAssignIdx >= 0 && stepType !== "assign") {
+          if (lastAssignIdx >= 0 && stepType !== "assign" && stepType !== "split") {
             steps.splice(lastAssignIdx, 0, newStep)
           } else {
             steps.push(newStep)
@@ -743,7 +897,6 @@ export function RouteBuilder({
           return { ...p, steps }
         }),
       }
-      // Rebuild canvas nodes from updated state
       setNodes(buildNodesFromState(newState))
       return newState
     })
@@ -1079,11 +1232,9 @@ export function RouteBuilder({
         return
       }
 
-      // ── Filter step: creates a new path column (filter + assign pair) ───────
+      // ── Filter step: creates a new path with just a filter ───────
       if (stepType === "filter") {
         const newPathId = crypto.randomUUID()
-        const pathNames = ['Path A','Path B','Path C','Path D','Path E','Path F','Path G']
-        const pathLabel = pathNames[state.paths.length] || `Path ${state.paths.length + 1}`
 
         setState((s) => {
           const newState = {
@@ -1092,25 +1243,50 @@ export function RouteBuilder({
               ...s.paths,
               {
                 id: newPathId,
-                label: pathLabel,
+                label: `Path ${s.paths.length + 1}`,
                 conditions: [],
                 action: { assignmentType: null, assigneeId: null, assigneeName: null },
                 steps: [
                   { type: 'filter' as const, conditions: [] as ConditionGroup[] },
-                  { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
                 ],
               },
             ],
           }
-          // Rebuild all nodes from V2 state so split node, branch headers, etc. render correctly
           setNodes(buildNodesFromState(newState))
           return newState
         })
 
-        // Open the filter config for the first step of the new path
         setTimeout(() => {
           setActiveSheet({ type: "filter", nodeId: `s_${newPathId}_0`, pathId: newPathId })
         }, 0)
+        return
+      }
+
+      // ── Assign step: add to the first path that doesn't end with an assign ───
+      if (stepType === "assign") {
+        if (state.paths.length === 0) {
+          // No paths yet — create one with just an assign
+          const newPathId = crypto.randomUUID()
+          setState((s) => {
+            const newState = {
+              ...s,
+              paths: [{
+                id: newPathId,
+                label: "Path 1",
+                conditions: [],
+                action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                steps: [
+                  { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
+                ],
+              }],
+            }
+            setNodes(buildNodesFromState(newState))
+            return newState
+          })
+        } else {
+          // Add assign to the first path
+          handleAddStepToPath(state.paths[0].id, "assign")
+        }
         return
       }
 
@@ -1136,6 +1312,33 @@ export function RouteBuilder({
           { id: newId, type: "defaultOwner" as CanvasNodeType, x: defaultX, y: defaultY },
         ])
         setActiveSheet({ type: "defaultOwner", nodeId: newId })
+        return
+      }
+
+      // ── Split: add to the first path ──
+      if (stepType === "split") {
+        if (state.paths.length === 0) {
+          const newPathId = crypto.randomUUID()
+          setState((s) => {
+            const newState = {
+              ...s,
+              paths: [{
+                id: newPathId,
+                label: "Path 1",
+                conditions: [],
+                action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                steps: [
+                  { type: 'filter' as const, conditions: [] as ConditionGroup[] },
+                  createDefaultStep("split"),
+                ],
+              }],
+            }
+            setNodes(buildNodesFromState(newState))
+            return newState
+          })
+        } else {
+          handleAddStepToPath(state.paths[0].id, "split")
+        }
         return
       }
 
@@ -1231,17 +1434,30 @@ export function RouteBuilder({
       const pathId = node.pathId
       const stepIdx = node.stepIndex
       setState((s) => {
-        const newPaths = s.paths.map((p) => {
-          if (p.id !== pathId || !p.steps) return p
+        let newPaths = updatePathById(s.paths, pathId, (p) => {
+          if (!p.steps) return p
           const newSteps = p.steps.filter((_, i) => i !== stepIdx)
           return { ...p, steps: newSteps }
-        }).filter((p) => (p.steps?.length ?? 0) > 0) // remove empty paths
-        return { ...s, paths: newPaths }
+        })
+        // Remove empty paths at top level
+        newPaths = newPaths.filter((p) => (p.steps?.length ?? 0) > 0)
+        const newState = { ...s, paths: newPaths }
+        setNodes(buildNodesFromState(newState))
+        return newState
       })
-      // Rebuild nodes from updated state
+      return
+    }
+
+    // Nested split node: remove the split step from parent path
+    if (node.type === "split" && node.splitParentPathId && node.splitStepIndex !== undefined) {
       setState((s) => {
-        setNodes(buildNodesFromState(s))
-        return s
+        const newPaths = updatePathById(s.paths, node.splitParentPathId!, (p) => ({
+          ...p,
+          steps: (p.steps ?? []).filter((_, i) => i !== node.splitStepIndex),
+        }))
+        const newState = { ...s, paths: newPaths }
+        setNodes(buildNodesFromState(newState))
+        return newState
       })
       return
     }
@@ -1261,11 +1477,9 @@ export function RouteBuilder({
       if (node.pathId) {
         setState((s) => ({
           ...s,
-          paths: s.paths.map((p) =>
-            p.id === node.pathId
-              ? { ...p, action: { assignmentType: null, assigneeId: null, assigneeName: null } }
-              : p
-          ),
+          paths: updatePathById(s.paths, node.pathId!, (p) => ({
+            ...p, action: { assignmentType: null, assigneeId: null, assigneeName: null }
+          })),
         }))
       }
       return
@@ -1520,19 +1734,10 @@ export function RouteBuilder({
                 )
               }
 
-              // Show path label on filter nodes (legacy) or on the first step of a branch (V2)
-              const pathLabel =
-                node.type === "filter" && node.stepIndex === undefined
-                  ? (state.paths.find((p) => p.id === node.pathId)?.label ?? "Filter")
-                  : node.stepIndex === 0 && node.pathId
-                    ? (state.paths.find((p) => p.id === node.pathId)?.label ?? undefined)
-                    : undefined
-
               return (
                 <CanvasNodeCard
                   key={node.id}
                   node={node}
-                  title={pathLabel}
                   subtitle={nodeSubtitle(node, state)}
                   isDragging={draggingId === node.id}
                   glowState={glowForNode(node.type)}
@@ -1542,80 +1747,12 @@ export function RouteBuilder({
                   }}
                   onClick={handleNodeClick}
                   onDelete={handleDeleteNode}
-                  onTitleChange={
-                    (node.type === "filter" && node.pathId && node.stepIndex === undefined) ||
-                    (node.stepIndex === 0 && node.pathId)
-                      ? (newLabel) =>
-                          setState((s) => ({
-                            ...s,
-                            paths: s.paths.map((p) =>
-                              p.id === node.pathId ? { ...p, label: newLabel } : p
-                            ),
-                          }))
-                      : undefined
-                  }
                 />
               )
             })}
 
-            {/* Branch headers — editable name + delete button per branch */}
-            {state.paths.length > 0 && state.paths.map((path) => {
-              const branchNodes = nodes
-                .filter((n) => n.pathId === path.id && n.stepIndex !== undefined)
-                .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
-              const firstNode = branchNodes[0]
-              if (!firstNode) return null
-              return (
-                <div
-                  key={`header-${path.id}`}
-                  data-canvas-node
-                  style={{
-                    position: "absolute",
-                    left: firstNode.x,
-                    top: firstNode.y - 36,
-                    width: NODE_WIDTH,
-                    zIndex: 15,
-                  }}
-                  className="flex items-center justify-between px-2"
-                >
-                  <span
-                    contentEditable
-                    suppressContentEditableWarning
-                    className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground cursor-text px-1.5 py-0.5 rounded border border-transparent hover:border-border hover:bg-muted/50 focus:border-primary focus:bg-background outline-none"
-                    onBlur={(e) => {
-                      const newName = (e.target as HTMLElement).textContent?.trim()
-                      if (newName) {
-                        setState(prev => ({
-                          ...prev,
-                          paths: prev.paths.map(p => p.id === path.id ? { ...p, label: newName } : p)
-                        }))
-                      }
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur() } }}
-                  >
-                    {path.label}
-                  </span>
-                  {state.paths.length > 1 && (
-                    <button
-                      type="button"
-                      className="size-5 rounded flex items-center justify-center text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setState(prev => ({
-                          ...prev,
-                          paths: prev.paths.filter(p => p.id !== path.id)
-                        }))
-                      }}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-
-            {/* "Add Step" buttons — full-width dashed card per branch */}
-            {state.paths.map((path) => {
+            {/* "Add Step" buttons — rendered for every path in the tree */}
+            {flattenAllPaths(state.paths).map(({ path }) => {
               const branchNodes = nodes
                 .filter((n) => n.pathId === path.id && n.stepIndex !== undefined)
                 .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
@@ -1649,53 +1786,88 @@ export function RouteBuilder({
               )
             })}
 
-            {/* "Add Path" button — to the right of the last branch */}
-            {state.paths.length > 0 && (() => {
-              const splitNode = nodes.find(n => n.type === "split")
-              if (!splitNode) return null
-              const lastPath = state.paths[state.paths.length - 1]
-              const lastBranchNodes = nodes.filter(n => n.pathId === lastPath.id && n.stepIndex !== undefined)
-              const firstOfLast = lastBranchNodes.sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))[0]
-              if (!firstOfLast) return null
-              return (
-                <button
-                  key="add-path"
-                  type="button"
-                  data-canvas-node
-                  style={{
-                    position: "absolute",
-                    left: firstOfLast.x + FILTER_GAP,
-                    top: firstOfLast.y,
-                    zIndex: 15,
-                  }}
-                  className="flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-muted-foreground/20 text-muted-foreground/40 text-xl hover:border-primary/40 hover:text-primary hover:bg-primary/5 bg-background transition-colors"
-                  title="Add Path"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const pathNames = ['Path A','Path B','Path C','Path D','Path E','Path F','Path G']
-                    const name = pathNames[state.paths.length] || `Path ${state.paths.length + 1}`
-                    setState(prev => {
-                      const newState = {
-                        ...prev,
-                        paths: [...prev.paths, {
-                          id: crypto.randomUUID(),
-                          label: name,
-                          conditions: [],
-                          action: { assignmentType: null, assigneeId: null, assigneeName: null },
-                          steps: [
-                            { type: 'filter' as const, conditions: [] as ConditionGroup[] },
-                            { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
-                          ],
-                        }],
-                      }
-                      setNodes(buildNodesFromState(newState))
-                      return newState
-                    })
-                  }}
-                >
-                  +
-                </button>
-              )
+            {/* "Add Path" buttons — one per split (top-level + nested) */}
+            {(() => {
+              const buttons: React.ReactNode[] = []
+
+              // Top-level add path (only if 2+ top-level paths, i.e. top split exists)
+              if (state.paths.length > 1) {
+                const lastPath = state.paths[state.paths.length - 1]
+                const lastBranchNodes = nodes.filter(n => n.pathId === lastPath.id && n.stepIndex !== undefined)
+                const firstOfLast = lastBranchNodes.sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))[0]
+                if (firstOfLast) {
+                  buttons.push(
+                    <button
+                      key="add-path-top"
+                      type="button"
+                      data-canvas-node
+                      style={{ position: "absolute", left: firstOfLast.x + FILTER_GAP, top: firstOfLast.y, zIndex: 15 }}
+                      className="flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-muted-foreground/20 text-muted-foreground/40 text-xl hover:border-primary/40 hover:text-primary hover:bg-primary/5 bg-background transition-colors"
+                      title="Add Path"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setState(prev => {
+                          const newState = {
+                            ...prev,
+                            paths: [...prev.paths, {
+                              id: crypto.randomUUID(),
+                              label: `Path ${prev.paths.length + 1}`,
+                              conditions: [],
+                              action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                              steps: [{ type: 'filter' as const, conditions: [] as ConditionGroup[] }],
+                            }],
+                          }
+                          setNodes(buildNodesFromState(newState))
+                          return newState
+                        })
+                      }}
+                    >+</button>
+                  )
+                }
+              }
+
+              // Nested split add-path buttons
+              for (const { parentPathId, stepIndex, split } of flattenAllSplits(state.paths)) {
+                if (split.paths.length < 1) continue
+                const lastSubPath = split.paths[split.paths.length - 1]
+                const lastSubNodes = nodes.filter(n => n.pathId === lastSubPath.id && n.stepIndex !== undefined)
+                const firstOfLastSub = lastSubNodes.sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))[0]
+                if (!firstOfLastSub) continue
+                buttons.push(
+                  <button
+                    key={`add-path-${parentPathId}-${stepIndex}`}
+                    type="button"
+                    data-canvas-node
+                    style={{ position: "absolute", left: firstOfLastSub.x + FILTER_GAP, top: firstOfLastSub.y, zIndex: 15 }}
+                    className="flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-muted-foreground/20 text-muted-foreground/40 text-xl hover:border-primary/40 hover:text-primary hover:bg-primary/5 bg-background transition-colors"
+                    title="Add Sub-Path"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setState(prev => {
+                        const newState = {
+                          ...prev,
+                          paths: updateSplitStep(prev.paths, parentPathId, stepIndex, (s) => ({
+                            ...s,
+                            paths: [...s.paths, {
+                              id: crypto.randomUUID(),
+                              label: `Sub-Path ${s.paths.length + 1}`,
+                              conditions: [],
+                              action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                              steps: [{ type: 'filter' as const, conditions: [] as ConditionGroup[] }],
+                            }],
+                          })),
+                        }
+                        setNodes(buildNodesFromState(newState))
+                        return newState
+                      })
+                    }}
+                  >+</button>
+                )
+              }
+
+              return buttons
             })()}
 
             {/* "Add Step" dropdown menu */}
@@ -1717,6 +1889,7 @@ export function RouteBuilder({
                     { type: "updateField" as PathStepType, label: "Update Field", icon: Pencil },
                     { type: "createTask" as PathStepType, label: "Create Task", icon: ClipboardList },
                     { type: "assign" as PathStepType, label: "Assignment", icon: UserCheck },
+                    { type: "split" as PathStepType, label: "Split", icon: GitBranch },
                   ] as const
                 ).map((item) => {
                   const ItemIcon = item.icon
@@ -1846,12 +2019,12 @@ export function RouteBuilder({
         onOpenChange={(open) => !open && closeSheet()}
         pathLabel={
           activeFilterPathId
-            ? (state.paths.find((p) => p.id === activeFilterPathId)?.label ?? "Path")
+            ? (findPathById(state.paths, activeFilterPathId)?.label ?? "Path")
             : "Path"
         }
         conditions={
           activeFilterPathId
-            ? (state.paths.find((p) => p.id === activeFilterPathId)?.conditions ?? [])
+            ? (findPathById(state.paths, activeFilterPathId)?.conditions ?? [])
             : []
         }
         objectType={resolveObjectType(state)}
@@ -1860,7 +2033,7 @@ export function RouteBuilder({
           const pathId = activeFilterPathId
           setState((s) => ({
             ...s,
-            paths: s.paths.map((p) => (p.id === pathId ? { ...p, conditions } : p)),
+            paths: updatePathById(s.paths, pathId, (p) => ({ ...p, conditions })),
           }))
         }}
         onLabelChange={(label: string) => {
@@ -1868,7 +2041,7 @@ export function RouteBuilder({
           const pathId = activeFilterPathId
           setState((s) => ({
             ...s,
-            paths: s.paths.map((p) => (p.id === pathId ? { ...p, label } : p)),
+            paths: updatePathById(s.paths, pathId, (p) => ({ ...p, label })),
           }))
         }}
       />
@@ -1880,12 +2053,12 @@ export function RouteBuilder({
         onOpenChange={(open) => !open && closeSheet()}
         pathLabel={
           activeAssignPathId
-            ? (state.paths.find((p) => p.id === activeAssignPathId)?.label ?? "Path")
+            ? (findPathById(state.paths, activeAssignPathId)?.label ?? "Path")
             : "Path"
         }
         action={
           activeAssignPathId
-            ? (state.paths.find((p) => p.id === activeAssignPathId)?.action ?? {
+            ? (findPathById(state.paths, activeAssignPathId)?.action ?? {
                 assignmentType: null,
                 assigneeId: null,
                 assigneeName: null,
@@ -1897,7 +2070,7 @@ export function RouteBuilder({
           const pathId = activeAssignPathId
           setState((s) => ({
             ...s,
-            paths: s.paths.map((p) => (p.id === pathId ? { ...p, action } : p)),
+            paths: updatePathById(s.paths, pathId, (p) => ({ ...p, action })),
           }))
         }}
       />
@@ -1909,12 +2082,12 @@ export function RouteBuilder({
         onOpenChange={(open) => !open && closeSheet()}
         fieldApiName={
           activeSheet?.type === "updateField"
-            ? ((state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldApiName: string } | undefined)?.fieldApiName ?? "")
+            ? ((findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldApiName: string } | undefined)?.fieldApiName ?? "")
             : ""
         }
         fieldValue={
           activeSheet?.type === "updateField"
-            ? ((state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldValue: string } | undefined)?.fieldValue ?? "")
+            ? ((findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldValue: string } | undefined)?.fieldValue ?? "")
             : ""
         }
         fields={[]}
@@ -1923,8 +2096,8 @@ export function RouteBuilder({
           const { pathId, stepIndex } = activeSheet
           setState((s) => ({
             ...s,
-            paths: s.paths.map((p) => {
-              if (p.id !== pathId || !p.steps) return p
+            paths: updatePathById(s.paths, pathId, (p) => {
+              if (!p.steps) return p
               const newSteps = [...p.steps]
               newSteps[stepIndex] = { type: "updateField", fieldApiName, fieldValue }
               return { ...p, steps: newSteps }
@@ -1941,7 +2114,7 @@ export function RouteBuilder({
         config={
           activeSheet?.type === "createTask"
             ? (() => {
-                const step = state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex]
+                const step = findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex]
                 if (step?.type === "createTask") return { subject: step.subject, priority: step.priority, status: step.status, dueDateOffset: step.dueDateOffset, description: step.description }
                 return { subject: "", priority: "Normal", status: "Not Started", dueDateOffset: null, description: "" }
               })()
@@ -1952,8 +2125,8 @@ export function RouteBuilder({
           const { pathId, stepIndex } = activeSheet
           setState((s) => ({
             ...s,
-            paths: s.paths.map((p) => {
-              if (p.id !== pathId || !p.steps) return p
+            paths: updatePathById(s.paths, pathId, (p) => {
+              if (!p.steps) return p
               const newSteps = [...p.steps]
               newSteps[stepIndex] = {
                 type: "createTask",

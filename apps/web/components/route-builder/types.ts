@@ -76,7 +76,7 @@ export interface TriggerConfig {
 }
 
 // ─── Multi-step branch types ──────────────────────────────────────────────
-export type PathStepType = "filter" | "updateField" | "createTask" | "assign"
+export type PathStepType = "filter" | "updateField" | "createTask" | "assign" | "split"
 
 export interface PathStepFilter {
   type: "filter"
@@ -105,7 +105,15 @@ export interface PathStepAssign {
   assigneeName: string | null
 }
 
-export type PathStep = PathStepFilter | PathStepUpdateField | PathStepCreateTask | PathStepAssign
+export interface PathStepSplit {
+  type: "split"
+  paths: RoutePath[]            // recursive sub-paths
+  defaultOwner: DefaultOwner | null
+}
+
+export type PathStep = PathStepFilter | PathStepUpdateField | PathStepCreateTask | PathStepAssign | PathStepSplit
+
+export const MAX_SPLIT_DEPTH = 5
 
 export interface RouteBuilderState {
   name: string
@@ -116,6 +124,135 @@ export interface RouteBuilderState {
   paths: RoutePath[]
   defaultOwner: DefaultOwner | null
 }
+
+// ─── Recursive tree helpers ───────────────────────────────────────────────
+
+/** Find a path by ID anywhere in the recursive tree */
+export function findPathById(paths: RoutePath[], targetId: string): RoutePath | null {
+  for (const path of paths) {
+    if (path.id === targetId) return path
+    for (const step of (path.steps ?? [])) {
+      if (step.type === "split") {
+        const found = findPathById(step.paths, targetId)
+        if (found) return found
+      }
+    }
+  }
+  return null
+}
+
+/** Immutably update a path by ID anywhere in the tree */
+export function updatePathById(
+  paths: RoutePath[],
+  targetId: string,
+  updater: (p: RoutePath) => RoutePath
+): RoutePath[] {
+  return paths.map(path => {
+    if (path.id === targetId) return updater(path)
+    const hasNestedSplit = (path.steps ?? []).some(s => s.type === "split")
+    if (!hasNestedSplit) return path
+    return {
+      ...path,
+      steps: (path.steps ?? []).map(step => {
+        if (step.type !== "split") return step
+        return { ...step, paths: updatePathById(step.paths, targetId, updater) }
+      }),
+    }
+  })
+}
+
+/** Remove a path by ID anywhere in the tree */
+export function removePathById(paths: RoutePath[], targetId: string): RoutePath[] {
+  const filtered = paths.filter(p => p.id !== targetId)
+  if (filtered.length !== paths.length) return filtered
+  return paths.map(path => {
+    const hasNestedSplit = (path.steps ?? []).some(s => s.type === "split")
+    if (!hasNestedSplit) return path
+    return {
+      ...path,
+      steps: (path.steps ?? []).map(step => {
+        if (step.type !== "split") return step
+        return { ...step, paths: removePathById(step.paths, targetId) }
+      }),
+    }
+  })
+}
+
+/** Get nesting depth of a path by ID (0 = top-level) */
+export function getPathDepth(paths: RoutePath[], targetId: string, depth = 0): number {
+  for (const path of paths) {
+    if (path.id === targetId) return depth
+    for (const step of (path.steps ?? [])) {
+      if (step.type === "split") {
+        const found = getPathDepth(step.paths, targetId, depth + 1)
+        if (found >= 0) return found
+      }
+    }
+  }
+  return -1
+}
+
+/** Update a split step identified by parentPathId + stepIndex */
+export function updateSplitStep(
+  paths: RoutePath[],
+  parentPathId: string,
+  stepIndex: number,
+  updater: (split: PathStepSplit) => PathStepSplit
+): RoutePath[] {
+  return updatePathById(paths, parentPathId, (p) => ({
+    ...p,
+    steps: (p.steps ?? []).map((step, i) => {
+      if (i !== stepIndex || step.type !== "split") return step
+      return updater(step)
+    }),
+  }))
+}
+
+/** Flatten all paths in the tree into a flat list with metadata */
+export interface FlatPath {
+  path: RoutePath
+  depth: number
+  parentPathId?: string
+  parentStepIndex?: number
+}
+
+export function flattenAllPaths(paths: RoutePath[], depth = 0, parentPathId?: string, parentStepIndex?: number): FlatPath[] {
+  const result: FlatPath[] = []
+  for (const path of paths) {
+    result.push({ path, depth, parentPathId, parentStepIndex })
+    for (let si = 0; si < (path.steps ?? []).length; si++) {
+      const step = (path.steps ?? [])[si]
+      if (step.type === "split") {
+        result.push(...flattenAllPaths(step.paths, depth + 1, path.id, si))
+      }
+    }
+  }
+  return result
+}
+
+/** Collect all split steps in the tree */
+export interface FlatSplit {
+  parentPathId: string
+  stepIndex: number
+  split: PathStepSplit
+  depth: number
+}
+
+export function flattenAllSplits(paths: RoutePath[], depth = 0): FlatSplit[] {
+  const result: FlatSplit[] = []
+  for (const path of paths) {
+    for (let si = 0; si < (path.steps ?? []).length; si++) {
+      const step = (path.steps ?? [])[si]
+      if (step.type === "split") {
+        result.push({ parentPathId: path.id, stepIndex: si, split: step, depth: depth + 1 })
+        result.push(...flattenAllSplits(step.paths, depth + 1))
+      }
+    }
+  }
+  return result
+}
+
+// ─── Existing helpers ─────────────────────────────────────────────────────
 
 /** Human-readable label for a trigger event */
 export function triggerEventLabel(
@@ -175,13 +312,22 @@ export function migratePathToSteps(path: RoutePath): PathStep[] {
   ]
 }
 
-/** Ensure all paths have steps[] populated */
+/** Ensure all paths have steps[] populated (recursive) */
 export function migrateStateToV2(state: RouteBuilderState): RouteBuilderState {
   return {
     ...state,
-    paths: state.paths.map(p => ({
-      ...p,
-      steps: p.steps ?? migratePathToSteps(p),
-    })),
+    paths: migratePaths(state.paths),
   }
+}
+
+function migratePaths(paths: RoutePath[]): RoutePath[] {
+  return paths.map(p => ({
+    ...p,
+    steps: (p.steps ?? migratePathToSteps(p)).map(step => {
+      if (step.type === "split") {
+        return { ...step, paths: migratePaths(step.paths) }
+      }
+      return step
+    }),
+  }))
 }

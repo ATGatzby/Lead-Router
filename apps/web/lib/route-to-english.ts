@@ -349,6 +349,10 @@ function stepToLine(step: PathStep): string {
         : "unspecified";
       return `\u2192 Assign to ${name} (${type})`;
     }
+    case "split": {
+      const count = step.paths?.length ?? 0;
+      return `\u2192 Split into ${count} sub-path${count !== 1 ? "s" : ""}`;
+    }
   }
 }
 

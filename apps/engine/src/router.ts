@@ -940,6 +940,63 @@ async function routeNewStyle(
             case "assign":
               // Handled by existing assignment logic below
               break;
+            case "split": {
+              // Recursive split: evaluate each sub-path's filter and execute the first match
+              const splitStep = step as { type: "split"; paths: any[]; defaultOwner: any };
+              if (splitStep.paths && splitStep.paths.length > 0) {
+                for (const subPath of splitStep.paths) {
+                  const subSteps = subPath.steps ?? [];
+                  // Find the first filter step to evaluate
+                  const filterStep = subSteps.find((s: any) => s.type === "filter");
+                  if (filterStep && filterStep.conditions && filterStep.conditions.length > 0) {
+                    const subEval = evaluateRule(filterStep.conditions, fields);
+                    if (!subEval.matched) continue;
+                  }
+                  // Sub-path matched — execute its non-filter steps
+                  for (const subStep of subSteps) {
+                    if (subStep.type === "filter") continue; // already evaluated
+                    if (subStep.type === "updateField" && !rule.isDryRun) {
+                      try {
+                        const sObjectName = toSfdcObjectName(objectType);
+                        const stepConn = await getOrgConnection(orgId);
+                        await stepConn
+                          .sobject(sObjectName)
+                          .update({ Id: recordId, [subStep.fieldApiName as string]: subStep.fieldValue });
+                      } catch (err) {
+                        console.error(`[router] nested UPDATE_FIELD step failed for ${recordId}:`, err);
+                      }
+                    }
+                    if (subStep.type === "createTask" && !rule.isDryRun) {
+                      try {
+                        const stepConn = await getOrgConnection(orgId);
+                        const taskData: Record<string, unknown> = {
+                          Subject: subStep.subject,
+                          Priority: (subStep.priority as string) ?? "Normal",
+                          Status: (subStep.status as string) ?? "Not Started",
+                          Description: (subStep.description as string) ?? "",
+                        };
+                        if (objectType === "LEAD" || objectType === "CONTACT") {
+                          taskData.WhoId = recordId;
+                        } else {
+                          taskData.WhatId = recordId;
+                        }
+                        if (subStep.dueDateOffset) {
+                          const due = new Date();
+                          due.setDate(due.getDate() + Number(subStep.dueDateOffset));
+                          taskData.ActivityDate = due.toISOString().split("T")[0];
+                        }
+                        await stepConn.sobject("Task").create(taskData);
+                      } catch (err) {
+                        console.error(`[router] nested CREATE_TASK step failed for ${recordId}:`, err);
+                      }
+                    }
+                    // Nested splits handled recursively by the same switch in a future iteration
+                  }
+                  break; // First matching sub-path wins
+                }
+              }
+              continue;
+            }
           }
         }
       }
