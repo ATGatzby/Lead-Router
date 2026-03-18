@@ -152,6 +152,7 @@ model Organization {
   aiChatFeedback          AiChatFeedback[]
   routingMode             Json?
   routingFlows            RoutingFlow[]
+  apiTokens               ApiToken[]
 
   @@map("organizations")
 }
@@ -694,6 +695,24 @@ model BulkSearchRun {
   @@index([orgId, ruleId])
   @@index([ruleId, status])
   @@map("bulk_search_runs")
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  orgId      String
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  scopes     String[]  @default(["read", "route"])
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("api_tokens")
 }
 
 model AiCustomPrompt {
