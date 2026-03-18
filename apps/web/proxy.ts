@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { getIronSession } from "iron-session";
+import { prisma } from "@lead-routing/db";
 import type { SessionData } from "@/lib/session";
 import { isOrgSuspended } from "@/lib/org-status";
 
@@ -41,6 +43,45 @@ export async function proxy(req: NextRequest) {
   // Exact-match public paths (no prefix matching)
   if (pathname === "/api/health") {
     return NextResponse.next();
+  }
+
+  // ── Bearer token auth (API tokens for MCP / external clients) ────────────
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer lr_")) {
+    const rawToken = authHeader.slice(7); // "lr_..."
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    const apiToken = await prisma.apiToken.findUnique({
+      where: { tokenHash },
+      select: { id: true, orgId: true, name: true, revokedAt: true, expiresAt: true },
+    });
+
+    if (!apiToken || apiToken.revokedAt) {
+      return NextResponse.json({ error: "Invalid or revoked API token" }, { status: 401 });
+    }
+    if (apiToken.expiresAt && apiToken.expiresAt < new Date()) {
+      return NextResponse.json({ error: "API token expired" }, { status: 401 });
+    }
+
+    // Update lastUsedAt (fire and forget)
+    prisma.apiToken.update({
+      where: { id: apiToken.id },
+      data: { lastUsedAt: new Date() },
+    }).catch(() => {});
+
+    // Check org suspension
+    const suspended = await isOrgSuspended(apiToken.orgId);
+    if (suspended) {
+      return NextResponse.json({ error: "Organization is suspended" }, { status: 403 });
+    }
+
+    const safeHeader = (value: string): string => value.replace(/[\r\n]/g, "");
+    const reqHeaders = new Headers(req.headers);
+    reqHeaders.set("x-org-id", safeHeader(apiToken.orgId));
+    reqHeaders.set("x-user-id", safeHeader(`api-token:${apiToken.id}`));
+    reqHeaders.set("x-user-name", safeHeader(apiToken.name));
+
+    return NextResponse.next({ request: { headers: reqHeaders } });
   }
 
   // CSRF: validate Origin for mutating requests on session-protected routes

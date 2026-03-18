@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/settings", label: "General" },
   { href: "/settings/notifications", label: "Webhooks" },
+  { href: "/settings/api-tokens", label: "API Tokens" },
   { href: "/settings/ai", label: "AI Assistant" },
   { href: "/settings/ai/prompts", label: "AI Prompts" },
   { href: "/settings/ai/performance", label: "AI Performance" },

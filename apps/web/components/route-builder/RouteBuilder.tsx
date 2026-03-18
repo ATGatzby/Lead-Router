@@ -163,77 +163,64 @@ const NODE_META: Record<
 
 // ─── Derive edges from nodes ───────────────────────────────────────────────────
 //
-// Walks the state tree to generate edges. Each edge connects two node IDs.
+// Generates edges by walking the state tree and mapping to node IDs.
+// Simple approach: for each path, chain steps linearly; for splits, recurse.
 //
 
-/** Get the canvas node ID for a step at (pathId, stepIndex) */
-function stepNodeId(pathId: string, stepIndex: number): string {
-  return `s_${pathId}_${stepIndex}`
-}
-
-/** Generate all edges for a set of paths and their nested splits */
-function edgesForPaths(
+function computeEdgesFromState(
   paths: RoutePath[],
-  nodeMap: Map<string, CanvasNode>,
-  fanOutId: string | null,     // node that fans out to each path's first step (split pill or parent node)
-  exitNodeId: string | null,   // node below this group (default owner, next step in parent)
+  parentId: string | null,  // node ID above this group (split pill, match, trigger)
+  exitId: string | null,    // node ID below this group (default owner, etc.)
+  nodeExists: (id: string) => boolean,
 ): CanvasEdge[] {
   const edges: CanvasEdge[] = []
 
   for (const path of paths) {
     const steps = path.steps ?? []
-    let prevId: string | null = fanOutId
+    let prevId = parentId
 
     for (let si = 0; si < steps.length; si++) {
       const step = steps[si]
 
       if (step.type === "split") {
-        // Nested split step
-        const nestedSplitPillId = `split_${path.id}_${si}`
-        const nestedDOId = `do_${path.id}_${si}`
-        const hasNestedDO = nodeMap.has(nestedDOId)
+        const pillId = `split_${path.id}_${si}`
+        const doId = `do_${path.id}_${si}`
+        const hasPill = step.paths.length > 1 && nodeExists(pillId)
+        const hasDO = nodeExists(doId)
 
-        // prev → nested split pill (if multi-path) or → first sub-path step (if single)
-        if (step.paths.length > 1 && nodeMap.has(nestedSplitPillId)) {
-          if (prevId) edges.push({ fromId: prevId, toId: nestedSplitPillId })
-          // Recurse — split pill fans out, sub-paths converge to nested DO or next step
-          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
-          const nestedExit = hasNestedDO ? nestedDOId : (nextStepInParent && nodeMap.has(nextStepInParent) ? nextStepInParent : exitNodeId)
-          edges.push(...edgesForPaths(step.paths, nodeMap, nestedSplitPillId, nestedExit))
-        } else if (step.paths.length === 1) {
-          // Single sub-path — no split pill, connect directly
-          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
-          const nestedExit = hasNestedDO ? nestedDOId : (nextStepInParent && nodeMap.has(nextStepInParent) ? nextStepInParent : exitNodeId)
-          edges.push(...edgesForPaths(step.paths, nodeMap, prevId, nestedExit))
+        // prev → split pill
+        if (hasPill && prevId) {
+          edges.push({ fromId: prevId, toId: pillId })
         }
 
-        // Nested DO → next step after split in parent
-        if (hasNestedDO) {
-          const nextStepInParent = si + 1 < steps.length ? stepNodeId(path.id, si + 1) : null
-          if (nextStepInParent && nodeMap.has(nextStepInParent)) {
-            edges.push({ fromId: nestedDOId, toId: nextStepInParent })
-            prevId = nextStepInParent
-          } else {
-            prevId = nestedDOId
-          }
+        // Determine what sub-paths converge to after this split
+        const nextInParent = si + 1 < steps.length ? `s_${path.id}_${si + 1}` : null
+        const subExit = hasDO ? doId : (nextInParent && nodeExists(nextInParent) ? nextInParent : exitId)
+
+        // Recurse into sub-paths
+        const subParent = hasPill ? pillId : prevId
+        edges.push(...computeEdgesFromState(step.paths, subParent, subExit, nodeExists))
+
+        // DO → next step in parent
+        if (hasDO && nextInParent && nodeExists(nextInParent)) {
+          edges.push({ fromId: doId, toId: nextInParent })
+          prevId = nextInParent
+        } else if (hasDO) {
+          prevId = doId
         } else {
-          prevId = null // branches connect directly to exit
+          prevId = null
         }
       } else {
-        // Regular step
-        const nid = stepNodeId(path.id, si)
-        if (!nodeMap.has(nid)) continue
-
-        if (prevId) {
-          edges.push({ fromId: prevId, toId: nid })
-        }
+        const nid = `s_${path.id}_${si}`
+        if (!nodeExists(nid)) continue
+        if (prevId) edges.push({ fromId: prevId, toId: nid })
         prevId = nid
       }
     }
 
-    // Last node → exit (fan-in to default owner or parent's next step)
-    if (prevId && exitNodeId && prevId !== exitNodeId) {
-      edges.push({ fromId: prevId, toId: exitNodeId })
+    // Last step → exit
+    if (prevId && exitId && prevId !== exitId) {
+      edges.push({ fromId: prevId, toId: exitId })
     }
   }
 
@@ -242,44 +229,35 @@ function edgesForPaths(
 
 function computeEdges(nodes: CanvasNode[], state: RouteBuilderState): CanvasEdge[] {
   const edges: CanvasEdge[] = []
-  const trigger = nodes.find((n) => n.type === "trigger")
-  const searchTrigger = nodes.find((n) => n.type === "searchTrigger")
-  const match = nodes.find((n) => n.type === "match")
-  const defaultOwnerNode = nodes.find((n) => n.id === "defaultOwner")
-  const topSplitNode = nodes.find((n) => n.id === "split")
+  const nodeSet = new Set(nodes.map(n => n.id))
+  const nodeExists = (id: string) => nodeSet.has(id)
+
+  const trigger = nodes.find(n => n.type === "trigger")
+  const searchTrigger = nodes.find(n => n.type === "searchTrigger")
+  const match = nodes.find(n => n.type === "match")
+  const defaultOwner = nodes.find(n => n.id === "defaultOwner")
+  const topSplit = nodes.find(n => n.id === "split")
   const paths = state.paths
 
-  // trigger/searchTrigger → match/split/first-step
-  let firstDownstream: CanvasNode | undefined
-  if (match) firstDownstream = match
-  else if (topSplitNode) firstDownstream = topSplitNode
-  else if (paths.length === 1) firstDownstream = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
-  else if (defaultOwnerNode) firstDownstream = defaultOwnerNode
+  // Trigger → first downstream
+  const first = match ?? topSplit ?? (paths.length === 1 ? nodes.find(n => n.pathId === paths[0]?.id && n.stepIndex === 0) : undefined) ?? defaultOwner
+  if (trigger && first) edges.push({ fromId: trigger.id, toId: first.id })
+  if (searchTrigger && first) edges.push({ fromId: searchTrigger.id, toId: first.id })
 
-  if (trigger && firstDownstream) edges.push({ fromId: trigger.id, toId: firstDownstream.id })
-  if (searchTrigger && firstDownstream) edges.push({ fromId: searchTrigger.id, toId: firstDownstream.id })
-
-  // match → split/first-step/defaultOwner
-  if (match) {
-    if (topSplitNode) {
-      edges.push({ fromId: match.id, toId: topSplitNode.id })
-    } else if (paths.length === 1) {
-      const firstStep = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
-      if (firstStep) edges.push({ fromId: match.id, toId: firstStep.id })
-    } else if (defaultOwnerNode && paths.length === 0) {
-      edges.push({ fromId: match.id, toId: defaultOwnerNode.id })
-    }
+  // Match → split or first step
+  if (match && topSplit) {
+    edges.push({ fromId: match.id, toId: topSplit.id })
+  } else if (match && !topSplit && paths.length === 1) {
+    const fs = nodes.find(n => n.pathId === paths[0].id && n.stepIndex === 0)
+    if (fs) edges.push({ fromId: match.id, toId: fs.id })
+  } else if (match && !topSplit && paths.length === 0 && defaultOwner) {
+    edges.push({ fromId: match.id, toId: defaultOwner.id })
   }
 
-  // All path edges (recursive)
+  // Path edges — recursive
   if (paths.length > 0) {
-    const nodeMap = new Map(nodes.map(n => [n.id, n]))
-    // For multi-path: split pill fans out to each path
-    // For single-path: match/trigger connects directly to first step
-    const fanOutId = paths.length > 1
-      ? (topSplitNode?.id ?? null)
-      : (match?.id ?? trigger?.id ?? searchTrigger?.id ?? null)
-    edges.push(...edgesForPaths(paths, nodeMap, fanOutId, defaultOwnerNode?.id ?? null))
+    const parentId = topSplit?.id ?? match?.id ?? trigger?.id ?? searchTrigger?.id ?? null
+    edges.push(...computeEdgesFromState(paths, parentId, defaultOwner?.id ?? null, nodeExists))
   }
 
   return edges
@@ -910,6 +888,8 @@ export function RouteBuilder({
     startNodeX: number
     startNodeY: number
     hasMoved: boolean
+    // Descendants: nodes below the dragged node that move together
+    descendants: { id: string; startX: number; startY: number }[]
   } | null>(null)
 
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -1062,6 +1042,29 @@ export function RouteBuilder({
     e.stopPropagation()
     const node = nodes.find((n) => n.id === nodeId)
     if (!node) return
+
+    // Find all descendant nodes (reachable via edges going downward)
+    const descendants: { id: string; startX: number; startY: number }[] = []
+    const edgeMap = new Map<string, string[]>()
+    for (const edge of edges) {
+      if (!edgeMap.has(edge.fromId)) edgeMap.set(edge.fromId, [])
+      edgeMap.get(edge.fromId)!.push(edge.toId)
+    }
+    const visited = new Set<string>()
+    const queue = edgeMap.get(nodeId) ?? []
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      if (visited.has(id)) continue
+      visited.add(id)
+      const n = nodes.find(cn => cn.id === id)
+      if (n && n.y > node.y) {
+        descendants.push({ id: n.id, startX: n.x, startY: n.y })
+        for (const child of (edgeMap.get(id) ?? [])) {
+          queue.push(child)
+        }
+      }
+    }
+
     dragRef.current = {
       nodeId,
       startMouseX: e.clientX,
@@ -1069,8 +1072,9 @@ export function RouteBuilder({
       startNodeX: node.x,
       startNodeY: node.y,
       hasMoved: false,
+      descendants,
     }
-  }, [nodes])
+  }, [nodes, edges])
 
   // We need scale in the drag effect but don't want to re-register listeners on every scale change
   const scaleRef = useRef(scale)
@@ -1086,10 +1090,15 @@ export function RouteBuilder({
       }
       const newX = dragRef.current.startNodeX + dx
       const newY = dragRef.current.startNodeY + dy
+      const descIds = new Set(dragRef.current.descendants.map(d => d.id))
+      const descMap = new Map(dragRef.current.descendants.map(d => [d.id, d]))
       setNodes((prev) =>
-        prev.map((n) =>
-          n.id === dragRef.current!.nodeId ? { ...n, x: newX, y: newY } : n
-        )
+        prev.map((n) => {
+          if (n.id === dragRef.current!.nodeId) return { ...n, x: newX, y: newY }
+          const desc = descMap.get(n.id)
+          if (desc) return { ...n, x: desc.startX + dx, y: desc.startY + dy }
+          return n
+        })
       )
     }
 
@@ -1515,8 +1524,12 @@ export function RouteBuilder({
 
   // ── Derived values ────────────────────────────────────────────────────────────
   const activeTypes = nodes.map((n) => n.type)
+  const minX = nodes.reduce((m, n) => Math.min(m, n.x), 0)
+  const minY = nodes.reduce((m, n) => Math.min(m, n.y), 0)
   const maxX = nodes.reduce((m, n) => Math.max(m, n.x + NODE_WIDTH + 100), 800)
   const maxY = nodes.reduce((m, n) => Math.max(m, n.y + NODE_HEIGHT + 100), 600)
+  const svgW = maxX - minX + 200
+  const svgH = maxY - minY + 200
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   useEffect(() => {
@@ -1691,16 +1704,17 @@ export function RouteBuilder({
               height: "100%",
             }}
           >
-            {/* SVG overlay for edges */}
+            {/* SVG overlay for edges — covers full node range including negative coords */}
             <svg
               style={{
                 position: "absolute",
-                top: 0,
-                left: 0,
-                width: maxX,
-                height: maxY,
+                top: minY - 50,
+                left: minX - 50,
+                width: svgW,
+                height: svgH,
                 pointerEvents: "none",
                 zIndex: 1,
+                overflow: "visible",
               }}
             >
               {edges.map((edge) => {
