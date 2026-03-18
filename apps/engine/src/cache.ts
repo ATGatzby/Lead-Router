@@ -20,7 +20,7 @@ export interface CachedBranch {
     value: string | null;
   }>;
   steps?: Array<{
-    type: "filter" | "updateField" | "createTask" | "assign";
+    type: "filter" | "updateField" | "createTask" | "assign" | "split";
     [key: string]: unknown;
   }>;
 }
