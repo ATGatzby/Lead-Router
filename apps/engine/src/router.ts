@@ -113,6 +113,36 @@ function toSfdcObjectName(objectType: string): string {
   return objectType.charAt(0) + objectType.slice(1).toLowerCase();
 }
 
+// ─── Condition flattening helper ──────────────────────────────────────────────
+
+/** Flatten ConditionGroup[] (from Route Builder) to flat EvalCondition[] for evaluateRule */
+function flattenConditionGroups(rawConditions: any[]): Array<{ groupId: string; fieldName: string; fieldType: string; operator: string; value: string | null }> {
+  if (!Array.isArray(rawConditions) || rawConditions.length === 0) return [];
+  return rawConditions.flatMap((g: any) => {
+    if (Array.isArray(g?.conditions)) {
+      // ConditionGroup format: { id, conjunction, conditions: [{fieldApiName, operator, value}] }
+      return g.conditions.map((c: any) => ({
+        groupId: g.id ?? g.groupId ?? "default",
+        fieldName: c.fieldApiName ?? c.fieldName,
+        fieldType: c.fieldType ?? "TEXT",
+        operator: c.operator,
+        value: c.value ?? null,
+      }));
+    }
+    // Flat condition format: { groupId, fieldName, operator, value }
+    if (g.fieldName || g.fieldApiName) {
+      return [{
+        groupId: g.groupId ?? "default",
+        fieldName: g.fieldApiName ?? g.fieldName,
+        fieldType: g.fieldType ?? "TEXT",
+        operator: g.operator,
+        value: g.value ?? null,
+      }];
+    }
+    return [];
+  });
+}
+
 // ─── Recursive step execution for nested splits ──────────────────────────────
 
 interface StepExecContext {
@@ -196,50 +226,37 @@ async function executeSteps(
 
       case "split": {
         const splitPaths: any[] = step.paths ?? [];
-        let matched = false;
+        let splitResult: StepExecResult | null = null;
 
         for (const subPath of splitPaths) {
           const subSteps: any[] = subPath.steps ?? [];
 
-          // Evaluate the sub-path's filter step (if any)
+          // Evaluate the sub-path's filter conditions
+          // Check both steps[0].conditions (V2) and subPath.conditions (legacy/UI)
           const filterStep = subSteps.find((s: any) => s.type === "filter");
-          if (filterStep?.conditions?.length > 0) {
-            // Flatten ConditionGroup[] to flat conditions for evaluateRule
-            const flatConditions = Array.isArray(filterStep.conditions)
-              ? filterStep.conditions.flatMap((g: any) =>
-                  Array.isArray(g?.conditions)
-                    ? g.conditions.map((c: any) => ({
-                        groupId: g.id ?? g.groupId ?? "default",
-                        fieldName: c.fieldApiName ?? c.fieldName,
-                        fieldType: c.fieldType ?? "TEXT",
-                        operator: c.operator,
-                        value: c.value ?? null,
-                      }))
-                    : [{
-                        groupId: g.groupId ?? "default",
-                        fieldName: g.fieldApiName ?? g.fieldName,
-                        fieldType: g.fieldType ?? "TEXT",
-                        operator: g.operator,
-                        value: g.value ?? null,
-                      }]
-                )
-              : [];
+          const rawConditions = filterStep?.conditions ?? subPath.conditions ?? [];
 
-            if (flatConditions.length > 0) {
-              const evalResult = await evaluateRule(ctx.fields, flatConditions, ctx.orgId);
-              if (!evalResult) continue; // sub-path doesn't match — try next
-            }
+          const flatConditions = flattenConditionGroups(rawConditions);
+
+          if (flatConditions.length > 0) {
+            const evalResult = await evaluateRule(ctx.fields, flatConditions, ctx.orgId);
+            if (!evalResult) continue; // sub-path doesn't match — try next
           }
 
           // Sub-path matched — recursively execute its steps
           const result = await executeSteps(subSteps, ctx);
-          if (result) return result; // propagate assignment info up
-          matched = true;
-          break; // first matching sub-path wins
+          if (result) {
+            splitResult = result;
+            break; // first matching sub-path with an assignment wins
+          }
+          // Sub-path matched filter but had no assign → keep trying other paths
         }
 
-        // No sub-path matched — check for split-level default owner
-        if (!matched && step.defaultOwner) {
+        // If a sub-path returned an assignment, propagate it up
+        if (splitResult) return splitResult;
+
+        // No sub-path produced an assignment — check for split-level default owner
+        if (step.defaultOwner?.assignmentType) {
           return {
             assignmentType: step.defaultOwner.assignmentType ?? null,
             assigneeId: step.defaultOwner.assigneeId ?? null,
@@ -1018,11 +1035,27 @@ async function routeNewStyle(
   // Step 2: Branch (path) evaluation
   ruleTrace.branches = [];
   for (const branch of rule.branches) {
+    const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
+    const hasV2Steps = branch.steps && branch.steps.length > 0;
+
+    // V2 branches: skip legacy branch.conditions — the filter is inside steps[0]
+    // V1 branches: evaluate legacy branch.conditions as before
     const evalStart = Date.now();
-    const evalResult = await evaluateRuleDetailed(fields, branch.conditions, orgId);
+    let evalResult: { matched: boolean; groups: DetailedConditionGroup[] };
+
+    if (hasV2Steps) {
+      // For V2 branches, evaluate the first filter step's conditions
+      const firstFilterStep = branch.steps!.find((s: any) => s.type === "filter");
+      const flatConditions = flattenConditionGroups(firstFilterStep?.conditions ?? []);
+      evalResult = flatConditions.length > 0
+        ? await evaluateRuleDetailed(fields, flatConditions, orgId)
+        : { matched: true, groups: [] }; // no conditions = catch-all
+    } else {
+      evalResult = await evaluateRuleDetailed(fields, branch.conditions, orgId);
+    }
+
     if (trace) trace.timing.evaluationMs = (trace.timing.evaluationMs ?? 0) + (Date.now() - evalStart);
 
-    const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
     ruleTrace.branches!.push({
       branchId: branch.id,
       label: branchLabel,
@@ -1035,7 +1068,7 @@ async function routeNewStyle(
       ruleTrace.outcome = "MATCHED";
 
       // ── Multi-step branch execution (recursive — handles nested splits) ──
-      if (branch.steps && branch.steps.length > 0) {
+      if (hasV2Steps) {
         const stepResult = await executeSteps(branch.steps, {
           fields,
           recordId,
