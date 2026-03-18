@@ -4,6 +4,16 @@
 
 export type Operator = { value: string; label: string };
 
+const NUMERIC_OPS: Operator[] = [
+  { value: "equals",     label: "=" },
+  { value: "not_equals", label: "≠" },
+  { value: "gt",         label: ">" },
+  { value: "lt",         label: "<" },
+  { value: "gte",        label: "≥" },
+  { value: "lte",        label: "≤" },
+  { value: "is_blank",   label: "is blank" },
+];
+
 const OPERATORS: Record<string, Operator[]> = {
   TEXT: [
     { value: "equals",       label: "equals" },
@@ -17,15 +27,11 @@ const OPERATORS: Record<string, Operator[]> = {
     { value: "sounds_like",  label: "sounds like" },
     { value: "similar_to",   label: "is similar to (AI)" },
   ],
-  NUMBER: [
-    { value: "equals",     label: "=" },
-    { value: "not_equals", label: "≠" },
-    { value: "gt",         label: ">" },
-    { value: "lt",         label: "<" },
-    { value: "gte",        label: "≥" },
-    { value: "lte",        label: "≤" },
-    { value: "is_blank",   label: "is blank" },
-  ],
+  NUMBER:   NUMERIC_OPS,
+  CURRENCY: NUMERIC_OPS,
+  DOUBLE:   NUMERIC_OPS,
+  PERCENT:  NUMERIC_OPS,
+  INT:      NUMERIC_OPS,
   PICKLIST: [
     { value: "equals",     label: "equals" },
     { value: "not_equals", label: "does not equal" },
