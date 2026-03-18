@@ -2060,22 +2060,20 @@ export function RouteBuilder({
         onSave={(conditions: RuleConditions) => {
           if (!activeFilterPathId) return
           const pathId = activeFilterPathId
-          // Find the stepIndex for this filter (if opened via V2 step node)
-          const filterStepIndex = activeSheet?.type === "filter" && "stepIndex" in activeSheet ? (activeSheet as any).stepIndex : undefined
           setState((s) => ({
             ...s,
             paths: updatePathById(s.paths, pathId, (p) => {
-              const updated = { ...p, conditions }
-              // Also sync conditions into steps[0] if it's a filter step (keep V2 steps in sync)
-              if (updated.steps && updated.steps.length > 0) {
-                const targetIdx = filterStepIndex ?? updated.steps.findIndex(st => st.type === "filter")
-                if (targetIdx >= 0 && updated.steps[targetIdx]?.type === "filter") {
-                  const newSteps = [...updated.steps]
-                  newSteps[targetIdx] = { ...newSteps[targetIdx], conditions } as any
-                  return { ...updated, steps: newSteps }
+              if (p.steps && p.steps.length > 0) {
+                // V2: steps[0].conditions is the single source of truth
+                const idx = p.steps.findIndex(st => st.type === "filter")
+                if (idx >= 0) {
+                  const newSteps = [...p.steps]
+                  newSteps[idx] = { type: "filter", conditions } as any
+                  return { ...p, steps: newSteps, conditions }
                 }
               }
-              return updated
+              // Legacy: path.conditions only
+              return { ...p, conditions }
             }),
           }))
         }}

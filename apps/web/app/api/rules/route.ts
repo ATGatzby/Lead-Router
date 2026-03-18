@@ -291,15 +291,18 @@ export async function POST(req: NextRequest) {
             assigneeTeamId: b.assignmentType === "ROUND_ROBIN" ? (b.assigneeTeamId ?? null) : null,
             assigneeQueueId: b.assignmentType === "QUEUE" ? (b.assigneeQueueId ?? null) : null,
             steps: b.steps ?? undefined,
+            // V2 branches: conditions live in steps JSON only — skip branch_conditions table
             conditions: {
-              create: b.conditions.map((c, ci) => ({
-                groupId: c.groupId,
-                fieldName: c.fieldName,
-                fieldType: c.fieldType ?? "TEXT",
-                operator: c.operator,
-                value: c.value ?? null,
-                sortOrder: c.sortOrder ?? ci,
-              })),
+              create: (b.steps && Array.isArray(b.steps) && b.steps.length > 0)
+                ? []
+                : b.conditions.map((c, ci) => ({
+                    groupId: c.groupId,
+                    fieldName: c.fieldName,
+                    fieldType: c.fieldType ?? "TEXT",
+                    operator: c.operator,
+                    value: c.value ?? null,
+                    sortOrder: c.sortOrder ?? ci,
+                  })),
             },
           })),
         },

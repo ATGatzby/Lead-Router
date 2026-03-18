@@ -2268,8 +2268,9 @@ Both settings are configurable per rule in the SearchTriggerConfigSheet advanced
 
 stdio-based MCP server that gives Claude Code full access to the Lead Routing system. Pure HTTP client — no Prisma, no direct DB access. All operations go through the engine and web app APIs.
 
-- **19 tools:** routing (2), rules CRUD (5), teams CRUD (6), users (2), monitoring (3), sync (1)
+- **52 tools:** rules management (9), teams management (9), users (7), routing (2), monitoring (8), analytics (3), flows (3), fields (2), queues (2), settings (4), bulk runs (2), audit (1)
 - **2 resources:** `lead-routing://rules`, `lead-routing://teams`
+- **Zod validation:** All tool inputs validated via centralized schemas in `src/utils/validate.ts`, dispatched from `src/index.ts` before handler execution
 
 ### 26.2 Architecture
 
@@ -2324,7 +2325,8 @@ claude mcp add --scope user --transport stdio lead-routing \
 | `apps/mcp/src/index.ts` | MCP server entry point, tool registration |
 | `apps/mcp/src/clients/engine-client.ts` | HMAC-signed HTTP client for engine |
 | `apps/mcp/src/clients/web-client.ts` | Bearer-authenticated HTTP client for web app |
-| `apps/mcp/src/tools/` | 19 tool handlers |
+| `apps/mcp/src/tools/` | 52 tool handlers (one file per tool) |
+| `apps/mcp/src/utils/validate.ts` | Centralized Zod validation schemas for all tools |
 | `apps/web/proxy.ts` | Bearer token auth (lines 48-78) |
 | `apps/web/lib/session.ts` | `requireSession()` with Bearer fallback |
 | `apps/web/app/api/tokens/` | Token CRUD endpoints |
