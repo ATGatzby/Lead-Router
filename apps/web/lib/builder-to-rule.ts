@@ -67,6 +67,7 @@ export function builderToApiBody(
         path.action.assignmentType === "ROUND_ROBIN" ? path.action.assigneeId : null,
       assigneeQueueId:
         path.action.assignmentType === "QUEUE" ? path.action.assigneeId : null,
+      steps: path.steps ?? null,
       conditions: path.conditions.flatMap((group, gi) =>
         group.conditions.map((cond, ci) => ({
           groupId: group.id,
@@ -210,6 +211,7 @@ function _apiRuleToBuilderState(rule: any): RouteBuilderState {
               assigneeId,
               assigneeName,
             },
+            ...(branch.steps ? { steps: Array.isArray(branch.steps) ? branch.steps : JSON.parse(String(branch.steps)) } : {}),
           }
         }
       )

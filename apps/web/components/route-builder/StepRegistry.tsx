@@ -1,6 +1,6 @@
 "use client"
 
-import { Zap, Search, Filter, AlertTriangle, SearchIcon, Pencil, ClipboardList } from "lucide-react"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, SearchIcon, Pencil, ClipboardList, GitBranch } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,9 +25,16 @@ const STEPS: StepDefinition[] = [
   {
     type: "filter",
     icon: Filter,
-    label: "Filter + Assign",
-    description: "Add a branching path",
+    label: "Filter",
+    description: "Route by conditions",
     color: "text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900",
+  },
+  {
+    type: "assign" as CanvasNodeType,
+    icon: UserCheck,
+    label: "Assign",
+    description: "Assign record to owner",
+    color: "text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900",
   },
   {
     type: "updateField",
@@ -42,6 +49,13 @@ const STEPS: StepDefinition[] = [
     label: "Create Task",
     description: "Create a follow-up task",
     color: "text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900",
+  },
+  {
+    type: "split" as CanvasNodeType,
+    icon: GitBranch,
+    label: "Split",
+    description: "Branch into sub-paths",
+    color: "text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800",
   },
   {
     type: "defaultOwner",
