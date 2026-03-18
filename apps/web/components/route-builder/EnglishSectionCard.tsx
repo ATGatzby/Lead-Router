@@ -133,11 +133,19 @@ export function EnglishSectionCard({
       {/* Expanded content */}
       {(!isPath || isExpanded) && (
         <div className="px-3 pb-2.5 pt-0.5">
-          {section.lines.map((line, i) => (
-            <p key={i} className="text-xs text-muted-foreground leading-relaxed">
-              {line}
-            </p>
-          ))}
+          {section.lines.map((line, i) => {
+            const text = typeof line === "string" ? line : line.text
+            const depth = typeof line === "string" ? 0 : line.depth
+            return (
+              <p
+                key={i}
+                className="text-xs text-muted-foreground leading-relaxed"
+                style={depth > 0 ? { marginLeft: `${depth * 1}rem`, borderLeft: "2px solid var(--border)", paddingLeft: "0.5rem" } : undefined}
+              >
+                {text}
+              </p>
+            )
+          })}
         </div>
       )}
     </div>

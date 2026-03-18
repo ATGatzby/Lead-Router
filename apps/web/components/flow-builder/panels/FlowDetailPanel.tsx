@@ -99,7 +99,7 @@ export function FlowDetailPanel({ section, onClose, onSwitchToCanvas }: FlowDeta
           <h4 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2">Details</h4>
           <div className="rounded-md border bg-muted/30 p-2.5 space-y-2">
             {section.lines.map((line, i) => (
-              <p key={i} className="text-xs text-foreground leading-relaxed">{line}</p>
+              <p key={i} className="text-xs text-foreground leading-relaxed">{typeof line === "string" ? line : line.text}</p>
             ))}
           </div>
         </div>

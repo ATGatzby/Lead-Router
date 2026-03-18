@@ -380,6 +380,44 @@ function CollapsibleStep({
 
 // ── Rule Evaluation Detail ──────────────────────────────────────────────
 
+/** Recursively render nested split evaluation traces */
+function SplitTraceView({ splits, depth }: { splits: any[]; depth: number }) {
+  return (
+    <div className="mt-2 space-y-2" style={{ marginLeft: `${depth * 12}px` }}>
+      {splits.map((split: any, si: number) => (
+        <div key={si} className="space-y-1.5 border-l-2 border-indigo-200 dark:border-indigo-800 pl-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">
+            Split · {split.paths?.length ?? 0} paths
+          </p>
+          {split.paths?.map((path: any, pi: number) => (
+            <div key={pi} className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-medium">
+                <span className={path.matched ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}>
+                  {path.matched ? "✓" : "✗"}
+                </span>
+                <span>{path.label}</span>
+                {!path.matched && (
+                  <span className="text-muted-foreground font-normal italic text-[10px]">— did not match</span>
+                )}
+              </div>
+              {path.conditionGroups?.map((group: any) => (
+                <div key={group.groupId} className="ml-4">
+                  <ConditionTable group={group} />
+                </div>
+              ))}
+              {(!path.conditionGroups || path.conditionGroups.length === 0) && path.matched && (
+                <p className="text-[10px] text-muted-foreground italic ml-4">No conditions (catch-all)</p>
+              )}
+              {/* Recurse into deeper splits */}
+              {path.nestedSplits && <SplitTraceView splits={path.nestedSplits} depth={depth + 1} />}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RuleEvalDetail({ rule }: { rule: any }) {
   const [expanded, setExpanded] = useState(true); // default open to show conditions
   const isMatched = rule.outcome === "MATCHED";
@@ -436,6 +474,8 @@ function RuleEvalDetail({ rule }: { rule: any }) {
               {(!branch.conditionGroups || branch.conditionGroups.length === 0) && (
                 <p className="text-xs text-muted-foreground italic ml-5">No conditions (catch-all branch)</p>
               )}
+              {/* Nested split traces */}
+              {branch.splitTraces && <SplitTraceView splits={branch.splitTraces} depth={1} />}
             </div>
           ))}
 

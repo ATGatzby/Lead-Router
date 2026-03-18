@@ -16,11 +16,16 @@ import type {
 // Public types
 // ---------------------------------------------------------------------------
 
+export interface EnglishLine {
+  text: string;
+  depth: number;
+}
+
 export interface EnglishSection {
   id: string;
   type: "trigger" | "match" | "path" | "default";
   title: string;
-  lines: string[];
+  lines: (string | EnglishLine)[];  // string for backward compat, EnglishLine for depth
   status: "ok" | "warning" | "error";
   pathIndex?: number;
 }
@@ -371,6 +376,57 @@ function hasUnconfiguredSteps(steps: PathStep[]): boolean {
   });
 }
 
+/** Recursively convert steps to lines with depth for nested splits */
+function stepsToLines(
+  steps: PathStep[],
+  path: RoutePath,
+  lines: (string | EnglishLine)[],
+  depth: number
+): void {
+  for (const step of steps) {
+    if (step.type === "split") {
+      lines.push({ text: `Split into ${step.paths.length} sub-path${step.paths.length !== 1 ? "s" : ""}:`, depth });
+      for (const subPath of step.paths) {
+        const subLabel = subPath.label || "Sub-path";
+        const subSteps = subPath.steps ?? [];
+        const filterStep = subSteps.find(s => s.type === "filter");
+        // Use path.conditions if available, else steps[0].conditions
+        const conditions = (subPath.conditions?.length > 0 ? subPath.conditions : filterStep?.type === "filter" ? filterStep.conditions : []) ?? [];
+        const condText = conditionsToText(conditions);
+        lines.push({ text: condText ? `${subLabel}: If ${condText}` : `${subLabel}: (catch-all)`, depth: depth + 1 });
+        // Render non-filter steps of this sub-path
+        for (const subStep of subSteps) {
+          if (subStep.type === "filter") continue;
+          if (subStep.type === "split") {
+            stepsToLines([subStep], subPath, lines, depth + 2);
+          } else {
+            lines.push({ text: stepToLine(subStep), depth: depth + 2 });
+          }
+        }
+      }
+      if (step.defaultOwner) {
+        const doType = assignmentTypeLabel(step.defaultOwner.assignmentType);
+        lines.push({ text: `Default: Assign to ${step.defaultOwner.assigneeName || "(not set)"} (${doType})`, depth: depth + 1 });
+      }
+    } else {
+      lines.push(depth === 0 ? stepToLine(step) : { text: stepToLine(step), depth });
+    }
+  }
+}
+
+/** Check if an assign step exists anywhere in the tree (including nested splits) */
+function hasAssignAnywhere(steps: PathStep[]): boolean {
+  for (const step of steps) {
+    if (step.type === "assign") return true;
+    if (step.type === "split") {
+      for (const subPath of step.paths) {
+        if (subPath.steps && hasAssignAnywhere(subPath.steps)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function buildPathSection(
   path: RoutePath,
   index: number
@@ -383,15 +439,12 @@ function buildPathSection(
 
   // V2 multi-step paths
   if (path.steps && path.steps.length > 0) {
-    for (const step of path.steps) {
-      lines.push(stepToLine(step));
-    }
+    stepsToLines(path.steps, path, lines, 0);
     if (hasUnconfiguredSteps(path.steps)) {
       status = "warning";
     }
-    // Check if there's no assign step at all
-    const hasAssignStep = path.steps.some((s) => s.type === "assign");
-    if (!hasAssignStep) {
+    // Check if there's no assign step anywhere (including nested splits)
+    if (!hasAssignAnywhere(path.steps)) {
       status = "warning";
     }
     return { id, type: "path", title, lines, status, pathIndex: index };

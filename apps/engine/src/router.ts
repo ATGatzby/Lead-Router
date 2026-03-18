@@ -25,6 +25,17 @@ interface TraceMatchCheck {
   matchedRecordId?: string;
 }
 
+interface TraceSplitPath {
+  label: string;
+  matched: boolean;
+  conditionGroups: DetailedConditionGroup[];
+  nestedSplits?: TraceSplit[];
+}
+
+interface TraceSplit {
+  paths: TraceSplitPath[];
+}
+
 interface TraceRuleEval {
   ruleId: string;
   ruleName: string;
@@ -41,6 +52,7 @@ interface TraceRuleEval {
     priority: number;
     matched: boolean;
     conditionGroups: DetailedConditionGroup[];
+    splitTraces?: TraceSplit[];
   }>;
   legacyConditions?: DetailedConditionGroup[];
   defaultOwner?: { evaluated: boolean; resolved: boolean };
@@ -153,6 +165,10 @@ interface StepExecContext {
   isDryRun: boolean;
 }
 
+interface StepTraceContext {
+  splitTraces: TraceSplit[];
+}
+
 interface StepExecResult {
   assignmentType: string | null;
   assigneeId: string | null;
@@ -168,7 +184,8 @@ interface StepExecResult {
  */
 async function executeSteps(
   steps: any[],
-  ctx: StepExecContext
+  ctx: StepExecContext,
+  traceCtx?: StepTraceContext
 ): Promise<StepExecResult | null> {
   for (const step of steps) {
     switch (step.type) {
@@ -227,6 +244,7 @@ async function executeSteps(
       case "split": {
         const splitPaths: any[] = step.paths ?? [];
         let splitResult: StepExecResult | null = null;
+        const splitTrace: TraceSplit = { paths: [] };
 
         for (const subPath of splitPaths) {
           const subSteps: any[] = subPath.steps ?? [];
@@ -234,22 +252,41 @@ async function executeSteps(
           // Evaluate the sub-path's filter conditions from steps[0] (single source of truth)
           const filterStep = subSteps.find((s: any) => s.type === "filter");
           const rawConditions = filterStep?.conditions ?? [];
-
           const flatConditions = flattenConditionGroups(rawConditions);
 
+          let matched = true;
+          let conditionGroups: DetailedConditionGroup[] = [];
+
           if (flatConditions.length > 0) {
-            const evalResult = await evaluateRule(ctx.fields, flatConditions, ctx.orgId);
-            if (!evalResult) continue; // sub-path doesn't match — try next
+            const evalResult = await evaluateRuleDetailed(ctx.fields, flatConditions, ctx.orgId);
+            matched = evalResult.matched;
+            conditionGroups = evalResult.groups;
+            if (!matched) {
+              splitTrace.paths.push({ label: subPath.label ?? "Sub-path", matched: false, conditionGroups });
+              continue;
+            }
           }
 
           // Sub-path matched — recursively execute its steps
-          const result = await executeSteps(subSteps, ctx);
+          const subTraceCtx: StepTraceContext = { splitTraces: [] };
+          const result = await executeSteps(subSteps, ctx, subTraceCtx);
+
+          splitTrace.paths.push({
+            label: subPath.label ?? "Sub-path",
+            matched: true,
+            conditionGroups,
+            nestedSplits: subTraceCtx.splitTraces.length > 0 ? subTraceCtx.splitTraces : undefined,
+          });
+
           if (result) {
             splitResult = result;
             break; // first matching sub-path with an assignment wins
           }
           // Sub-path matched filter but had no assign → keep trying other paths
         }
+
+        // Record this split's trace
+        if (traceCtx) traceCtx.splitTraces.push(splitTrace);
 
         // If a sub-path returned an assignment, propagate it up
         if (splitResult) return splitResult;
@@ -1068,13 +1105,19 @@ async function routeNewStyle(
 
       // ── Multi-step branch execution (recursive — handles nested splits) ──
       if (hasV2Steps) {
+        const branchTraceCtx: StepTraceContext = { splitTraces: [] };
         const stepResult = await executeSteps(branch.steps, {
           fields,
           recordId,
           objectType,
           orgId,
           isDryRun: rule.isDryRun,
-        });
+        }, branchTraceCtx);
+        // Attach split traces to the branch trace for the UI
+        const branchTraceEntry = ruleTrace.branches?.[ruleTrace.branches.length - 1];
+        if (branchTraceEntry && branchTraceCtx.splitTraces.length > 0) {
+          branchTraceEntry.splitTraces = branchTraceCtx.splitTraces;
+        }
         // If a nested assign step returned assignment info, use it to override branch-level assignment
         // (This allows nested splits to determine the final assignee)
         if (stepResult?.assignmentType) {
