@@ -295,18 +295,12 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "filter": {
       const path = node.pathId ? findPathById(state.paths, node.pathId) : null
       if (!path) return "No path"
-      // V2: read from steps[] if stepIndex is present
-      if (node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "filter") {
-        const step = path.steps[node.stepIndex] as { type: "filter"; conditions: any[] }
-        const allConds = Array.isArray(step.conditions) ? step.conditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
-        const count = allConds.length
-        if (count === 0) return "No conditions (catch-all)"
-        const first = allConds[0]
-        const preview = `${first.fieldApiName} ${first.operator}${first.value ? ` ${first.value}` : ""}`
-        return count === 1 ? preview : `${preview} +${count - 1} more`
+      // Read conditions: prefer path.conditions (always up-to-date from UI), fall back to steps[0]
+      let rawConds: any[] = path.conditions ?? []
+      if (rawConds.length === 0 && node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "filter") {
+        rawConds = (path.steps[node.stepIndex] as { type: "filter"; conditions: any[] }).conditions ?? []
       }
-      // Legacy: read from path.conditions
-      const allConds = Array.isArray(path.conditions) ? path.conditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
+      const allConds = Array.isArray(rawConds) ? rawConds.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
       const count = allConds.length
       if (count === 0) return "No conditions (catch-all)"
       const first = allConds[0]
@@ -2053,7 +2047,14 @@ export function RouteBuilder({
         }
         conditions={
           activeFilterPathId
-            ? (findPathById(state.paths, activeFilterPathId)?.conditions ?? [])
+            ? (() => {
+                const p = findPathById(state.paths, activeFilterPathId)
+                if (!p) return []
+                // V2: read from steps[0].conditions (single source of truth)
+                const filterStep = p.steps?.find(s => s.type === "filter")
+                if (filterStep?.type === "filter" && filterStep.conditions?.length > 0) return filterStep.conditions
+                return p.conditions ?? []
+              })()
             : []
         }
         objectType={resolveObjectType(state)}

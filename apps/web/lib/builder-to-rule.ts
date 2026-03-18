@@ -1,5 +1,34 @@
-import type { RouteBuilderState } from "@/components/route-builder/types"
+import type { RouteBuilderState, RoutePath, PathStep } from "@/components/route-builder/types"
 import { resolveObjectType } from "@/components/route-builder/types"
+
+/**
+ * Recursively sync path.conditions → steps[0].conditions for every path in the tree.
+ * This ensures the steps JSON always has the latest conditions from the UI,
+ * even for nested sub-paths inside splits.
+ */
+function syncConditionsIntoSteps(path: RoutePath): PathStep[] {
+  const steps = [...(path.steps ?? [])]
+
+  // Sync this path's conditions into its first filter step
+  if (path.conditions?.length > 0) {
+    const filterIdx = steps.findIndex(s => s.type === "filter")
+    if (filterIdx >= 0) {
+      steps[filterIdx] = { type: "filter", conditions: path.conditions } as PathStep
+    }
+  }
+
+  // Recurse into any split steps to sync their sub-paths too
+  return steps.map(step => {
+    if (step.type !== "split") return step
+    return {
+      ...step,
+      paths: step.paths.map(subPath => ({
+        ...subPath,
+        steps: syncConditionsIntoSteps(subPath),
+      })),
+    }
+  })
+}
 
 /**
  * Converts RouteBuilderState to the PUT /api/rules/:id body format expected by the API.
@@ -57,8 +86,9 @@ export function builderToApiBody(
       : null,
 
     branches: state.paths.map((path, i) => {
-      // For V2 paths (with steps[]), derive conditions from steps[0] to keep one source of truth
-      const filterStep = path.steps?.find(s => s.type === "filter")
+      // Sync path.conditions → steps[0].conditions recursively before serializing
+      const syncedSteps = path.steps ? syncConditionsIntoSteps(path) : null
+      const filterStep = syncedSteps?.find(s => s.type === "filter")
       const conditionSource = (filterStep?.type === "filter" && filterStep.conditions?.length > 0)
         ? filterStep.conditions
         : path.conditions
@@ -73,7 +103,7 @@ export function builderToApiBody(
           path.action.assignmentType === "ROUND_ROBIN" ? path.action.assigneeId : null,
         assigneeQueueId:
           path.action.assignmentType === "QUEUE" ? path.action.assigneeId : null,
-        steps: path.steps ?? null,
+        steps: syncedSteps,
         conditions: conditionSource.flatMap((group: any, gi: number) =>
           (group.conditions ?? []).map((cond: any, ci: number) => ({
             groupId: group.id ?? group.groupId,
