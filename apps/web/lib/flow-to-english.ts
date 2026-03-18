@@ -391,7 +391,7 @@ function detectWarnings(
   if (nodes.find(n => n.type === "MATCH")) {
     warnings.push({
       severity: "info",
-      message: "Match node is a placeholder \u2014 always follows the \"Not Found\" path",
+      message: "Match node is a placeholder \u2014 duplicate detection not yet implemented",
     })
   }
 

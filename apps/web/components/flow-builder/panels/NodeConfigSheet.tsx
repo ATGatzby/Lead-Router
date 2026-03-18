@@ -11,9 +11,14 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { AssigneeSelect } from "@/components/rule-form/AssigneeSelect"
 import { ConditionBuilder } from "@/components/condition-builder"
+import { cn } from "@/lib/utils"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { FlowNodeData } from "../types"
+import type { AssignmentType } from "@/components/route-builder/types"
 
 interface NodeConfigSheetProps {
   node: FlowNodeData | null
@@ -26,6 +31,87 @@ const selectClass = "mt-1.5 w-full border border-zinc-200 rounded-lg px-3 py-2 t
 const inputClass = "mt-1.5 w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-700 outline-none focus:border-violet-400"
 const labelClass = "text-xs font-medium text-zinc-500 uppercase tracking-wider"
 
+/* ── Match config helpers (ported from Route Builder MatchConfigSheet) ──── */
+
+interface MatchRadioOptionProps {
+  id: string
+  name: string
+  value: string
+  checked: boolean
+  onChange: () => void
+  label: string
+  description?: string
+  recommended?: boolean
+}
+
+function MatchRadioOption({ id, name, value, checked, onChange, label, description, recommended }: MatchRadioOptionProps) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+        checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
+      )}
+    >
+      <input
+        type="radio"
+        id={id}
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5 accent-primary"
+      />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{label}</span>
+          {recommended && (
+            <span className="text-[10px] font-semibold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 px-1.5 py-0.5 rounded-full">
+              Recommended
+            </span>
+          )}
+        </div>
+        {description && (
+          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        )}
+      </div>
+    </label>
+  )
+}
+
+function MatchCheckField({
+  id,
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  id: string
+  label: string
+  description?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(v) => onChange(!!v)}
+        className="mt-0.5"
+      />
+      <div>
+        <Label htmlFor={id} className="cursor-pointer font-medium text-sm">
+          {label}
+        </Label>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigSheetProps) {
   const usersQuery = useQuery<{ users: Array<{ id: string; name: string; sfdcUserId: string; isLicensed: boolean }> }>({
     queryKey: ["users-licensed"],
@@ -34,7 +120,7 @@ export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigS
       if (!res.ok) return { users: [] }
       return res.json()
     },
-    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT" || node.type === "CREATE_TASK"),
+    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT" || node.type === "CREATE_TASK" || node.type === "MATCH"),
   })
 
   const teamsQuery = useQuery<{ teams: Array<{ id: string; name: string; _count?: { members: number } }> }>({
@@ -44,7 +130,7 @@ export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigS
       if (!res.ok) return { teams: [] }
       return res.json()
     },
-    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT"),
+    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT" || node.type === "MATCH"),
   })
 
   const queuesQuery = useQuery<{ queues: Array<{ id: string; name: string; sfdcQueueId: string }> }>({
@@ -54,7 +140,7 @@ export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigS
       if (!res.ok) return { queues: [] }
       return res.json()
     },
-    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT"),
+    enabled: !!node && (node.type === "ASSIGNMENT" || node.type === "DEFAULT" || node.type === "MATCH"),
   })
 
   const users = usersQuery.data?.users ?? []
@@ -142,36 +228,278 @@ export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigS
             {/* MATCH */}
             {node.type === "MATCH" && (
               <>
-                <div>
-                  <label className={labelClass}>Check for existing</label>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {(["checkLeads", "checkContacts", "checkAccounts"] as const).map(key => (
-                      <label key={key} className="flex items-center gap-2 text-sm text-zinc-700">
-                        <input type="checkbox" checked={!!config[key]} onChange={e => updateConfig(key, e.target.checked)} className="accent-blue-500" />
-                        {key.replace("check", "")}
-                      </label>
-                    ))}
+                {/* Check against existing records */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Check against existing records
+                  </h3>
+                  <div className="space-y-2.5">
+                    <MatchCheckField
+                      id="flow-checkLeads"
+                      label="Existing Leads"
+                      description="Match against leads with the same email or phone"
+                      checked={!!config.checkLeads}
+                      onChange={(v) => updateConfig("checkLeads", v)}
+                    />
+                    <MatchCheckField
+                      id="flow-checkContacts"
+                      label="Existing Contacts"
+                      description="Match against contacts with the same email or phone"
+                      checked={!!config.checkContacts}
+                      onChange={(v) => updateConfig("checkContacts", v)}
+                    />
+                    <MatchCheckField
+                      id="flow-checkAccounts"
+                      label="Existing Accounts"
+                      description="Match against accounts by company domain"
+                      checked={!!config.checkAccounts}
+                      onChange={(v) => updateConfig("checkAccounts", v)}
+                    />
                   </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Match by</label>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {(["matchEmail", "matchPhone", "matchDomain", "matchCompanyName"] as const).map(key => (
-                      <label key={key} className="flex items-center gap-2 text-sm text-zinc-700">
-                        <input type="checkbox" checked={!!config[key]} onChange={e => updateConfig(key, e.target.checked)} className="accent-blue-500" />
-                        {key.replace("match", "")}
-                      </label>
-                    ))}
+                </section>
+
+                {/* Match on */}
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Match on
+                  </h3>
+                  <div className="space-y-2.5">
+                    <MatchCheckField
+                      id="flow-matchEmail"
+                      label="Email address (exact)"
+                      checked={!!config.matchEmail}
+                      onChange={(v) => updateConfig("matchEmail", v)}
+                    />
+                    <MatchCheckField
+                      id="flow-matchPhone"
+                      label="Phone number (normalized)"
+                      description="Strips formatting before comparing"
+                      checked={!!config.matchPhone}
+                      onChange={(v) => updateConfig("matchPhone", v)}
+                    />
+                    <MatchCheckField
+                      id="flow-matchDomain"
+                      label="Company domain"
+                      description="Extracts domain from email, matches against Account website"
+                      checked={!!config.matchDomain}
+                      onChange={(v) => updateConfig("matchDomain", v)}
+                    />
+                    <MatchCheckField
+                      id="flow-matchCompanyName"
+                      label="Company name"
+                      description="Match against Account name using the selected strategy"
+                      checked={!!config.matchCompanyName}
+                      onChange={(v) => updateConfig("matchCompanyName", v)}
+                    />
+                    {!!config.matchCompanyName && (
+                      <div className="ml-7 space-y-2">
+                        <MatchRadioOption
+                          id="flow-fuzzy-strict"
+                          name="flow-fuzzyMatchMode"
+                          value="STRICT"
+                          checked={(config.fuzzyMatchMode ?? "STRICT") === "STRICT"}
+                          onChange={() => updateConfig("fuzzyMatchMode", "STRICT")}
+                          label="Strict"
+                          description="Exact company name match (normalized)"
+                          recommended
+                        />
+                        <MatchRadioOption
+                          id="flow-fuzzy-fuzzy"
+                          name="flow-fuzzyMatchMode"
+                          value="FUZZY"
+                          checked={config.fuzzyMatchMode === "FUZZY"}
+                          onChange={() => updateConfig("fuzzyMatchMode", "FUZZY")}
+                          label="Fuzzy"
+                          description="String similarity + known abbreviations (e.g. Corp vs Corporation)"
+                        />
+                        <MatchRadioOption
+                          id="flow-fuzzy-ai"
+                          name="flow-fuzzyMatchMode"
+                          value="AI_SMART"
+                          checked={config.fuzzyMatchMode === "AI_SMART"}
+                          onChange={() => updateConfig("fuzzyMatchMode", "AI_SMART")}
+                          label="AI Smart"
+                          description="Semantic matching with AI fallback for ambiguous names"
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Mode</label>
-                  <select value={config.fuzzyMatchMode ?? "STRICT"} onChange={e => updateConfig("fuzzyMatchMode", e.target.value)} className={selectClass}>
-                    <option value="STRICT">Strict</option>
-                    <option value="FUZZY">Fuzzy</option>
-                    <option value="AI_SMART">AI Smart</option>
-                  </select>
-                </div>
+                </section>
+
+                {/* When Lead matched */}
+                {!!config.checkLeads && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      When a Lead is matched
+                    </h3>
+                    <div className="space-y-2">
+                      <MatchRadioOption
+                        id="flow-leadMatch-merge"
+                        name="flow-leadMatch"
+                        value="SFDC_MERGE"
+                        checked={(config.onLeadMatch ?? "SFDC_MERGE") === "SFDC_MERGE"}
+                        onChange={() => { updateConfig("onLeadMatch", "SFDC_MERGE"); updateConfig("leadCustomAssignment", null) }}
+                        label="Salesforce Lead Merge"
+                        description="Merge this lead into the existing lead"
+                        recommended
+                      />
+                      <MatchRadioOption
+                        id="flow-leadMatch-owner"
+                        name="flow-leadMatch"
+                        value="ASSIGN_TO_OWNER"
+                        checked={config.onLeadMatch === "ASSIGN_TO_OWNER"}
+                        onChange={() => { updateConfig("onLeadMatch", "ASSIGN_TO_OWNER"); updateConfig("leadCustomAssignment", null) }}
+                        label="Assign to lead's owner"
+                        description="Assign the new lead to the matched lead's current owner"
+                      />
+                      <MatchRadioOption
+                        id="flow-leadMatch-custom"
+                        name="flow-leadMatch"
+                        value="ASSIGN_CUSTOM"
+                        checked={config.onLeadMatch === "ASSIGN_CUSTOM"}
+                        onChange={() => {
+                          updateConfig("onLeadMatch", "ASSIGN_CUSTOM")
+                          updateConfig("leadCustomAssignment", { assignmentType: "USER", assigneeId: "", assigneeName: "" })
+                        }}
+                        label="Assign to..."
+                        description="Choose a specific user, team, or queue"
+                      />
+                      {config.onLeadMatch === "ASSIGN_CUSTOM" && (
+                        <div className="ml-6 mt-2">
+                          <AssigneeSelect
+                            assignmentType={(config.leadCustomAssignment as any)?.assignmentType ?? "USER"}
+                            assigneeId={(config.leadCustomAssignment as any)?.assigneeId ?? ""}
+                            onTypeChange={(type: AssignmentType) =>
+                              updateConfig("leadCustomAssignment", { assignmentType: type, assigneeId: "", assigneeName: "" })
+                            }
+                            onAssigneeChange={(id: string) =>
+                              updateConfig("leadCustomAssignment", {
+                                ...((config.leadCustomAssignment as any) ?? { assignmentType: "USER", assigneeName: "" }),
+                                assigneeId: id,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* When Contact matched */}
+                {!!config.checkContacts && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      When a Contact is matched
+                    </h3>
+                    <div className="space-y-2">
+                      <MatchRadioOption
+                        id="flow-contactMatch-owner"
+                        name="flow-contactMatch"
+                        value="ASSIGN_TO_OWNER"
+                        checked={(config.onContactMatch ?? "ASSIGN_TO_OWNER") === "ASSIGN_TO_OWNER"}
+                        onChange={() => { updateConfig("onContactMatch", "ASSIGN_TO_OWNER"); updateConfig("contactCustomAssignment", null) }}
+                        label="Assign to Contact's owner"
+                        description="Assign the lead to the matched contact's current owner"
+                      />
+                      <MatchRadioOption
+                        id="flow-contactMatch-custom"
+                        name="flow-contactMatch"
+                        value="ASSIGN_CUSTOM"
+                        checked={config.onContactMatch === "ASSIGN_CUSTOM"}
+                        onChange={() => {
+                          updateConfig("onContactMatch", "ASSIGN_CUSTOM")
+                          updateConfig("contactCustomAssignment", { assignmentType: "USER", assigneeId: "", assigneeName: "" })
+                        }}
+                        label="Assign to..."
+                        description="Choose a specific user, team, or queue"
+                      />
+                      {config.onContactMatch === "ASSIGN_CUSTOM" && (
+                        <div className="ml-6 mt-2">
+                          <AssigneeSelect
+                            assignmentType={(config.contactCustomAssignment as any)?.assignmentType ?? "USER"}
+                            assigneeId={(config.contactCustomAssignment as any)?.assigneeId ?? ""}
+                            onTypeChange={(type: AssignmentType) =>
+                              updateConfig("contactCustomAssignment", { assignmentType: type, assigneeId: "", assigneeName: "" })
+                            }
+                            onAssigneeChange={(id: string) =>
+                              updateConfig("contactCustomAssignment", {
+                                ...((config.contactCustomAssignment as any) ?? { assignmentType: "USER", assigneeName: "" }),
+                                assigneeId: id,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      <MatchRadioOption
+                        id="flow-contactMatch-skip"
+                        name="flow-contactMatch"
+                        value="SKIP"
+                        checked={config.onContactMatch === "SKIP"}
+                        onChange={() => { updateConfig("onContactMatch", "SKIP"); updateConfig("contactCustomAssignment", null) }}
+                        label="Skip routing"
+                        description="Do not route this lead if a contact match is found"
+                      />
+                    </div>
+                  </section>
+                )}
+
+                {/* When Account matched */}
+                {!!config.checkAccounts && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      When an Account is matched
+                    </h3>
+                    <div className="space-y-2">
+                      <MatchRadioOption
+                        id="flow-accountMatch-owner"
+                        name="flow-accountMatch"
+                        value="ASSIGN_TO_OWNER"
+                        checked={(config.onAccountMatch ?? "ASSIGN_TO_OWNER") === "ASSIGN_TO_OWNER"}
+                        onChange={() => { updateConfig("onAccountMatch", "ASSIGN_TO_OWNER"); updateConfig("accountCustomAssignment", null) }}
+                        label="Assign to Account's owner"
+                        description="Assign the lead to the matched account's current owner"
+                      />
+                      <MatchRadioOption
+                        id="flow-accountMatch-custom"
+                        name="flow-accountMatch"
+                        value="ASSIGN_CUSTOM"
+                        checked={config.onAccountMatch === "ASSIGN_CUSTOM"}
+                        onChange={() => {
+                          updateConfig("onAccountMatch", "ASSIGN_CUSTOM")
+                          updateConfig("accountCustomAssignment", { assignmentType: "USER", assigneeId: "", assigneeName: "" })
+                        }}
+                        label="Assign to..."
+                        description="Choose a specific user, team, or queue"
+                      />
+                      {config.onAccountMatch === "ASSIGN_CUSTOM" && (
+                        <div className="ml-6 mt-2">
+                          <AssigneeSelect
+                            assignmentType={(config.accountCustomAssignment as any)?.assignmentType ?? "USER"}
+                            assigneeId={(config.accountCustomAssignment as any)?.assigneeId ?? ""}
+                            onTypeChange={(type: AssignmentType) =>
+                              updateConfig("accountCustomAssignment", { assignmentType: type, assigneeId: "", assigneeName: "" })
+                            }
+                            onAssigneeChange={(id: string) =>
+                              updateConfig("accountCustomAssignment", {
+                                ...((config.accountCustomAssignment as any) ?? { assignmentType: "USER", assigneeName: "" }),
+                                assigneeId: id,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+                      <MatchRadioOption
+                        id="flow-accountMatch-skip"
+                        name="flow-accountMatch"
+                        value="SKIP"
+                        checked={config.onAccountMatch === "SKIP"}
+                        onChange={() => { updateConfig("onAccountMatch", "SKIP"); updateConfig("accountCustomAssignment", null) }}
+                        label="Skip routing"
+                        description="Do not route this lead if an account match is found"
+                      />
+                    </div>
+                  </section>
+                )}
               </>
             )}
 
@@ -271,28 +599,43 @@ export function NodeConfigSheet({ node, fields, onUpdate, onClose }: NodeConfigS
             {node.type === "BRANCH_DECISION" && (
               <>
                 <div>
-                  <label className={labelClass}>Branch Field</label>
+                  <label className={labelClass}>Branch Field (optional)</label>
                   <select value={config.fieldApiName ?? ""} onChange={e => updateConfig("fieldApiName", e.target.value)} className={selectClass}>
-                    <option value="">Select field...</option>
+                    <option value="">None (use conditions only)</option>
                     {fields.map(f => <option key={f.fieldApiName} value={f.fieldApiName}>{f.fieldLabel}</option>)}
                   </select>
+                  <p className="text-[11px] text-zinc-400 mt-1">Visual hint only — each branch defines its own conditions below.</p>
                 </div>
                 <div>
                   <label className={labelClass}>Branches</label>
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-4 mt-2">
                     {(config.branches ?? []).map((b: any, i: number) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input
-                          value={b.label ?? ""}
-                          onChange={e => {
-                            const branches = [...(config.branches ?? [])]
-                            branches[i] = { ...branches[i], label: e.target.value }
-                            updateConfig("branches", branches)
-                          }}
-                          placeholder={`Branch ${i + 1}`}
-                          className="flex-1 border border-zinc-200 rounded-lg px-3 py-1.5 text-sm text-zinc-700 outline-none"
-                        />
-                        <button onClick={() => updateConfig("branches", (config.branches ?? []).filter((_: any, j: number) => j !== i))} className="text-zinc-300 hover:text-red-400 text-xs">✕</button>
+                      <div key={i} className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={b.label ?? ""}
+                            onChange={e => {
+                              const branches = [...(config.branches ?? [])]
+                              branches[i] = { ...branches[i], label: e.target.value }
+                              updateConfig("branches", branches)
+                            }}
+                            placeholder={`Branch ${i + 1}`}
+                            className="flex-1 border border-zinc-200 rounded-lg px-3 py-1.5 text-sm text-zinc-700 outline-none bg-white"
+                          />
+                          <button onClick={() => updateConfig("branches", (config.branches ?? []).filter((_: any, j: number) => j !== i))} className="text-zinc-300 hover:text-red-400 text-xs">✕</button>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Conditions</label>
+                          <ConditionBuilder
+                            fields={fields}
+                            value={b.conditions ?? []}
+                            onChange={(c: ConditionGroup[]) => {
+                              const branches = [...(config.branches ?? [])]
+                              branches[i] = { ...branches[i], conditions: c }
+                              updateConfig("branches", branches)
+                            }}
+                          />
+                        </div>
                       </div>
                     ))}
                     <button

@@ -9,6 +9,7 @@ import type {
   AssignmentType,
   SearchTriggerConfig,
   ScheduleFrequency,
+  PathStep,
 } from "@/components/route-builder/types";
 
 // ---------------------------------------------------------------------------
@@ -323,6 +324,49 @@ function matchActionLabel(
   }
 }
 
+function stepToLine(step: PathStep): string {
+  switch (step.type) {
+    case "filter": {
+      const text = conditionsToText(step.conditions);
+      return text ? `If ${text}` : "No filter conditions";
+    }
+    case "updateField":
+      return step.fieldApiName
+        ? `\u2192 Set ${step.fieldApiName} = "${step.fieldValue}"`
+        : "\u2192 Set field (not configured)";
+    case "createTask": {
+      const subject = step.subject || "(no subject)";
+      const duePart =
+        step.dueDateOffset != null
+          ? ` (due in ${step.dueDateOffset} day${step.dueDateOffset === 1 ? "" : "s"})`
+          : "";
+      return `\u2192 Create Task: "${subject}"${duePart}`;
+    }
+    case "assign": {
+      const name = step.assigneeName || "(not set)";
+      const type = step.assignmentType
+        ? assignmentTypeLabel(step.assignmentType)
+        : "unspecified";
+      return `\u2192 Assign to ${name} (${type})`;
+    }
+  }
+}
+
+function hasUnconfiguredSteps(steps: PathStep[]): boolean {
+  return steps.some((step) => {
+    switch (step.type) {
+      case "updateField":
+        return !step.fieldApiName;
+      case "createTask":
+        return !step.subject;
+      case "assign":
+        return step.assignmentType === null || step.assigneeId === null;
+      default:
+        return false;
+    }
+  });
+}
+
 function buildPathSection(
   path: RoutePath,
   index: number
@@ -333,6 +377,23 @@ function buildPathSection(
   const lines: string[] = [];
   let status: EnglishSection["status"] = "ok";
 
+  // V2 multi-step paths
+  if (path.steps && path.steps.length > 0) {
+    for (const step of path.steps) {
+      lines.push(stepToLine(step));
+    }
+    if (hasUnconfiguredSteps(path.steps)) {
+      status = "warning";
+    }
+    // Check if there's no assign step at all
+    const hasAssignStep = path.steps.some((s) => s.type === "assign");
+    if (!hasAssignStep) {
+      status = "warning";
+    }
+    return { id, type: "path", title, lines, status, pathIndex: index };
+  }
+
+  // Legacy path (no steps array)
   const isCatchAll = !hasConditions(path.conditions);
   const hasAssignment =
     path.action.assignmentType !== null && path.action.assigneeId !== null;
@@ -376,15 +437,37 @@ function detectWarnings(
 ): RouteWarning[] {
   const warnings: RouteWarning[] = [];
 
-  // Unconfigured assignments
+  // Unconfigured assignments / steps
   for (let i = 0; i < state.paths.length; i++) {
     const p = state.paths[i];
-    if (p.action.assignmentType === null || p.action.assigneeId === null) {
-      warnings.push({
-        severity: "error",
-        message: `Path "${p.label || `Path ${i + 1}`}" has no assignment configured`,
-        relatedSection: `path-${p.id}`,
-      });
+    const pathLabel = p.label || `Path ${i + 1}`;
+
+    if (p.steps && p.steps.length > 0) {
+      // V2 multi-step path warnings
+      if (hasUnconfiguredSteps(p.steps)) {
+        warnings.push({
+          severity: "warning",
+          message: `Path "${pathLabel}" has unconfigured steps`,
+          relatedSection: `path-${p.id}`,
+        });
+      }
+      const hasAssignStep = p.steps.some((s) => s.type === "assign");
+      if (!hasAssignStep) {
+        warnings.push({
+          severity: "warning",
+          message: `Path "${pathLabel}" has no assignment step`,
+          relatedSection: `path-${p.id}`,
+        });
+      }
+    } else {
+      // Legacy path
+      if (p.action.assignmentType === null || p.action.assigneeId === null) {
+        warnings.push({
+          severity: "error",
+          message: `Path "${pathLabel}" has no assignment configured`,
+          relatedSection: `path-${p.id}`,
+        });
+      }
     }
   }
 

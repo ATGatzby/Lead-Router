@@ -75,6 +75,7 @@ async function loadFlowFromDB(orgId: string, objectType: string): Promise<void> 
   const cached: CachedFlow = {
     id: flow.id,
     orgId: flow.orgId,
+    name: flow.name,
     objectType: flow.objectType,
     triggerEvent: flow.triggerEvent,
     isDryRun: flow.isDryRun,
@@ -90,6 +91,7 @@ async function loadFlowFromDB(orgId: string, objectType: string): Promise<void> 
       fromId: e.fromId,
       toId: e.toId,
       label: e.label,
+      sourceHandle: e.sourceHandle ?? null,
     })),
   };
 

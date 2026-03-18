@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { useTheme } from "next-themes"
-import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText, Play, Loader2, Sparkles } from "lucide-react"
+import { Zap, Search, Filter, UserCheck, AlertTriangle, X, Save, ZoomIn, ZoomOut, Maximize2, RotateCcw, FileText, Play, Loader2, Sparkles, GitBranch, Pencil, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StepRegistry, type CanvasNodeType } from "./StepRegistry"
 import { TriggerConfigSheet } from "./config/TriggerConfigSheet"
@@ -10,6 +10,8 @@ import { SearchTriggerConfigSheet } from "./config/SearchTriggerConfigSheet"
 import { MatchConfigSheet, defaultMatchConfig } from "./config/MatchConfigSheet"
 import { FilterConfigSheet } from "./config/FilterConfigSheet"
 import { ActionConfigSheet } from "./config/ActionConfigSheet"
+import { UpdateFieldConfigSheet } from "./config/UpdateFieldConfigSheet"
+import { CreateTaskConfigSheet } from "./config/CreateTaskConfigSheet"
 import { DefaultOwnerConfigSheet } from "./config/DefaultOwnerConfigSheet"
 import type {
   RouteBuilderState,
@@ -17,9 +19,12 @@ import type {
   DefaultOwner,
   PathAction,
   SearchTriggerConfig,
+  PathStep,
+  PathStepType,
 } from "./types"
-import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType } from "./types"
+import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType, migrateStateToV2 } from "./types"
 import type { RuleConditions } from "@/components/condition-builder"
+import type { ConditionGroup } from "@/components/condition-builder/types"
 import { EnglishView } from "./EnglishView"
 import { routeToEnglish } from "@/lib/route-to-english"
 import { RunPanel, type RunningStep } from "./RunPanel"
@@ -31,6 +36,8 @@ const NODE_WIDTH = 220
 const NODE_HEIGHT = 72
 const TOP_BAR_HEIGHT = 56
 const FILTER_GAP = NODE_WIDTH + 40   // horizontal gap between parallel path columns
+const STEP_GAP_Y = 100               // vertical gap between steps within a branch
+const SPLIT_W = 200                  // width of the split pill node
 
 // Zoom/pan constants
 const MIN_ZOOM = 0.25
@@ -46,6 +53,7 @@ interface CanvasNode {
   x: number
   y: number
   pathId?: string  // links filter/assign nodes to a RoutePath
+  stepIndex?: number // index within a path's steps[] array
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any
 }
@@ -63,6 +71,8 @@ type ActiveSheet =
   | { type: "match"; nodeId: string }
   | { type: "filter"; nodeId: string; pathId: string }
   | { type: "assign"; nodeId: string; pathId: string }
+  | { type: "updateField"; nodeId: string; pathId: string; stepIndex: number }
+  | { type: "createTask"; nodeId: string; pathId: string; stepIndex: number }
   | { type: "defaultOwner"; nodeId: string }
   | null
 
@@ -123,47 +133,119 @@ const NODE_META: Record<
     iconBg: "bg-amber-100 dark:bg-amber-900",
     iconColor: "text-amber-600 dark:text-amber-400",
   },
+  split: {
+    icon: GitBranch,
+    label: "Split",
+    borderClass: "border-l-4 border-l-slate-400",
+    iconBg: "bg-slate-100 dark:bg-slate-800",
+    iconColor: "text-slate-500 dark:text-slate-400",
+  },
+  updateField: {
+    icon: Pencil,
+    label: "Update Field",
+    borderClass: "border-l-4 border-l-yellow-500",
+    iconBg: "bg-yellow-100 dark:bg-yellow-900",
+    iconColor: "text-yellow-600 dark:text-yellow-400",
+  },
+  createTask: {
+    icon: ClipboardList,
+    label: "Create Task",
+    borderClass: "border-l-4 border-l-sky-500",
+    iconBg: "bg-sky-100 dark:bg-sky-900",
+    iconColor: "text-sky-600 dark:text-sky-400",
+  },
 }
 
 // ─── Derive edges from nodes ───────────────────────────────────────────────────
 //
-// Layout: trigger → match? → [filter-A, filter-B, ...] → [assign-A, assign-B, ...] → defaultOwner?
+// Layout: trigger/searchTrigger → match? → split → branches (step chains) → defaultOwner?
 //
 function computeEdges(nodes: CanvasNode[]): CanvasEdge[] {
   const edges: CanvasEdge[] = []
   const trigger = nodes.find((n) => n.type === "trigger")
   const searchTrigger = nodes.find((n) => n.type === "searchTrigger")
   const match = nodes.find((n) => n.type === "match")
-  // Both triggers fan-out to match (or to the first action node)
-  const firstAction = match ?? nodes.find((n) => n.type === "filter") ?? nodes.find((n) => n.type === "defaultOwner")
-  if (trigger && firstAction) edges.push({ fromId: trigger.id, toId: firstAction.id })
-  if (searchTrigger && firstAction) edges.push({ fromId: searchTrigger.id, toId: firstAction.id })
-  const splitNode = match ?? trigger ?? searchTrigger
-  if (!splitNode) return edges
-
-  const filterNodes = nodes.filter((n) => n.type === "filter")
-  const assignNodes = nodes.filter((n) => n.type === "assign")
+  const splitNode = nodes.find((n) => n.type === "split")
   const defaultOwnerNode = nodes.find((n) => n.type === "defaultOwner")
 
-  // Fan-out: splitNode → each filter
-  for (const f of filterNodes) {
-    edges.push({ fromId: splitNode.id, toId: f.id })
+  // Determine the first node after triggers
+  const afterTrigger = match ?? splitNode ?? defaultOwnerNode
+  if (trigger && afterTrigger) edges.push({ fromId: trigger.id, toId: afterTrigger.id })
+  if (searchTrigger && afterTrigger) edges.push({ fromId: searchTrigger.id, toId: afterTrigger.id })
+
+  // Collect unique pathIds from V2 step nodes
+  const pathIds = [...new Set(nodes.filter((n) => n.pathId && n.stepIndex !== undefined).map((n) => n.pathId!))]
+
+  // match → split (or first branch step for single path, or defaultOwner if no paths)
+  if (match && splitNode) {
+    edges.push({ fromId: match.id, toId: splitNode.id })
+  } else if (match && !splitNode && pathIds.length > 0) {
+    // Single path — connect match directly to first step
+    const firstStep = nodes.find((n) => n.pathId === pathIds[0] && n.stepIndex === 0)
+    if (firstStep) edges.push({ fromId: match.id, toId: firstStep.id })
+  } else if (match && !splitNode && defaultOwnerNode) {
+    edges.push({ fromId: match.id, toId: defaultOwnerNode.id })
   }
-  // filter → assign (matched by pathId)
-  for (const f of filterNodes) {
-    const a = assignNodes.find((n) => n.pathId === f.pathId)
-    if (a) edges.push({ fromId: f.id, toId: a.id })
+
+  // Also handle trigger → first step when no match and no split (single path)
+  if (!match && !splitNode && pathIds.length > 0) {
+    const anchorNode = trigger ?? searchTrigger
+    if (anchorNode) {
+      const firstStep = nodes.find((n) => n.pathId === pathIds[0] && n.stepIndex === 0)
+      if (firstStep) edges.push({ fromId: anchorNode.id, toId: firstStep.id })
+    }
   }
-  // Fan-in: each assign → defaultOwner; or splitNode → defaultOwner when no paths
-  if (defaultOwnerNode) {
-    if (assignNodes.length > 0) {
-      for (const a of assignNodes) {
-        edges.push({ fromId: a.id, toId: defaultOwnerNode.id })
-      }
-    } else {
+
+  // split → first step of each branch (fan-out)
+  if (splitNode) {
+    for (const pid of pathIds) {
+      const firstStep = nodes.find((n) => n.pathId === pid && n.stepIndex === 0)
+      if (firstStep) edges.push({ fromId: splitNode.id, toId: firstStep.id })
+    }
+
+    // If split exists but no branch steps and defaultOwner exists
+    if (pathIds.length === 0 && defaultOwnerNode) {
       edges.push({ fromId: splitNode.id, toId: defaultOwnerNode.id })
     }
   }
+
+  // Within each branch: step[i] → step[i+1], last step → defaultOwner
+  for (const pid of pathIds) {
+    const branchNodes = nodes
+      .filter((n) => n.pathId === pid && n.stepIndex !== undefined)
+      .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
+    for (let i = 0; i < branchNodes.length - 1; i++) {
+      edges.push({ fromId: branchNodes[i].id, toId: branchNodes[i + 1].id })
+    }
+    // Last step → defaultOwner (fan-in)
+    if (defaultOwnerNode && branchNodes.length > 0) {
+      edges.push({ fromId: branchNodes[branchNodes.length - 1].id, toId: defaultOwnerNode.id })
+    }
+  }
+
+  // Legacy fallback: if no split node, connect filters/assigns the old way
+  if (!splitNode) {
+    const anchorNode = match ?? trigger ?? searchTrigger
+    const filterNodes = nodes.filter((n) => n.type === "filter")
+    const assignNodes = nodes.filter((n) => n.type === "assign")
+    if (anchorNode) {
+      for (const f of filterNodes) {
+        edges.push({ fromId: anchorNode.id, toId: f.id })
+      }
+    }
+    for (const f of filterNodes) {
+      const a = assignNodes.find((n) => n.pathId === f.pathId)
+      if (a) edges.push({ fromId: f.id, toId: a.id })
+    }
+    if (defaultOwnerNode && assignNodes.length > 0) {
+      for (const a of assignNodes) {
+        edges.push({ fromId: a.id, toId: defaultOwnerNode.id })
+      }
+    } else if (defaultOwnerNode && anchorNode && filterNodes.length === 0) {
+      edges.push({ fromId: anchorNode.id, toId: defaultOwnerNode.id })
+    }
+  }
+
   return edges
 }
 
@@ -199,6 +281,17 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "filter": {
       const path = state.paths.find((p) => p.id === node.pathId)
       if (!path) return "No path"
+      // V2: read from steps[] if stepIndex is present
+      if (node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "filter") {
+        const step = path.steps[node.stepIndex] as { type: "filter"; conditions: any[] }
+        const allConds = Array.isArray(step.conditions) ? step.conditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
+        const count = allConds.length
+        if (count === 0) return "No conditions (catch-all)"
+        const first = allConds[0]
+        const preview = `${first.fieldApiName} ${first.operator}${first.value ? ` ${first.value}` : ""}`
+        return count === 1 ? preview : `${preview} +${count - 1} more`
+      }
+      // Legacy: read from path.conditions
       const allConds = Array.isArray(path.conditions) ? path.conditions.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : []) : []
       const count = allConds.length
       if (count === 0) return "No conditions (catch-all)"
@@ -209,6 +302,14 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "assign": {
       const path = state.paths.find((p) => p.id === node.pathId)
       if (!path) return "No path"
+      // V2: read from steps[] if stepIndex is present
+      if (node.stepIndex !== undefined && path.steps?.[node.stepIndex]?.type === "assign") {
+        const step = path.steps[node.stepIndex] as { type: "assign"; assignmentType: string | null; assigneeName: string | null }
+        if (!step.assignmentType) return "Not configured"
+        const type = step.assignmentType === "USER" ? "User" : step.assignmentType === "ROUND_ROBIN" ? "Round Robin" : "Queue"
+        return step.assigneeName ? `${type}: ${step.assigneeName}` : type
+      }
+      // Legacy: read from path.action
       if (!path.action.assignmentType) return "Not configured"
       const type =
         path.action.assignmentType === "USER"
@@ -230,6 +331,30 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
         ? `${type}: ${state.defaultOwner.assigneeName}`
         : type
     }
+    case "split": {
+      const pathCount = state.paths.length
+      return `${pathCount} path${pathCount !== 1 ? "s" : ""}`
+    }
+    case "updateField": {
+      if (node.pathId && node.stepIndex !== undefined) {
+        const path = state.paths.find((p) => p.id === node.pathId)
+        const step = path?.steps?.[node.stepIndex]
+        if (step?.type === "updateField" && step.fieldApiName) {
+          return `${step.fieldApiName} = ${step.fieldValue || "…"}`
+        }
+      }
+      return "Not configured"
+    }
+    case "createTask": {
+      if (node.pathId && node.stepIndex !== undefined) {
+        const path = state.paths.find((p) => p.id === node.pathId)
+        const step = path?.steps?.[node.stepIndex]
+        if (step?.type === "createTask" && step.subject) {
+          return step.subject
+        }
+      }
+      return "Not configured"
+    }
   }
 }
 
@@ -240,14 +365,29 @@ interface EdgeProps {
   toNode: CanvasNode
 }
 
+const SPLIT_H = 32  // height of the split pill node
+
 function Edge({ fromNode, toNode }: EdgeProps) {
-  const sx = fromNode.x + NODE_WIDTH / 2
-  const sy = fromNode.y + NODE_HEIGHT
-  const tx = toNode.x + NODE_WIDTH / 2
+  const fromW = fromNode.type === "split" ? SPLIT_W : NODE_WIDTH
+  const fromH = fromNode.type === "split" ? SPLIT_H : NODE_HEIGHT
+  const toW = toNode.type === "split" ? SPLIT_W : NODE_WIDTH
+
+  const sx = fromNode.x + fromW / 2
+  const sy = fromNode.y + fromH
+  const tx = toNode.x + toW / 2
   const ty = toNode.y
-  const cp1y = sy + 60
-  const cp2y = ty - 60
-  const d = `M ${sx} ${sy} C ${sx} ${cp1y}, ${tx} ${cp2y}, ${tx} ${ty}`
+
+  // Right-angle elbows instead of Bezier curves
+  let d: string
+  if (sx === tx) {
+    // Straight vertical line
+    d = `M ${sx} ${sy} L ${tx} ${ty}`
+  } else {
+    // Right-angle elbow: down to midpoint, horizontal, then down
+    const midY = (sy + ty) / 2
+    d = `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`
+  }
+
   return (
     <path
       d={d}
@@ -255,6 +395,7 @@ function Edge({ fromNode, toNode }: EdgeProps) {
       strokeWidth={2}
       fill="none"
       strokeLinecap="round"
+      strokeDasharray="6 4"
     />
   )
 }
@@ -363,44 +504,79 @@ function CanvasNodeCard({
 // ─── Canvas initialisation from existing state ───────────────────────────────
 //
 // Builds nodes from the loaded route data (no-op for new routes with no paths).
+// V2: supports multi-step branches via path.steps[].
 //
 function buildNodesFromState(initialState?: Partial<RouteBuilderState>): CanvasNode[] {
-  const hasTrigger = !!initialState?.trigger
-  const hasSearchTrigger = !!initialState?.searchTrigger
+  // Migrate state to ensure all paths have steps[]
+  const migrated = initialState ? migrateStateToV2(initialState as RouteBuilderState) : null
+  const hasTrigger = !!migrated?.trigger
+  const hasSearchTrigger = !!migrated?.searchTrigger
   const bothTriggers = hasTrigger && hasSearchTrigger
   const nodes: CanvasNode[] = []
+  const GAP_Y = 110
+  const BRANCH_HEADER_GAP = 44
+
+  const centerX = 400
 
   if (hasTrigger) {
-    nodes.push({ id: "trigger", type: "trigger", x: bothTriggers ? 180 : 300, y: 120 })
+    nodes.push({ id: "trigger", type: "trigger", x: bothTriggers ? centerX - NODE_WIDTH - 20 : centerX - NODE_WIDTH / 2, y: 120 })
   }
   if (hasSearchTrigger) {
-    nodes.push({ id: "searchTrigger", type: "searchTrigger", x: bothTriggers ? 440 : 300, y: 120 })
+    nodes.push({ id: "searchTrigger", type: "searchTrigger", x: bothTriggers ? centerX + 20 : centerX - NODE_WIDTH / 2, y: 120 })
   }
-  const matchConfig = initialState?.matchConfig
-  const paths = initialState?.paths ?? []
-  const defaultOwner = initialState?.defaultOwner
 
-  let splitY = 120
+  const matchConfig = migrated?.matchConfig
+  const paths = migrated?.paths ?? []
+  const defaultOwner = migrated?.defaultOwner
+
+  let y = 120
+  if (hasTrigger || hasSearchTrigger) y += GAP_Y
+
   if (matchConfig) {
-    splitY += 140
-    nodes.push({ id: "match", type: "match", x: 300, y: splitY })
+    nodes.push({ id: "match", type: "match", x: centerX - NODE_WIDTH / 2, y })
+    y += GAP_Y
   }
 
   if (paths.length > 0) {
-    const filterY = splitY + 140
-    paths.forEach((path, i) => {
-      const filterX = 300 + i * FILTER_GAP
-      nodes.push({ id: `path-filter-${i}`, type: "filter", x: filterX, y: filterY, pathId: path.id })
-      nodes.push({ id: `path-assign-${i}`, type: "assign", x: filterX, y: filterY + 140, pathId: path.id })
+    // Auto-insert split node only when there are multiple paths
+    if (paths.length > 1) {
+      nodes.push({ id: "split", type: "split", x: centerX - SPLIT_W / 2, y })
+      y += 80
+    }
+
+    const pc = paths.length
+    const totalW = pc * NODE_WIDTH + (pc - 1) * (FILTER_GAP - NODE_WIDTH)
+    const startX = centerX - totalW / 2
+    let maxBot = y
+
+    paths.forEach((path, pi) => {
+      const px = startX + pi * FILTER_GAP
+      const steps = path.steps ?? []
+      let sy = y + BRANCH_HEADER_GAP
+
+      steps.forEach((step, si) => {
+        const nodeType = step.type as CanvasNodeType
+        nodes.push({
+          id: `s_${path.id}_${si}`,
+          type: nodeType,
+          x: px,
+          y: sy,
+          pathId: path.id,
+          stepIndex: si,
+        })
+        sy += STEP_GAP_Y
+      })
+
+      maxBot = Math.max(maxBot, sy)
     })
+
+    y = maxBot + 60
+
     if (defaultOwner) {
-      const avgX = Math.round(
-        paths.reduce((sum, _, i) => sum + 300 + i * FILTER_GAP, 0) / paths.length
-      )
-      nodes.push({ id: "defaultOwner", type: "defaultOwner", x: avgX, y: filterY + 280 })
+      nodes.push({ id: "defaultOwner", type: "defaultOwner", x: centerX - NODE_WIDTH / 2, y })
     }
   } else if (defaultOwner) {
-    nodes.push({ id: "defaultOwner", type: "defaultOwner", x: 300, y: splitY + 140 })
+    nodes.push({ id: "defaultOwner", type: "defaultOwner", x: centerX - NODE_WIDTH / 2, y })
   }
 
   return nodes
@@ -419,14 +595,18 @@ export function RouteBuilder({
 
   // ── Builder state (the source of truth for the route data) ─────────────────
   const base = defaultBuilderState()
-  const [state, setState] = useState<RouteBuilderState>(() => ({
-    ...base,
-    ...initialState,
-    trigger: initialState?.trigger
-      ? { ...defaultTriggerConfig(), ...initialState.trigger }
-      : null,
-    paths: initialState?.paths ?? base.paths,
-  }))
+  const [state, setState] = useState<RouteBuilderState>(() => {
+    const merged: RouteBuilderState = {
+      ...base,
+      ...initialState,
+      trigger: initialState?.trigger
+        ? { ...defaultTriggerConfig(), ...initialState.trigger }
+        : null,
+      paths: initialState?.paths ?? base.paths,
+    }
+    // Migrate all paths to V2 (ensure steps[] is populated)
+    return migrateStateToV2(merged)
+  })
 
   const [savedState, setSavedState] = useState<RouteBuilderState>(state)
   const [internalIsSaving, setInternalIsSaving] = useState(false)
@@ -510,6 +690,65 @@ export function RouteBuilder({
   // ── Sheet state ─────────────────────────────────────────────────────────────
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null)
   const closeSheet = useCallback(() => setActiveSheet(null), [])
+
+  // ── "Add Step" dropdown state ──────────────────────────────────────────────
+  const [addStepDropdown, setAddStepDropdown] = useState<{
+    pathId: string
+    x: number
+    y: number
+  } | null>(null)
+
+  // ── Step management helpers ────────────────────────────────────────────────
+
+  function createDefaultStep(type: PathStepType): PathStep {
+    switch (type) {
+      case "filter":
+        return { type: "filter", conditions: [] }
+      case "updateField":
+        return { type: "updateField", fieldApiName: "", fieldValue: "" }
+      case "createTask":
+        return {
+          type: "createTask",
+          subject: "",
+          priority: "Normal",
+          status: "Not Started",
+          dueDateOffset: null,
+          description: "",
+        }
+      case "assign":
+        return {
+          type: "assign",
+          assignmentType: null,
+          assigneeId: null,
+          assigneeName: null,
+        }
+    }
+  }
+
+  function handleAddStepToPath(pathId: string, stepType: PathStepType) {
+    setState((prev) => {
+      const newState = {
+        ...prev,
+        paths: prev.paths.map((p) => {
+          if (p.id !== pathId) return p
+          const steps = [...(p.steps ?? [])]
+          const newStep = createDefaultStep(stepType)
+          // Insert before the last assign step (unless adding an assign)
+          const lastAssignIdx = steps.findLastIndex((s) => s.type === "assign")
+          if (lastAssignIdx >= 0 && stepType !== "assign") {
+            steps.splice(lastAssignIdx, 0, newStep)
+          } else {
+            steps.push(newStep)
+          }
+          return { ...p, steps }
+        }),
+      }
+      // Rebuild canvas nodes from updated state
+      setNodes(buildNodesFromState(newState))
+      return newState
+    })
+    setAddStepDropdown(null)
+  }
 
   // ── Drag state (node repositioning inside canvas) ───────────────────────────
   const dragRef = useRef<{
@@ -721,6 +960,10 @@ export function RouteBuilder({
     if (!node) return
     if ((node.type === "filter" || node.type === "assign") && node.pathId) {
       setActiveSheet({ type: node.type, nodeId: node.id, pathId: node.pathId })
+    } else if (node.type === "updateField" && node.pathId && node.stepIndex !== undefined) {
+      setActiveSheet({ type: "updateField", nodeId: node.id, pathId: node.pathId, stepIndex: node.stepIndex })
+    } else if (node.type === "createTask" && node.pathId && node.stepIndex !== undefined) {
+      setActiveSheet({ type: "createTask", nodeId: node.id, pathId: node.pathId, stepIndex: node.stepIndex })
     } else if (node.type === "trigger" || node.type === "searchTrigger" || node.type === "match" || node.type === "defaultOwner") {
       setActiveSheet({ type: node.type, nodeId: node.id })
     }
@@ -743,12 +986,9 @@ export function RouteBuilder({
     e.dataTransfer.dropEffect = "copy"
   }, [])
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      const stepType = e.dataTransfer.getData("stepType") as CanvasNodeType | ""
-      if (!stepType) return
-
+  // Shared logic for adding a step to the canvas (used by both drag-drop and click)
+  const addStepToCanvas = useCallback(
+    (stepType: CanvasNodeType) => {
       const newId = `${stepType}-${Date.now()}`
 
       // ── Real-Time Trigger: singleton ──────────────────────────────────────────
@@ -841,45 +1081,36 @@ export function RouteBuilder({
 
       // ── Filter step: creates a new path column (filter + assign pair) ───────
       if (stepType === "filter") {
-        const existingFilterNodes = nodes.filter((n) => n.type === "filter")
-        const splitCandidates = nodes.filter((n) => n.type === "trigger" || n.type === "match")
-        const splitNode = splitCandidates[splitCandidates.length - 1] ?? nodes[0]
-        if (!splitNode) return
-
-        // All filter nodes share the same Y; new one placed to the right
-        const filterY =
-          existingFilterNodes.length > 0
-            ? existingFilterNodes[0].y
-            : splitNode.y + 140
-        const filterX =
-          existingFilterNodes.length > 0
-            ? Math.max(...existingFilterNodes.map((n) => n.x)) + FILTER_GAP
-            : splitNode.x
-
         const newPathId = crypto.randomUUID()
-        const pathLabel = `Path ${String.fromCharCode(65 + existingFilterNodes.length)}`
-        const filterId = `filter-${Date.now()}`
-        const assignId = `assign-${Date.now() + 1}`
+        const pathNames = ['Path A','Path B','Path C','Path D','Path E','Path F','Path G']
+        const pathLabel = pathNames[state.paths.length] || `Path ${state.paths.length + 1}`
 
-        const newFilter: CanvasNode = { id: filterId, type: "filter", x: filterX, y: filterY, pathId: newPathId }
-        const newAssign: CanvasNode = { id: assignId, type: "assign", x: filterX, y: filterY + 140, pathId: newPathId }
-
-        // Insert filter+assign before any defaultOwner node
-        setNodes((prev) => {
-          const defaults = prev.filter((n) => n.type === "defaultOwner")
-          const rest = prev.filter((n) => n.type !== "defaultOwner")
-          return [...rest, newFilter, newAssign, ...defaults]
+        setState((s) => {
+          const newState = {
+            ...s,
+            paths: [
+              ...s.paths,
+              {
+                id: newPathId,
+                label: pathLabel,
+                conditions: [],
+                action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                steps: [
+                  { type: 'filter' as const, conditions: [] as ConditionGroup[] },
+                  { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
+                ],
+              },
+            ],
+          }
+          // Rebuild all nodes from V2 state so split node, branch headers, etc. render correctly
+          setNodes(buildNodesFromState(newState))
+          return newState
         })
 
-        setState((s) => ({
-          ...s,
-          paths: [
-            ...s.paths,
-            { id: newPathId, label: pathLabel, conditions: [], action: { assignmentType: null, assigneeId: null, assigneeName: null } },
-          ],
-        }))
-
-        setActiveSheet({ type: "filter", nodeId: filterId, pathId: newPathId })
+        // Open the filter config for the first step of the new path
+        setTimeout(() => {
+          setActiveSheet({ type: "filter", nodeId: `s_${newPathId}_0`, pathId: newPathId })
+        }, 0)
         return
       }
 
@@ -907,8 +1138,48 @@ export function RouteBuilder({
         setActiveSheet({ type: "defaultOwner", nodeId: newId })
         return
       }
+
+      // ── Update Field / Create Task: add as a step to the first path (or create one) ──
+      if (stepType === "updateField" || stepType === "createTask") {
+        if (state.paths.length === 0) {
+          // No paths yet — create one with this step + assign
+          const newPathId = crypto.randomUUID()
+          setState((s) => {
+            const newState = {
+              ...s,
+              paths: [{
+                id: newPathId,
+                label: "Path A",
+                conditions: [],
+                action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                steps: [
+                  { type: 'filter' as const, conditions: [] as ConditionGroup[] },
+                  createDefaultStep(stepType),
+                  { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
+                ],
+              }],
+            }
+            setNodes(buildNodesFromState(newState))
+            return newState
+          })
+        } else {
+          // Add to the first path
+          handleAddStepToPath(state.paths[0].id, stepType as PathStepType)
+        }
+        return
+      }
     },
-    [nodes]
+    [nodes, state.paths]
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      const stepType = e.dataTransfer.getData("stepType") as CanvasNodeType | ""
+      if (!stepType) return
+      addStepToCanvas(stepType)
+    },
+    [addStepToCanvas]
   )
 
   // ── Delete a node ─────────────────────────────────────────────────────────────
@@ -955,9 +1226,29 @@ export function RouteBuilder({
       return
     }
 
+    // V2 step nodes (with stepIndex): remove step from path.steps[] and rebuild canvas
+    if (node.stepIndex !== undefined && node.pathId) {
+      const pathId = node.pathId
+      const stepIdx = node.stepIndex
+      setState((s) => {
+        const newPaths = s.paths.map((p) => {
+          if (p.id !== pathId || !p.steps) return p
+          const newSteps = p.steps.filter((_, i) => i !== stepIdx)
+          return { ...p, steps: newSteps }
+        }).filter((p) => (p.steps?.length ?? 0) > 0) // remove empty paths
+        return { ...s, paths: newPaths }
+      })
+      // Rebuild nodes from updated state
+      setState((s) => {
+        setNodes(buildNodesFromState(s))
+        return s
+      })
+      return
+    }
+
     if (node.type === "filter") {
       const { pathId } = node
-      // Remove this filter AND its paired assign
+      // Remove this filter AND its paired assign (legacy layout)
       setNodes((prev) => prev.filter((n) => n.id !== nodeId && n.pathId !== pathId))
       if (pathId) {
         setState((s) => ({ ...s, paths: s.paths.filter((p) => p.id !== pathId) }))
@@ -979,6 +1270,9 @@ export function RouteBuilder({
       }
       return
     }
+
+    // Split node is auto-inserted; ignore delete
+    if (node.type === "split") return
 
     if (node.type === "defaultOwner") {
       setNodes((prev) => prev.filter((n) => n.id !== nodeId))
@@ -1159,7 +1453,10 @@ export function RouteBuilder({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onWheel={handleWheel}
-          onMouseDown={handleCanvasPanStart}
+          onMouseDown={(e) => {
+            setAddStepDropdown(null)
+            handleCanvasPanStart(e)
+          }}
         >
           <div
             className="relative"
@@ -1200,10 +1497,36 @@ export function RouteBuilder({
 
             {/* Nodes */}
             {nodes.map((node) => {
+              // Split node renders as a small pill, not a full card
+              if (node.type === "split") {
+                return (
+                  <div
+                    key={node.id}
+                    data-canvas-node
+                    style={{
+                      position: "absolute",
+                      left: node.x,
+                      top: node.y,
+                      width: SPLIT_W,
+                      zIndex: 10,
+                    }}
+                    className="flex items-center justify-center gap-1.5 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400"
+                  >
+                    <GitBranch className="size-3" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider">
+                      {state.paths.length} path{state.paths.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )
+              }
+
+              // Show path label on filter nodes (legacy) or on the first step of a branch (V2)
               const pathLabel =
-                node.type === "filter"
+                node.type === "filter" && node.stepIndex === undefined
                   ? (state.paths.find((p) => p.id === node.pathId)?.label ?? "Filter")
-                  : undefined
+                  : node.stepIndex === 0 && node.pathId
+                    ? (state.paths.find((p) => p.id === node.pathId)?.label ?? undefined)
+                    : undefined
 
               return (
                 <CanvasNodeCard
@@ -1220,7 +1543,8 @@ export function RouteBuilder({
                   onClick={handleNodeClick}
                   onDelete={handleDeleteNode}
                   onTitleChange={
-                    node.type === "filter" && node.pathId
+                    (node.type === "filter" && node.pathId && node.stepIndex === undefined) ||
+                    (node.stepIndex === 0 && node.pathId)
                       ? (newLabel) =>
                           setState((s) => ({
                             ...s,
@@ -1233,6 +1557,196 @@ export function RouteBuilder({
                 />
               )
             })}
+
+            {/* Branch headers — editable name + delete button per branch */}
+            {state.paths.length > 0 && state.paths.map((path) => {
+              const branchNodes = nodes
+                .filter((n) => n.pathId === path.id && n.stepIndex !== undefined)
+                .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
+              const firstNode = branchNodes[0]
+              if (!firstNode) return null
+              return (
+                <div
+                  key={`header-${path.id}`}
+                  data-canvas-node
+                  style={{
+                    position: "absolute",
+                    left: firstNode.x,
+                    top: firstNode.y - 36,
+                    width: NODE_WIDTH,
+                    zIndex: 15,
+                  }}
+                  className="flex items-center justify-between px-2"
+                >
+                  <span
+                    contentEditable
+                    suppressContentEditableWarning
+                    className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground cursor-text px-1.5 py-0.5 rounded border border-transparent hover:border-border hover:bg-muted/50 focus:border-primary focus:bg-background outline-none"
+                    onBlur={(e) => {
+                      const newName = (e.target as HTMLElement).textContent?.trim()
+                      if (newName) {
+                        setState(prev => ({
+                          ...prev,
+                          paths: prev.paths.map(p => p.id === path.id ? { ...p, label: newName } : p)
+                        }))
+                      }
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur() } }}
+                  >
+                    {path.label}
+                  </span>
+                  {state.paths.length > 1 && (
+                    <button
+                      type="button"
+                      className="size-5 rounded flex items-center justify-center text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setState(prev => ({
+                          ...prev,
+                          paths: prev.paths.filter(p => p.id !== path.id)
+                        }))
+                      }}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* "Add Step" buttons — full-width dashed card per branch */}
+            {state.paths.map((path) => {
+              const branchNodes = nodes
+                .filter((n) => n.pathId === path.id && n.stepIndex !== undefined)
+                .sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))
+              const lastNode = branchNodes[branchNodes.length - 1]
+              if (!lastNode) return null
+              return (
+                <button
+                  key={`add-step-${path.id}`}
+                  type="button"
+                  data-canvas-node
+                  style={{
+                    position: "absolute",
+                    left: lastNode.x,
+                    top: lastNode.y + NODE_HEIGHT + 16,
+                    width: NODE_WIDTH,
+                    zIndex: 15,
+                  }}
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border-2 border-dashed border-muted-foreground/20 text-muted-foreground/50 text-[11px] font-semibold hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setAddStepDropdown({
+                      pathId: path.id,
+                      x: lastNode.x,
+                      y: lastNode.y + NODE_HEIGHT + 64,
+                    })
+                  }}
+                >
+                  <span>+</span> Add Step
+                </button>
+              )
+            })}
+
+            {/* "Add Path" button — to the right of the last branch */}
+            {state.paths.length > 0 && (() => {
+              const splitNode = nodes.find(n => n.type === "split")
+              if (!splitNode) return null
+              const lastPath = state.paths[state.paths.length - 1]
+              const lastBranchNodes = nodes.filter(n => n.pathId === lastPath.id && n.stepIndex !== undefined)
+              const firstOfLast = lastBranchNodes.sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))[0]
+              if (!firstOfLast) return null
+              return (
+                <button
+                  key="add-path"
+                  type="button"
+                  data-canvas-node
+                  style={{
+                    position: "absolute",
+                    left: firstOfLast.x + FILTER_GAP,
+                    top: firstOfLast.y,
+                    zIndex: 15,
+                  }}
+                  className="flex items-center justify-center size-12 rounded-xl border-2 border-dashed border-muted-foreground/20 text-muted-foreground/40 text-xl hover:border-primary/40 hover:text-primary hover:bg-primary/5 bg-background transition-colors"
+                  title="Add Path"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const pathNames = ['Path A','Path B','Path C','Path D','Path E','Path F','Path G']
+                    const name = pathNames[state.paths.length] || `Path ${state.paths.length + 1}`
+                    setState(prev => {
+                      const newState = {
+                        ...prev,
+                        paths: [...prev.paths, {
+                          id: crypto.randomUUID(),
+                          label: name,
+                          conditions: [],
+                          action: { assignmentType: null, assigneeId: null, assigneeName: null },
+                          steps: [
+                            { type: 'filter' as const, conditions: [] as ConditionGroup[] },
+                            { type: 'assign' as const, assignmentType: null, assigneeId: null, assigneeName: null },
+                          ],
+                        }],
+                      }
+                      setNodes(buildNodesFromState(newState))
+                      return newState
+                    })
+                  }}
+                >
+                  +
+                </button>
+              )
+            })()}
+
+            {/* "Add Step" dropdown menu */}
+            {addStepDropdown && (
+              <div
+                data-canvas-node
+                style={{
+                  position: "absolute",
+                  left: addStepDropdown.x,
+                  top: addStepDropdown.y,
+                  zIndex: 60,
+                  width: 180,
+                }}
+                className="rounded-lg border bg-white dark:bg-[#1a1a24] shadow-lg p-1"
+              >
+                {(
+                  [
+                    { type: "filter" as PathStepType, label: "Filter", icon: Filter },
+                    { type: "updateField" as PathStepType, label: "Update Field", icon: Pencil },
+                    { type: "createTask" as PathStepType, label: "Create Task", icon: ClipboardList },
+                    { type: "assign" as PathStepType, label: "Assignment", icon: UserCheck },
+                  ] as const
+                ).map((item) => {
+                  const ItemIcon = item.icon
+                  return (
+                    <button
+                      key={item.type}
+                      type="button"
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors text-left"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAddStepToPath(addStepDropdown.pathId, item.type)
+                      }}
+                    >
+                      <ItemIcon className="size-3.5 text-muted-foreground" />
+                      {item.label}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:bg-muted transition-colors text-left mt-1 border-t pt-2"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setAddStepDropdown(null)
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── Zoom controls ──────────────────────────────────────────────── */}
@@ -1277,7 +1791,7 @@ export function RouteBuilder({
         </div>
 
         {/* Step registry panel */}
-        <StepRegistry activeTypes={activeTypes} />
+        <StepRegistry activeTypes={activeTypes} onAddStep={addStepToCanvas} />
         </>)}
 
         {/* ── Run panel (slides in from right over canvas) ───────────────────── */}
@@ -1384,6 +1898,73 @@ export function RouteBuilder({
           setState((s) => ({
             ...s,
             paths: s.paths.map((p) => (p.id === pathId ? { ...p, action } : p)),
+          }))
+        }}
+      />
+
+      {/* Update Field sheet */}
+      <UpdateFieldConfigSheet
+        key={activeSheet?.type === "updateField" ? `uf-${activeSheet.pathId}-${activeSheet.stepIndex}` : "uf-closed"}
+        open={activeSheet?.type === "updateField"}
+        onOpenChange={(open) => !open && closeSheet()}
+        fieldApiName={
+          activeSheet?.type === "updateField"
+            ? ((state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldApiName: string } | undefined)?.fieldApiName ?? "")
+            : ""
+        }
+        fieldValue={
+          activeSheet?.type === "updateField"
+            ? ((state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldValue: string } | undefined)?.fieldValue ?? "")
+            : ""
+        }
+        fields={[]}
+        onSave={(fieldApiName: string, fieldValue: string) => {
+          if (activeSheet?.type !== "updateField") return
+          const { pathId, stepIndex } = activeSheet
+          setState((s) => ({
+            ...s,
+            paths: s.paths.map((p) => {
+              if (p.id !== pathId || !p.steps) return p
+              const newSteps = [...p.steps]
+              newSteps[stepIndex] = { type: "updateField", fieldApiName, fieldValue }
+              return { ...p, steps: newSteps }
+            }),
+          }))
+        }}
+      />
+
+      {/* Create Task sheet */}
+      <CreateTaskConfigSheet
+        key={activeSheet?.type === "createTask" ? `ct-${activeSheet.pathId}-${activeSheet.stepIndex}` : "ct-closed"}
+        open={activeSheet?.type === "createTask"}
+        onOpenChange={(open) => !open && closeSheet()}
+        config={
+          activeSheet?.type === "createTask"
+            ? (() => {
+                const step = state.paths.find((p) => p.id === activeSheet.pathId)?.steps?.[activeSheet.stepIndex]
+                if (step?.type === "createTask") return { subject: step.subject, priority: step.priority, status: step.status, dueDateOffset: step.dueDateOffset, description: step.description }
+                return { subject: "", priority: "Normal", status: "Not Started", dueDateOffset: null, description: "" }
+              })()
+            : { subject: "", priority: "Normal", status: "Not Started", dueDateOffset: null, description: "" }
+        }
+        onSave={(config) => {
+          if (activeSheet?.type !== "createTask") return
+          const { pathId, stepIndex } = activeSheet
+          setState((s) => ({
+            ...s,
+            paths: s.paths.map((p) => {
+              if (p.id !== pathId || !p.steps) return p
+              const newSteps = [...p.steps]
+              newSteps[stepIndex] = {
+                type: "createTask",
+                subject: config.subject,
+                priority: config.priority as "High" | "Normal" | "Low",
+                status: config.status as "Not Started" | "In Progress" | "Completed",
+                dueDateOffset: config.dueDateOffset,
+                description: config.description,
+              }
+              return { ...p, steps: newSteps }
+            }),
           }))
         }}
       />

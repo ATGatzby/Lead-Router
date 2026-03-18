@@ -233,7 +233,7 @@ async function resolveBranchAssignee(branch: CachedBranch, orgId: string): Promi
 
 // ─── Match step helpers ───────────────────────────────────────────────────
 
-interface MatchResult {
+export interface MatchResult {
   type: "LEAD" | "CONTACT" | "ACCOUNT";
   ownerId: string;   // SFDC OwnerId of the matched record
   recordId: string;  // SFDC Id of the matched record
@@ -243,7 +243,7 @@ interface MatchResult {
  * Find a matching Salesforce record (Lead / Contact / Account) for the incoming record.
  * Returns null if no match found.
  */
-async function runMatcher(
+export async function runMatcher(
   fields: Record<string, unknown>,
   matchConfig: CachedMatchConfig,
   conn: any,
@@ -890,6 +890,60 @@ async function routeNewStyle(
 
     if (evalResult.matched) {
       ruleTrace.outcome = "MATCHED";
+
+      // ── Multi-step branch execution ──
+      if (branch.steps && branch.steps.length > 0) {
+        for (const step of branch.steps) {
+          switch (step.type) {
+            case "filter":
+              // Filter conditions already evaluated to match this branch — skip
+              continue;
+            case "updateField":
+              if (!rule.isDryRun) {
+                try {
+                  const sObjectName = toSfdcObjectName(objectType);
+                  const stepConn = await getOrgConnection(orgId);
+                  await stepConn
+                    .sobject(sObjectName)
+                    .update({ Id: recordId, [step.fieldApiName as string]: step.fieldValue });
+                } catch (err) {
+                  console.error(`[router] UPDATE_FIELD step failed for ${recordId}:`, err);
+                }
+              }
+              continue;
+            case "createTask":
+              if (!rule.isDryRun) {
+                try {
+                  const stepConn = await getOrgConnection(orgId);
+                  const taskData: Record<string, unknown> = {
+                    Subject: step.subject,
+                    Priority: (step.priority as string) ?? "Normal",
+                    Status: (step.status as string) ?? "Not Started",
+                    Description: (step.description as string) ?? "",
+                  };
+                  if (objectType === "LEAD" || objectType === "CONTACT") {
+                    taskData.WhoId = recordId;
+                  } else {
+                    taskData.WhatId = recordId;
+                  }
+                  if (step.dueDateOffset) {
+                    const due = new Date();
+                    due.setDate(due.getDate() + Number(step.dueDateOffset));
+                    taskData.ActivityDate = due.toISOString().split("T")[0];
+                  }
+                  await stepConn.sobject("Task").create(taskData);
+                } catch (err) {
+                  console.error(`[router] CREATE_TASK step failed for ${recordId}:`, err);
+                }
+              }
+              continue;
+            case "assign":
+              // Handled by existing assignment logic below
+              break;
+          }
+        }
+      }
+
       const assignee = await resolveBranchAssignee(branch, orgId);
       if (!assignee) continue; // branch has no eligible assignee, try next
 

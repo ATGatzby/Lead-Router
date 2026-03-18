@@ -15,6 +15,7 @@ interface BranchInput {
   assigneeUserId?: string | null;
   assigneeTeamId?: string | null;
   assigneeQueueId?: string | null;
+  steps?: any;
   conditions: Array<{
     groupId: string;
     fieldName: string;
@@ -289,6 +290,7 @@ export async function POST(req: NextRequest) {
             assigneeUserId: b.assignmentType === "USER" ? (b.assigneeUserId ?? null) : null,
             assigneeTeamId: b.assignmentType === "ROUND_ROBIN" ? (b.assigneeTeamId ?? null) : null,
             assigneeQueueId: b.assignmentType === "QUEUE" ? (b.assigneeQueueId ?? null) : null,
+            steps: b.steps ?? undefined,
             conditions: {
               create: b.conditions.map((c, ci) => ({
                 groupId: c.groupId,

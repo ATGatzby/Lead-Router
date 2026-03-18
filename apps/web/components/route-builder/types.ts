@@ -45,6 +45,7 @@ export interface RoutePath {
   label: string
   conditions: ConditionGroup[]
   action: PathAction
+  steps?: PathStep[]  // V2 multi-step branches; if present, overrides conditions + action
 }
 
 export interface DefaultOwner {
@@ -73,6 +74,38 @@ export interface TriggerConfig {
   isDryRun: boolean
   triggerConditions: ConditionGroup[]
 }
+
+// ─── Multi-step branch types ──────────────────────────────────────────────
+export type PathStepType = "filter" | "updateField" | "createTask" | "assign"
+
+export interface PathStepFilter {
+  type: "filter"
+  conditions: ConditionGroup[]
+}
+
+export interface PathStepUpdateField {
+  type: "updateField"
+  fieldApiName: string
+  fieldValue: string
+}
+
+export interface PathStepCreateTask {
+  type: "createTask"
+  subject: string
+  priority: "High" | "Normal" | "Low"
+  status: "Not Started" | "In Progress" | "Completed"
+  dueDateOffset: number | null
+  description: string
+}
+
+export interface PathStepAssign {
+  type: "assign"
+  assignmentType: AssignmentType | null
+  assigneeId: string | null
+  assigneeName: string | null
+}
+
+export type PathStep = PathStepFilter | PathStepUpdateField | PathStepCreateTask | PathStepAssign
 
 export interface RouteBuilderState {
   name: string
@@ -127,4 +160,28 @@ export function defaultBuilderState(): RouteBuilderState {
 /** Resolve the active object type from whichever trigger is present */
 export function resolveObjectType(state: RouteBuilderState): ObjectType {
   return state.trigger?.objectType ?? state.searchTrigger?.objectType ?? "LEAD"
+}
+
+/** Convert legacy RoutePath (conditions + action) to V2 with steps[] */
+export function migratePathToSteps(path: RoutePath): PathStep[] {
+  return [
+    { type: "filter", conditions: path.conditions },
+    {
+      type: "assign",
+      assignmentType: path.action.assignmentType,
+      assigneeId: path.action.assigneeId,
+      assigneeName: path.action.assigneeName
+    },
+  ]
+}
+
+/** Ensure all paths have steps[] populated */
+export function migrateStateToV2(state: RouteBuilderState): RouteBuilderState {
+  return {
+    ...state,
+    paths: state.paths.map(p => ({
+      ...p,
+      steps: p.steps ?? migratePathToSteps(p),
+    })),
+  }
 }

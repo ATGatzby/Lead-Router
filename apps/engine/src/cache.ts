@@ -19,6 +19,10 @@ export interface CachedBranch {
     operator: string;
     value: string | null;
   }>;
+  steps?: Array<{
+    type: "filter" | "updateField" | "createTask" | "assign";
+    [key: string]: unknown;
+  }>;
 }
 
 export interface CachedMatchConfig {
@@ -164,6 +168,9 @@ async function loadRulesFromDB(orgId: string, objectType: string): Promise<void>
         operator: c.operator,
         value: c.value,
       })),
+      steps: (b as any).steps
+        ? (Array.isArray((b as any).steps) ? (b as any).steps : JSON.parse(String((b as any).steps))) as CachedBranch["steps"]
+        : undefined,
     })),
     matchConfig: r.matchConfig
       ? {
