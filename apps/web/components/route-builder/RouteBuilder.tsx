@@ -1524,12 +1524,8 @@ export function RouteBuilder({
 
   // ── Derived values ────────────────────────────────────────────────────────────
   const activeTypes = nodes.map((n) => n.type)
-  const minX = nodes.reduce((m, n) => Math.min(m, n.x), 0)
-  const minY = nodes.reduce((m, n) => Math.min(m, n.y), 0)
   const maxX = nodes.reduce((m, n) => Math.max(m, n.x + NODE_WIDTH + 100), 800)
   const maxY = nodes.reduce((m, n) => Math.max(m, n.y + NODE_HEIGHT + 100), 600)
-  const svgW = maxX - minX + 200
-  const svgH = maxY - minY + 200
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   useEffect(() => {
@@ -1704,14 +1700,14 @@ export function RouteBuilder({
               height: "100%",
             }}
           >
-            {/* SVG overlay for edges — covers full node range including negative coords */}
+            {/* SVG overlay for edges */}
             <svg
               style={{
                 position: "absolute",
-                top: minY - 50,
-                left: minX - 50,
-                width: svgW,
-                height: svgH,
+                top: 0,
+                left: 0,
+                width: maxX,
+                height: maxY,
                 pointerEvents: "none",
                 zIndex: 1,
                 overflow: "visible",
