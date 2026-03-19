@@ -45,7 +45,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       {
         href: "/routing-rules",
-        label: "Routing Rules",
+        label: "Route Workflows",
         icon: ArrowRightLeft,
       },
 { href: "/activity", label: "Activity", icon: History },
