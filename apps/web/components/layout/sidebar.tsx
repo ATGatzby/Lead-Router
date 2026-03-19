@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   Users,
   GitFork,
-  GitBranch,
   ArrowRightLeft,
   History,
   Settings,
@@ -49,8 +48,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Routing Rules",
         icon: ArrowRightLeft,
       },
-      { href: "/flow-builder/LEAD", label: "Flow Builder", icon: GitBranch, badge: "New" },
-      { href: "/activity", label: "Activity", icon: History },
+{ href: "/activity", label: "Activity", icon: History },
     ],
   },
   {
