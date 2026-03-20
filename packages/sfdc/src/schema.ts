@@ -1,7 +1,7 @@
 import type { Connection } from "jsforce";
 import { prisma } from "@lead-routing/db";
 
-type SfdcObjectType = "Lead" | "Contact" | "Account";
+type SfdcObjectType = "Lead" | "Contact" | "Account" | "User";
 
 /** Map jsforce field type strings to our internal FieldType enum values */
 function mapSfdcType(type: string): string {
