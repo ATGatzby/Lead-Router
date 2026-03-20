@@ -1,8 +1,16 @@
-import { intro, outro, text, log } from '@clack/prompts'
+import { intro, outro, text, note, confirm, log, isCancel, cancel } from '@clack/prompts'
 import chalk from 'chalk'
+import { exec } from 'node:child_process'
+import { platform } from 'node:os'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { sfdcDeployInline } from '../steps/sfdc-deploy-inline.js'
-import { guideAppLauncherSetup } from '../steps/app-launcher-guide.js'
+
+const MANAGED_PACKAGE_INSTALL_URL = 'https://login.salesforce.com/packaging/installPackage.apexp?p0=04tgL000000CTnp'
+
+function openBrowser(url: string): void {
+  const cmd = platform() === 'darwin' ? 'open' : 'xdg-open'
+  exec(`${cmd} ${JSON.stringify(url)}`)
+}
 
 export async function runSfdcDeploy(): Promise<void> {
   intro('Lead Routing — Deploy Salesforce Package')
@@ -37,7 +45,32 @@ export async function runSfdcDeploy(): Promise<void> {
     engineUrl = (rawEngine as string).trim()
   }
 
-  // ── 2. Prompt for org alias ────────────────────────────────────────────────
+  // ── 2. Install managed package ─────────────────────────────────────────────
+  note(
+    'The Lead Router managed package installs the required Connected App,\n' +
+      'triggers, and custom objects in your Salesforce org.\n\n' +
+      `Install URL: ${chalk.cyan(MANAGED_PACKAGE_INSTALL_URL)}`,
+    'Salesforce Package'
+  )
+  log.info('Opening install URL in your browser...')
+  openBrowser(MANAGED_PACKAGE_INSTALL_URL)
+  log.info(chalk.dim("If the browser didn't open, visit the URL above manually."))
+
+  const installed = await confirm({
+    message: 'Have you installed the package? (Click "Install for All Users" in Salesforce)',
+    initialValue: false,
+  })
+  if (isCancel(installed)) {
+    cancel('Setup cancelled.')
+    process.exit(0)
+  }
+  if (!installed) {
+    log.warn('You can install the package later — routing will not work until it is installed.')
+  } else {
+    log.success('Salesforce package installed')
+  }
+
+  // ── 3. Prompt for org alias ────────────────────────────────────────────────
   const alias = await text({
     message: 'Salesforce org alias (used to log in)',
     placeholder: 'lead-routing',
@@ -46,7 +79,7 @@ export async function runSfdcDeploy(): Promise<void> {
   })
   if (typeof alias === 'symbol') process.exit(0)
 
-  // ── 3. Run shared deploy logic ─────────────────────────────────────────────
+  // ── 4. Run shared deploy logic ─────────────────────────────────────────────
   try {
     await sfdcDeployInline({
       appUrl,
@@ -59,9 +92,6 @@ export async function runSfdcDeploy(): Promise<void> {
     log.error(err instanceof Error ? err.message : String(err))
     process.exit(1)
   }
-
-  // ── 4. Interactive App Launcher wizard ─────────────────────────────────────
-  await guideAppLauncherSetup(appUrl)
 
   // ── Done ────────────────────────────────────────────────────────────────────
   outro(

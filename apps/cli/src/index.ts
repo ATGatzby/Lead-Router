@@ -9,6 +9,7 @@ import { runSfdcDeploy } from './commands/sfdc.js'
 import { runUninstall } from './commands/uninstall.js'
 import { runSignup } from './commands/signup.js'
 import { runLogin } from './commands/login.js'
+import { runDev } from './commands/dev.js'
 
 const program = new Command()
 
@@ -85,6 +86,14 @@ program
   .command('uninstall')
   .description('Stop all containers, remove all data, and delete the remote installation')
   .action(runUninstall)
+
+program
+  .command('dev')
+  .description('Start a local dev environment (Docker-based, no SSH required)')
+  .option('--reset', 'Wipe all local data and start fresh')
+  .option('--logs [service]', 'Stream logs from a service (web, engine, postgres, redis)')
+  .option('--sfdc', 'Update Salesforce Connected App credentials')
+  .action((opts: { reset?: boolean; logs?: string; sfdc?: boolean }) => runDev(opts))
 
 program
   .command('signup')

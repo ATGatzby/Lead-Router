@@ -4,6 +4,44 @@ import { getOrgIdFromHeaders, getActorFromHeaders, requireSession, requireRole }
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 import { buildMatchConfigData } from "@/app/api/rules/route";
+import { SalesforceApi } from "@lead-routing/sfdc";
+
+const SFDC_API_VERSION = "v59.0";
+
+/**
+ * Delete all Route_Criteria__c records for a given ruleId from Salesforce.
+ * Fire-and-forget: errors are swallowed — a stale orphan row has no routing impact
+ * (the rule is already gone from the engine cache) but cleaning up is best practice.
+ */
+async function deleteSfdcCriteria(orgId: string, ruleId: string): Promise<void> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { sfdcInstanceUrl: true, oauthAccessToken: true },
+    });
+    if (!org?.sfdcInstanceUrl || !org.oauthAccessToken) return;
+
+    const sfApi = new SalesforceApi(org.sfdcInstanceUrl, org.oauthAccessToken);
+    const existing = await sfApi.query<{ Id: string }>(
+      `SELECT Id FROM Route_Criteria__c WHERE Rule_Id__c = '${ruleId}'`
+    );
+    if (existing.length === 0) return;
+
+    for (let i = 0; i < existing.length; i += 25) {
+      const batch = existing.slice(i, i + 25);
+      await sfApi.composite(
+        batch.map((rec, idx) => ({
+          method: "DELETE" as const,
+          url: `/services/data/${SFDC_API_VERSION}/sobjects/Route_Criteria__c/${rec.Id}`,
+          referenceId: `del_criteria_${i + idx}`,
+        }))
+      );
+    }
+  } catch {
+    // Non-critical: orphaned Route_Criteria__c rows won't cause wrong routing
+    // because the engine cache no longer has this rule.
+  }
+}
 
 // GET /api/rules/:id — full rule detail with conditions and branches
 export async function GET(
@@ -274,6 +312,9 @@ export async function DELETE(
     }
 
     await prisma.routingRule.delete({ where: { id } });
+
+    // Clean up Route_Criteria__c records from Salesforce (fire-and-forget)
+    deleteSfdcCriteria(orgId, id).catch(() => {});
 
     await prisma.auditLog.create({
       data: {
