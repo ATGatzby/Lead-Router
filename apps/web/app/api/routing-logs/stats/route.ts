@@ -47,13 +47,13 @@ export async function GET(req: NextRequest) {
       orderBy: { _count: { id: "desc" } },
     });
 
-    // Pivot by assigneeName → { LEAD, CONTACT, ACCOUNT, total }
-    const statsMap = new Map<string, { LEAD: number; CONTACT: number; ACCOUNT: number; total: number }>();
+    // Pivot by assigneeName → { LEAD, CONTACT, ACCOUNT, USER, total }
+    const statsMap = new Map<string, { LEAD: number; CONTACT: number; ACCOUNT: number; USER: number; total: number }>();
 
     for (const row of rows) {
       const name = row.assigneeName!;
       if (!statsMap.has(name)) {
-        statsMap.set(name, { LEAD: 0, CONTACT: 0, ACCOUNT: 0, total: 0 });
+        statsMap.set(name, { LEAD: 0, CONTACT: 0, ACCOUNT: 0, USER: 0, total: 0 });
       }
       const entry = statsMap.get(name)!;
       const count = row._count.id;
