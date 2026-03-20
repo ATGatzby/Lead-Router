@@ -16,8 +16,8 @@ const FREE_LIMITS: TierLimits = {
   maxOrgs: 1,
   maxSeats: 3,
   allowedTriggers: ["LEAD"],
-  weightedDistribution: false,
-  analytics: false,
+  weightedDistribution: true,
+  analytics: true,
   auditLog: false,
   aiRuleGenerator: false,
 };

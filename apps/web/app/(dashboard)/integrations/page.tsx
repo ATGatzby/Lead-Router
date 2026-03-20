@@ -103,32 +103,6 @@ export default async function IntegrationsPage() {
           </div>
         </div>
 
-        {/* Zoho — Coming Soon */}
-        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm opacity-60">
-          <div className="p-6 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950">
-                <div className="h-7 w-7 rounded-full bg-red-500 dark:bg-red-400" />
-              </div>
-              <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-                Coming Soon
-              </Badge>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-base">Zoho CRM</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Sync and route records from Zoho CRM.
-              </p>
-            </div>
-
-            <div>
-              <Button size="sm" variant="outline" disabled>
-                Connect
-              </Button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

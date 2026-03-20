@@ -50,7 +50,7 @@ export async function syncFieldSchema(
     .filter((f) => f.createable || f.updateable)
     .map((f) => ({
       orgId,
-      objectType: objectType.toUpperCase() as "LEAD" | "CONTACT" | "ACCOUNT",
+      objectType: objectType.toUpperCase() as "LEAD" | "CONTACT" | "ACCOUNT" | "USER",
       fieldApiName: f.name,
       fieldLabel: f.label,
       fieldType: mapSfdcType(f.type as string),
@@ -64,7 +64,7 @@ export async function syncFieldSchema(
   await prisma.fieldSchema.deleteMany({
     where: {
       orgId,
-      objectType: objectType.toUpperCase() as "LEAD" | "CONTACT" | "ACCOUNT",
+      objectType: objectType.toUpperCase() as "LEAD" | "CONTACT" | "ACCOUNT" | "USER",
     },
   });
 
