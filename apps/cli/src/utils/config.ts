@@ -53,6 +53,9 @@ export function writeConfig(dir: string, config: InstallConfig): void {
 export function findInstallDir(startDir = process.cwd()): string | null {
   const candidate = join(startDir, 'lead-routing.json')
   if (existsSync(candidate)) return startDir
+  // Check dev directory first — takes precedence over prod when both exist
+  const dev = join(startDir, 'lead-routing-dev', 'lead-routing.json')
+  if (existsSync(dev)) return join(startDir, 'lead-routing-dev')
   const nested = join(startDir, 'lead-routing', 'lead-routing.json')
   if (existsSync(nested)) return join(startDir, 'lead-routing')
   return null

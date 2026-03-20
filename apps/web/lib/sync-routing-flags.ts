@@ -46,16 +46,25 @@ export async function syncRoutingFlags(orgId: string): Promise<void> {
     }
 
     const sf = new SalesforceApi(org.sfdcInstanceUrl, org.oauthAccessToken);
-    const records = await sf.query<{ Id: string }>(
-      "SELECT Id FROM lrt__Routing_Settings__c LIMIT 1"
-    );
+    // Try unnamespaced first (self-hosted unpackaged deploy), then lrt__ namespace (managed package)
+    let records = await sf.query<{ Id: string }>(
+      "SELECT Id FROM Routing_Settings__c LIMIT 1"
+    ).catch(() => [] as { Id: string }[]);
+    let objectName = "Routing_Settings__c";
+
+    if (!records.length) {
+      records = await sf.query<{ Id: string }>(
+        "SELECT Id FROM lrt__Routing_Settings__c LIMIT 1"
+      ).catch(() => [] as { Id: string }[]);
+      objectName = "lrt__Routing_Settings__c";
+    }
 
     if (!records.length) {
       console.warn("[sync-flags] No Routing_Settings__c record found, skipping");
       return;
     }
 
-    await sf.update("lrt__Routing_Settings__c", records[0].Id, flags);
+    await sf.update(objectName, records[0].Id, flags);
   } catch (err) {
     console.warn("[sync-flags] Failed to sync routing flags:", err);
   }
