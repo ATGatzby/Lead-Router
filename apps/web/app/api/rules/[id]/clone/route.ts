@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@lead-routing/db";
+import { prisma, Prisma } from "@lead-routing/db";
 import { getActorFromHeaders } from "@/lib/auth";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
 import { syncRoutingFlags } from "@/lib/sync-routing-flags";
@@ -93,7 +93,7 @@ export async function POST(
             assigneeUserId: b.assigneeUserId,
             assigneeTeamId: b.assigneeTeamId,
             assigneeQueueId: b.assigneeQueueId,
-            steps: b.steps ?? null,
+            steps: b.steps === null ? undefined : (b.steps as Prisma.InputJsonValue),
             conditions: {
               create: b.conditions.map((c) => ({
                 groupId: c.groupId,
