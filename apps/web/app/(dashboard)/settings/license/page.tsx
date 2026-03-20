@@ -166,7 +166,7 @@ export default function LicenseSettingsPage() {
               <p className="text-sm text-muted-foreground mt-0.5">
                 {isPro
                   ? "Unlimited rules, seats, and all object triggers"
-                  : "Basic routing with limited capacity"}
+                  : "Routing with limited features"}
               </p>
             </div>
           </div>

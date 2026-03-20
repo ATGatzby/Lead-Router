@@ -310,15 +310,18 @@ export default function LicenseUsersPage() {
     onError: () => toast.error("Failed to sync queues from Salesforce"),
   });
 
-  // Auto-sync on first load if no users exist
-  const hasSynced = useRef(false);
-  useEffect(() => {
-    if (!usersLoading && usersData && usersData.total === 0 && !hasSynced.current && !syncUsers.isPending) {
-      hasSynced.current = true;
-      syncUsers.mutate();
-      syncQueuesM.mutate();
-    }
-  }, [usersLoading, usersData]);
+  const syncUserFields = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/fields/sync-user", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to sync User fields");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-custom-fields"] });
+    },
+    onError: () => toast.error("Failed to sync User fields from Salesforce"),
+  });
+
 
   // ── Mutations ──
   const invalidateAll = () => {
@@ -435,15 +438,27 @@ export default function LicenseUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roles }),
       });
-      if (!res.ok) throw new Error("Failed to license by role");
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 402 && body.error === "seat_cap_exceeded") {
+          throw new Error(`seat_cap:You only have ${body.available} seat${body.available !== 1 ? "s" : ""} available, but the selected roles have ${body.requested} users. Free up seats or upgrade to Pro.`);
+        }
+        throw new Error("Failed to license by role");
+      }
+      return body;
     },
     onSuccess: (data) => {
       invalidateAll();
       closePanel();
       toast.success(data?.count != null ? `${data.count} users licensed by role` : "Users licensed by role");
     },
-    onError: () => toast.error("Failed to license by role"),
+    onError: (err: Error) => {
+      if (err.message.startsWith("seat_cap:")) {
+        toast.error(err.message.replace("seat_cap:", ""));
+      } else {
+        toast.error("Failed to license by role");
+      }
+    },
   });
 
   const licenseByProfile = useMutation({
@@ -453,15 +468,27 @@ export default function LicenseUsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profiles }),
       });
-      if (!res.ok) throw new Error("Failed to license by profile");
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 402 && body.error === "seat_cap_exceeded") {
+          throw new Error(`seat_cap:You only have ${body.available} seat${body.available !== 1 ? "s" : ""} available, but the selected profiles have ${body.requested} users. Free up seats or upgrade to Pro.`);
+        }
+        throw new Error("Failed to license by profile");
+      }
+      return body;
     },
     onSuccess: (data) => {
       invalidateAll();
       closePanel();
       toast.success(data?.count != null ? `${data.count} users licensed by profile` : "Users licensed by profile");
     },
-    onError: () => toast.error("Failed to license by profile"),
+    onError: (err: Error) => {
+      if (err.message.startsWith("seat_cap:")) {
+        toast.error(err.message.replace("seat_cap:", ""));
+      } else {
+        toast.error("Failed to license by profile");
+      }
+    },
   });
 
   const licenseByCustomField = useMutation({
@@ -866,8 +893,8 @@ export default function LicenseUsersPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={syncUsers.isPending || syncQueuesM.isPending}
-            onMouseDown={() => { syncUsers.mutate(); syncQueuesM.mutate(); }}
+            disabled={syncUsers.isPending || syncQueuesM.isPending || syncUserFields.isPending}
+            onMouseDown={() => { syncUsers.mutate(); syncQueuesM.mutate(); syncUserFields.mutate(); }}
           >
             {syncUsers.isPending ? (
               <><Plug className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Syncing...</>
@@ -1290,7 +1317,51 @@ export default function LicenseUsersPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    users.map((user) => (
+                    <>
+                    {(queues ?? []).filter((q) => q.isLicensed).map((q) => (
+                      <TableRow key={`queue-${q.id}`} className="bg-teal-50/40 dark:bg-teal-950/20">
+                        <TableCell className="pr-0">
+                          <Checkbox disabled />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700">
+                              <Inbox className="h-2.5 w-2.5" />
+                              Queue
+                            </span>
+                            <span className="font-medium text-sm">{q.name}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground font-mono mt-0.5">{q.sfdcQueueId}</div>
+                        </TableCell>
+                        <TableCell><span className="text-muted-foreground/50">—</span></TableCell>
+                        <TableCell>
+                          {q.memberCount != null && (
+                            <span className="text-sm text-muted-foreground">{q.memberCount} members</span>
+                          )}
+                        </TableCell>
+                        <TableCell><span className="text-muted-foreground/50">—</span></TableCell>
+                        <TableCell><span className="text-muted-foreground/50">—</span></TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="default" className="min-w-[76px] justify-center bg-teal-600 dark:bg-teal-700">
+                            Licensed
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <button
+                            onMouseDown={async () => {
+                              if (confirm(`Remove queue "${q.name}"? This cannot be undone.`)) {
+                                await fetch(`/api/queues/${q.id}/license`, { method: "DELETE" });
+                                queryClient.invalidateQueries({ queryKey: ["queues-list"] });
+                              }
+                            }}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {users.map((user) => (
                       <TableRow
                         key={user.id}
                         className={cn(selectedRows.has(user.id) && "bg-primary/5")}
@@ -1364,7 +1435,8 @@ export default function LicenseUsersPage() {
                           </button>
                         </TableCell>
                       </TableRow>
-                    ))
+                    ))}
+                    </>
                   )}
                 </TableBody>
               </Table>

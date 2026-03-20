@@ -265,13 +265,6 @@ export default function RoundRobinsPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <Button
                   size="sm"
-                  variant="outline"
-                  onClick={() => router.push(`/round-robins/${team.id}`)}
-                >
-                  Manage
-                </Button>
-                <Button
-                  size="sm"
                   variant="ghost"
                   onClick={() => router.push(`/round-robins/${team.id}`)}
                   aria-label="Edit team"

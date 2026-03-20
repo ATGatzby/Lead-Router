@@ -13,6 +13,7 @@ import {
   Plug,
   BrainCircuit,
   HeartPulse,
+  Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -58,7 +59,6 @@ const NAV_SECTIONS: NavSection[] = [
         href: "/analytics",
         label: "Analytics",
         icon: BarChart3,
-        badge: "Pro",
       },
     ],
   },
@@ -66,6 +66,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Intelligence",
     items: [
       { href: "/ai-assistant", label: "AI Assistant", icon: BrainCircuit, badge: "Pro" },
+      { href: "/mcp-server", label: "MCP Server", icon: Server, badge: "Pro" },
     ],
   },
   {

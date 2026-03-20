@@ -37,19 +37,23 @@ export async function POST(req: NextRequest) {
 
     const objectParam = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? "LEAD";
 
-    if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)) {
+    if (!["LEAD", "CONTACT", "ACCOUNT", "USER"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
-    const limits = getTierLimits();
-    if (!limits.allowedTriggers.includes(objectParam)) {
-      return upgradeRequiredResponse(`${objectParam} object syncing`);
+    // USER object sync is always allowed (used for license-by-custom-field)
+    if (objectParam !== "USER") {
+      const limits = getTierLimits();
+      if (!limits.allowedTriggers.includes(objectParam)) {
+        return upgradeRequiredResponse(`${objectParam} object syncing`);
+      }
     }
 
     const objectType = (objectParam.charAt(0) + objectParam.slice(1).toLowerCase()) as
       | "Lead"
       | "Contact"
-      | "Account";
+      | "Account"
+      | "User";
 
     if (!org.oauthAccessToken || !org.oauthRefreshToken || !org.sfdcInstanceUrl) {
       return NextResponse.json({ error: "Salesforce org not connected" }, { status: 400 });

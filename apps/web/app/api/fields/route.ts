@@ -13,16 +13,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
-    // For USER object type, we query LEAD fields that end with __c as a placeholder
-    // since FieldSchema doesn't have a USER enum value yet
     const where: Record<string, unknown> = { orgId };
-    if (objectParam === "USER") {
-      // Return custom fields from LEAD as proxy (User custom fields share naming conventions)
-      where.objectType = "LEAD";
-      where.fieldApiName = { endsWith: "__c" };
-    } else {
-      where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT";
-    }
+    where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT" | "USER";
 
     if (customOnly) {
       where.fieldApiName = { endsWith: "__c" };
