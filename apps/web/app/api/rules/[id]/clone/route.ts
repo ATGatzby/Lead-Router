@@ -64,6 +64,14 @@ export async function POST(
         assigneeTeamId: source.assigneeTeamId,
         assigneeQueueId: source.assigneeQueueId,
         isDryRun: source.isDryRun,
+        routeType: source.routeType,
+        scheduleFrequency: source.scheduleFrequency,
+        scheduleTime: source.scheduleTime,
+        scheduleTimezone: source.scheduleTimezone,
+        scheduleCron: source.scheduleCron,
+        searchCriteria: source.searchCriteria ?? undefined,
+        searchMaxRecords: source.searchMaxRecords,
+        searchBatchSize: source.searchBatchSize,
         defaultOwnerType: source.defaultOwnerType,
         defaultOwnerUserId: source.defaultOwnerUserId,
         defaultOwnerTeamId: source.defaultOwnerTeamId,
@@ -85,6 +93,7 @@ export async function POST(
             assigneeUserId: b.assigneeUserId,
             assigneeTeamId: b.assigneeTeamId,
             assigneeQueueId: b.assigneeQueueId,
+            steps: b.steps ?? null,
             conditions: {
               create: b.conditions.map((c) => ({
                 groupId: c.groupId,

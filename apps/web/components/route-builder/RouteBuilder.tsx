@@ -31,6 +31,7 @@ import { EnglishView } from "./EnglishView"
 import { routeToEnglish } from "@/lib/route-to-english"
 import { RunPanel, type RunningStep } from "./RunPanel"
 import { AIRouteGenerator } from "./AIRouteGenerator"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -714,6 +715,7 @@ export function RouteBuilder({
   const [internalIsSaving, setInternalIsSaving] = useState(false)
   const isSaving = externalIsSaving ?? internalIsSaving
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveWarningBranches, setSaveWarningBranches] = useState<string[]>([])
   const isDirty = JSON.stringify(state) !== JSON.stringify(savedState)
 
   // ── AI generator state ─────────────────────────────────────────────────────
@@ -1503,7 +1505,7 @@ export function RouteBuilder({
   }, [nodes])
 
   // ── Save ──────────────────────────────────────────────────────────────────────
-  const handleSave = async () => {
+  const doSave = async () => {
     setSaveError(null)
     setInternalIsSaving(true)
     try {
@@ -1514,6 +1516,24 @@ export function RouteBuilder({
     } finally {
       setInternalIsSaving(false)
     }
+  }
+
+  const handleSave = async () => {
+    // Check each branch for a missing assignment
+    const missing = (state.paths ?? [])
+      .filter((path) => {
+        if (path.steps && path.steps.length > 0) {
+          return !path.steps.some((s) => s.type === "assign" && s.assignmentType !== null)
+        }
+        return !path.action?.assignmentType
+      })
+      .map((p) => p.label)
+
+    if (missing.length > 0) {
+      setSaveWarningBranches(missing)
+      return
+    }
+    await doSave()
   }
 
   // ── Derived values ────────────────────────────────────────────────────────────
@@ -2207,6 +2227,41 @@ export function RouteBuilder({
           onClose={() => setShowAIGenerator(false)}
         />
       )}
+
+      {/* ── Missing assignment warning dialog ───────────────────────────────── */}
+      <Dialog open={saveWarningBranches.length > 0} onOpenChange={(open) => { if (!open) setSaveWarningBranches([]) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Missing Assignment
+            </DialogTitle>
+            <DialogDescription>
+              The following {saveWarningBranches.length === 1 ? "branch has" : "branches have"} no assignment configured. Leads matching {saveWarningBranches.length === 1 ? "it" : "them"} will not be routed.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-1.5 rounded-md border bg-muted/40 px-4 py-3">
+            {saveWarningBranches.map((name) => (
+              <li key={name} className="flex items-center gap-2 text-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                <span className="font-medium">{name}</span>
+                <span className="text-muted-foreground">— no assignment set up</span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveWarningBranches([])}>
+              Fix Now
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => { setSaveWarningBranches([]); doSave() }}
+            >
+              Save Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

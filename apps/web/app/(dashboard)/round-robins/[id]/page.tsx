@@ -190,6 +190,7 @@ export default function TeamDetailPage({
       if (!res.ok) throw new Error("Team not found");
       return res.json();
     },
+    refetchInterval: 15000,
   });
 
   // Licensed users not yet on this team — loaded when add dialog opens
@@ -500,6 +501,17 @@ export default function TeamDetailPage({
         }
       } else {
         Object.assign(weights, localWeights);
+        // Fix rounding so percentages sum to exactly 100
+        const pctTotal = Object.values(weights).reduce((s, v) => s + v, 0);
+        if (pctTotal !== 100 && Object.keys(weights).length > 0) {
+          // Add/subtract remainder from the active member with the highest weight
+          const highestMember = activeMembers.reduce(
+            (best, m) =>
+              (weights[m.userId] ?? 0) > (weights[best?.userId] ?? 0) ? m : best,
+            activeMembers[0]
+          );
+          if (highestMember) weights[highestMember.userId] += 100 - pctTotal;
+        }
       }
 
       const res = await fetch(`/api/teams/${teamId}/weights`, {

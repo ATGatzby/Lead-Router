@@ -90,7 +90,7 @@ function RecordSnapshotPopover({ snapshot }: { snapshot: Record<string, unknown>
 
 const ANTI_RECURSION_TOOLTIP = "This event was blocked by the anti-recursion safeguard. The routing engine detected this record was recently routed.";
 
-function StatusBadge({ status }: { status: RoutingLog["status"] }) {
+function StatusBadge({ status, hasRule }: { status: RoutingLog["status"]; hasRule?: boolean }) {
   const cfg: Record<string, string> = {
     SUCCESS: "bg-green-50 text-green-700 border-green-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800",
     FAILED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800",
@@ -103,7 +103,7 @@ function StatusBadge({ status }: { status: RoutingLog["status"] }) {
   const label: Record<string, string> = {
     SUCCESS: "Success",
     FAILED: "Failed",
-    UNMATCHED: "Unmatched",
+    UNMATCHED: hasRule ? "No Assignment Set Up" : "No Matching Rule",
     RETRY: "Retry",
     MERGED: "Merged",
     COOLDOWN_SKIPPED: "Cooldown Skip",
@@ -432,7 +432,7 @@ export default function HistoryPage() {
               <span className="text-xs text-muted-foreground whitespace-nowrap">{fmtTime(log.createdAt)}</span>
 
               {/* Status */}
-              <StatusBadge status={log.status} />
+              <StatusBadge status={log.status} hasRule={!!log.ruleId} />
             </div>
           ))}
         </div>
@@ -482,7 +482,11 @@ export default function HistoryPage() {
               </a>
             </SheetTitle>
             <SheetDescription>
-              {selectedLog?.ruleName ?? "No rule matched"} · {selectedLog?.status?.toLowerCase()}
+              {selectedLog?.ruleName ?? "No rule matched"} · {
+                selectedLog?.status === "UNMATCHED"
+                  ? (selectedLog.ruleId ? "No assignment set up" : "No matching rule")
+                  : selectedLog?.status?.toLowerCase()
+              }
             </SheetDescription>
           </SheetHeader>
           <SheetBody>

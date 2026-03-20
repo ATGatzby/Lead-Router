@@ -200,22 +200,20 @@ export default function LicenseUsersPage() {
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState("all");
   const [profileFilter, setProfileFilter] = useState("all");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // ── Data queries ──
   const { data: usersData, isLoading: usersLoading } = useQuery<UsersResponse>({
-    queryKey: ["license-users", search, page, statusFilter, roleFilter, profileFilter, departmentFilter],
+    queryKey: ["license-users", search, page, statusFilter, roleFilter, profileFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search) params.set("search", search);
+      if (search) params.set("q", search);
       params.set("page", String(page));
       if (statusFilter === "licensed") params.set("licensed", "true");
       else if (statusFilter === "unlicensed") params.set("licensed", "false");
       if (roleFilter !== "all") params.set("role", roleFilter);
       if (profileFilter !== "all") params.set("profile", profileFilter);
-      if (departmentFilter !== "all") params.set("department", departmentFilter);
       const res = await fetch(`/api/users?${params}`);
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
@@ -257,7 +255,6 @@ export default function LicenseUsersPage() {
       const data = await res.json();
       return Array.isArray(data) ? data : data.queues ?? [];
     },
-    enabled: activeMethod === "queue",
   });
 
   // ── Panel options for the active method ──
@@ -834,7 +831,7 @@ export default function LicenseUsersPage() {
   const isAtSeatLimit = isFreeTier && maxSeats > 0 && currentSeatsUsed >= maxSeats;
 
   // Determine whether to show the user table
-  const hasActiveFilters = search || roleFilter !== "all" || profileFilter !== "all" || departmentFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters = search || roleFilter !== "all" || profileFilter !== "all" || statusFilter !== "all";
   const showUserTable = hasAppliedMethod || hasActiveFilters;
 
   // ── Panel title/subtitle based on active method ──
@@ -1255,17 +1252,6 @@ export default function LicenseUsersPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={departmentFilter} onValueChange={(v) => { setDepartmentFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[160px] h-9">
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {(filters?.departments ?? []).map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[140px] h-9">
                 <SelectValue placeholder="All Statuses" />
@@ -1301,7 +1287,6 @@ export default function LicenseUsersPage() {
                     </TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Role / Profile</TableHead>
-                    <TableHead>Department</TableHead>
                     <TableHead>Teams</TableHead>
                     <TableHead>Last Routed</TableHead>
                     <TableHead className="text-right">Licensed</TableHead>
@@ -1311,7 +1296,7 @@ export default function LicenseUsersPage() {
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
                         No users match your filters
                       </TableCell>
@@ -1339,7 +1324,6 @@ export default function LicenseUsersPage() {
                             <span className="text-sm text-muted-foreground">{q.memberCount} members</span>
                           )}
                         </TableCell>
-                        <TableCell><span className="text-muted-foreground/50">—</span></TableCell>
                         <TableCell><span className="text-muted-foreground/50">—</span></TableCell>
                         <TableCell className="text-right">
                           <Badge variant="default" className="min-w-[76px] justify-center bg-teal-600 dark:bg-teal-700">
@@ -1379,9 +1363,6 @@ export default function LicenseUsersPage() {
                         <TableCell>
                           <div className="text-sm">{user.role ?? "—"}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">{user.profile ?? ""}</div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{user.department ?? "—"}</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1 flex-wrap">
