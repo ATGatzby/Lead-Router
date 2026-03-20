@@ -170,7 +170,7 @@ export async function GET(req: NextRequest) {
 
     // Sync field schemas for all supported objects so condition builder is ready immediately
     Promise.all(
-      ["Lead", "Contact", "Account"].map((obj) =>
+      (["Lead", "Contact", "Account"] as const).map((obj) =>
         syncFieldSchema(conn, session.orgId!, obj).catch((err) =>
           console.error(`[sfdc-callback] syncFieldSchema(${obj}) failed:`, err)
         )
