@@ -350,6 +350,7 @@ function OverviewContent() {
         </div>
       </div>
     </div>
+    </div>
   );
 }
 
