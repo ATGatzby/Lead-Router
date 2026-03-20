@@ -5,6 +5,7 @@ import {
   exchangeCodeForTokens,
   createConnection,
   pushSettings,
+  syncFieldSchema,
 } from "@lead-routing/sfdc";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
@@ -157,14 +158,24 @@ export async function GET(req: NextRequest) {
       select: { webhookSecret: true },
     });
 
+    const conn = createConnection(tokens);
+
     if (org.webhookSecret) {
-      const conn = createConnection(tokens);
       pushSettings(conn, {
         webhookSecret: org.webhookSecret,
         engineUrl: process.env.PUBLIC_ENGINE_URL ?? process.env.ENGINE_URL ?? "http://localhost:3001",
         appUrl: process.env.APP_URL ?? "http://localhost:3000",
       }).catch((err) => console.error("[sfdc-callback] pushSettings failed:", err));
     }
+
+    // Sync field schemas for all supported objects so condition builder is ready immediately
+    Promise.all(
+      ["Lead", "Contact", "Account"].map((obj) =>
+        syncFieldSchema(conn, session.orgId!, obj).catch((err) =>
+          console.error(`[sfdc-callback] syncFieldSchema(${obj}) failed:`, err)
+        )
+      )
+    );
 
     const successRedirect = NextResponse.redirect(new URL("/integrations/salesforce?connected=1", appUrl));
     successRedirect.cookies.delete("sfdc_pkce_verifier");

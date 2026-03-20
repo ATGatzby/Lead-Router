@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend
 } from "recharts";
-import { TrendingUp, TrendingDown, Minus, Zap, Target, Clock, BarChart3, ShieldAlert, Lock } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Zap, Target, Clock, BarChart3, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Helper to build API query string from search params
@@ -87,78 +87,12 @@ const STATUS_COLORS = {
 
 const DONUT_COLORS = ["#22c55e", "#ef4444", "#eab308", "#a855f7"];
 
-function AnalyticsPaywall() {
-  return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 dark:bg-gray-950/60">
-      <div className="max-w-sm text-center px-6">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900">
-          <Lock className="h-7 w-7 text-violet-600 dark:text-violet-400" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Analytics requires Pro</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-5">
-          Track routing volume, success rates, speed metrics, and conversions.
-        </p>
-        <a
-          href="https://openedgeai.tech/pricing"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 dark:from-violet-500 dark:to-purple-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-500/40"
-        >
-          <BarChart3 className="h-4 w-4" />
-          Upgrade to Pro
-        </a>
-      </div>
-    </div>
-  );
-}
-
 function OverviewContent() {
   const searchParams = useSearchParams();
   const apiParams = useMemo(() => buildApiParams(searchParams), [searchParams]);
   const [granularity, setGranularity] = useState("day");
   const [groupBy, setGroupBy] = useState("status");
 
-  // Check license tier for paywall
-  const { data: licenseData } = useQuery({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license");
-      if (!res.ok) throw new Error("Failed to load license");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const isFree = licenseData?.tier === "free";
-
-  // ── Dummy data for free-tier preview ──────────────────────────────────────
-  const dummyOverview = {
-    totalRouted: 2847, totalRoutedDelta: 12.4,
-    successRate: 94.2, successRateDelta: 3.1,
-    avgSpeedSeconds: 4.8, avgSpeedDelta: -18.5,
-    conversionRate: 23.1, conversionRateDelta: 5.7,
-    statusBreakdown: { success: 2682, failed: 57, unmatched: 85, merged: 23 },
-  };
-  const dummyVolume = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - 13 + i);
-    return {
-      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      success: 150 + Math.floor(Math.random() * 100),
-      failed: 2 + Math.floor(Math.random() * 8),
-      unmatched: 3 + Math.floor(Math.random() * 10),
-      merged: Math.floor(Math.random() * 5),
-    };
-  });
-  const dummyRules = [
-    { name: "New Lead → Eastern Team", total: 842 },
-    { name: "Enterprise Accounts", total: 631 },
-    { name: "Web Inbound → SDR Pool", total: 524 },
-    { name: "Partner Referrals", total: 412 },
-    { name: "APAC Region Route", total: 289 },
-  ];
-  const dummyTriggerHealth = { recursiveBounces: 0, cooldownSkips: 0, stampSkips: 0 };
-
-  // Fetch real data only for Pro tier
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ["analytics-overview", apiParams],
     queryFn: async () => {
@@ -166,7 +100,6 @@ function OverviewContent() {
       if (!res.ok) throw new Error("Failed to load overview");
       return res.json();
     },
-    enabled: !isFree,
   });
 
   const { data: volume, isLoading: volumeLoading } = useQuery({
@@ -176,7 +109,6 @@ function OverviewContent() {
       if (!res.ok) throw new Error("Failed to load volume");
       return res.json();
     },
-    enabled: !isFree,
   });
 
   const { data: triggerHealth } = useQuery({
@@ -187,7 +119,6 @@ function OverviewContent() {
       return res.json();
     },
     refetchInterval: 60_000,
-    enabled: !isFree,
   });
 
   const { data: rulesData } = useQuery({
@@ -197,22 +128,20 @@ function OverviewContent() {
       if (!res.ok) throw new Error("Failed to load rules");
       return res.json();
     },
-    enabled: !isFree,
   });
 
-  // Use dummy data for free tier, real data for Pro
-  const displayOverview = isFree ? dummyOverview : overview;
-  const displayTriggerHealth = isFree ? dummyTriggerHealth : triggerHealth;
-  const topRules = isFree ? dummyRules : (rulesData?.rules?.slice(0, 5) || []);
+  const displayOverview = overview;
+  const displayTriggerHealth = triggerHealth;
+  const topRules = rulesData?.rules?.slice(0, 5) || [];
   const maxRuleVolume = topRules.length > 0 ? Math.max(...topRules.map((r: any) => r.total)) : 1;
 
-  const chartData = isFree ? dummyVolume : (volume?.series || []).map((d: any) => ({
+  const chartData = (volume?.series || []).map((d: any) => ({
     ...d,
     date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
   }));
 
   // Donut data
-  const donutSource = isFree ? dummyOverview : overview;
+  const donutSource = overview;
   const donutData = donutSource ? [
     { name: "Success", value: donutSource.statusBreakdown.success },
     { name: "Failed", value: donutSource.statusBreakdown.failed },
@@ -222,8 +151,7 @@ function OverviewContent() {
 
   return (
     <div className="relative">
-      {isFree && <AnalyticsPaywall />}
-      <div className={cn("space-y-6 mt-4", isFree && "pointer-events-none select-none blur-[3px] opacity-40")}>
+      <div className="space-y-6 mt-4">
       {/* Row 1: KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         <KpiCard
@@ -420,7 +348,6 @@ function OverviewContent() {
             </div>
           )}
         </div>
-      </div>
       </div>
     </div>
   );

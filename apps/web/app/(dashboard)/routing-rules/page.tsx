@@ -10,7 +10,6 @@ import {
   Copy,
   Pencil,
   Trash2,
-  RefreshCw,
   Zap,
   Search,
   Play,
@@ -475,17 +474,6 @@ export default function RoutingRulesPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const syncFieldsMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/fields/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Sync failed");
-      return data;
-    },
-    onSuccess: (data) => toast.success(`Synced ${data.synced} fields from Salesforce`),
-    onError: (err: Error) => toast.error(err.message),
-  });
-
   const runMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/rules/${id}/run`, { method: "POST" });
@@ -543,17 +531,6 @@ export default function RoutingRulesPage() {
               Simulate 1M
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => syncFieldsMutation.mutate()}
-            disabled={syncFieldsMutation.isPending}
-          >
-            <RefreshCw
-              className={cn("h-3.5 w-3.5 mr-1", syncFieldsMutation.isPending && "animate-spin")}
-            />
-            Sync Fields
-          </Button>
           <NewRouteDropdown atLimit={atRuleLimit} onAIGenerate={() => setShowAIRules(true)} />
         </div>
       </div>
