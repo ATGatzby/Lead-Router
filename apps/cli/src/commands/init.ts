@@ -343,15 +343,52 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     try {
       let webhookSecret = ''
       const envEngineContent = readFileSync(join(dir, '.env.engine'), 'utf-8')
-      const match = envEngineContent.match(/^(?:ENGINE_)?WEBHOOK_SECRET=(.+)$/m)
-      if (match) webhookSecret = match[1].trim()
+      const wsMatch = envEngineContent.match(/^(?:ENGINE_)?WEBHOOK_SECRET=(.+)$/m)
+      if (wsMatch) webhookSecret = wsMatch[1].trim()
+
+      // Auto-generate API token by logging into the web app
+      let apiToken = ''
+      if (webhookSecret) {
+        try {
+          log.step('Generating MCP API token...')
+          // Login to get session cookie
+          const loginRes = await fetch(`${cfg.appUrl}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cfg.adminEmail, password: cfg.adminPassword }),
+            redirect: 'manual',
+          })
+          if (loginRes.ok) {
+            // Extract set-cookie header for session
+            const cookies = loginRes.headers.getSetCookie?.() ?? []
+            const cookieHeader = cookies.join('; ')
+
+            // Create API token
+            const tokenRes = await fetch(`${cfg.appUrl}/api/tokens`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Cookie': cookieHeader,
+              },
+              body: JSON.stringify({ name: 'Claude Code MCP', scopes: ['read', 'write', 'route'] }),
+            })
+            if (tokenRes.ok) {
+              const tokenData = await tokenRes.json() as { token: string }
+              apiToken = tokenData.token
+              log.success('MCP API token created')
+            }
+          }
+        } catch { /* non-fatal — MCP will work without apiToken for engine-only calls */ }
+      }
 
       if (webhookSecret) {
         const mcpDir = join(homedir(), '.lead-routing')
         mkdirSync(mcpDir, { recursive: true })
+        const mcpConfig: Record<string, string> = { appUrl: cfg.appUrl, engineUrl: cfg.engineUrl, webhookSecret }
+        if (apiToken) mcpConfig.apiToken = apiToken
         writeFileSync(
           join(mcpDir, 'mcp.json'),
-          JSON.stringify({ appUrl: cfg.appUrl, engineUrl: cfg.engineUrl, webhookSecret }, null, 2),
+          JSON.stringify(mcpConfig, null, 2),
           'utf-8'
         )
         note(
