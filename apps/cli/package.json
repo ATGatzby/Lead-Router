@@ -1,6 +1,6 @@
 {
   "name": "@lead-routing/cli",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "Self-hosted deployment CLI for Lead Routing",
   "homepage": "https://github.com/lead-routing/lead-routing",
   "keywords": [
