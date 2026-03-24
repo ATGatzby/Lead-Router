@@ -339,6 +339,28 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       'Next: Connect Salesforce'
     )
 
+    // Generate MCP command for Claude Code
+    let webhookSecret = ''
+    try {
+      const envEngineContent = readFileSync(join(dir, '.env.engine'), 'utf-8')
+      const match = envEngineContent.match(/^WEBHOOK_SECRET=(.+)$/m)
+      if (match) webhookSecret = match[1].trim()
+    } catch { /* non-fatal */ }
+
+    if (webhookSecret) {
+      const mcpCmd =
+        `claude mcp add lead-routing \\\n` +
+        `  -e APP_URL=${cfg.appUrl} \\\n` +
+        `  -e ENGINE_URL=${cfg.engineUrl} \\\n` +
+        `  -e WEBHOOK_SECRET=${webhookSecret} \\\n` +
+        `  -- npx -y @lead-routing/mcp`
+      note(
+        'Paste this command in your terminal to connect Lead Routing to Claude Code:\n\n' +
+          chalk.cyan(mcpCmd),
+        'Claude Code MCP'
+      )
+    }
+
     // Done
     outro(
       chalk.green("✔  You're live!") +
