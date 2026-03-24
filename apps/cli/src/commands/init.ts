@@ -343,7 +343,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     try {
       let webhookSecret = ''
       const envEngineContent = readFileSync(join(dir, '.env.engine'), 'utf-8')
-      const match = envEngineContent.match(/^WEBHOOK_SECRET=(.+)$/m)
+      const match = envEngineContent.match(/^(?:ENGINE_)?WEBHOOK_SECRET=(.+)$/m)
       if (match) webhookSecret = match[1].trim()
 
       if (webhookSecret) {

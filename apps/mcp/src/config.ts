@@ -39,7 +39,7 @@ export function loadConfig(): McpConfig {
   // Env vars override file values
   const appUrl = process.env.APP_URL || file.appUrl;
   const engineUrl = process.env.ENGINE_URL || file.engineUrl;
-  const webhookSecret = process.env.WEBHOOK_SECRET || file.webhookSecret;
+  const webhookSecret = process.env.WEBHOOK_SECRET || process.env.ENGINE_WEBHOOK_SECRET || file.webhookSecret;
   const apiToken = process.env.API_TOKEN || file.apiToken || "";
   const sfdcOrgId = process.env.SFDC_ORG_ID || file.sfdcOrgId || "";
 
