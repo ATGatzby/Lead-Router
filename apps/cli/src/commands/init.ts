@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { exec } from 'node:child_process'
 import { platform } from 'node:os'
 import { join } from 'node:path'
-import { intro, outro, note, log, confirm, cancel, isCancel, password as promptPassword } from '@clack/prompts'
+import { intro, outro, note, log, confirm, cancel, isCancel, password as promptPassword, select, text } from '@clack/prompts'
 import chalk from 'chalk'
 
 /** Managed package install URL — mirrors packages/sfdc/src/constants.ts */
@@ -18,7 +18,7 @@ import { startServices } from '../steps/start-services.js'
 import { verifyHealth } from '../steps/verify-health.js'
 import { SshConnection } from '../utils/ssh.js'
 import { findInstallDir, readConfig } from '../utils/config.js'
-import { requireAuth, type StoredCredentials } from '../utils/auth.js'
+import { requireAuth, saveCredentials, apiLogin, apiSignup, apiResendVerification, type StoredCredentials } from '../utils/auth.js'
 import { formatTierBadge } from '../utils/license.js'
 
 export interface InitOptions {
@@ -125,19 +125,94 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   // ── Full init flow ───────────────────────────────────────────────────────────
 
-  // ── Auth check ──
+  // ── Auth check (inline signup/login if needed) ──
   let auth: StoredCredentials
   try {
     auth = await requireAuth()
-  } catch (err) {
-    log.error(err instanceof Error ? err.message : 'Authentication required')
-    note(
-      'Run one of the following:\n\n' +
-      `  ${chalk.cyan('lead-routing signup')}   Create a new account\n` +
-      `  ${chalk.cyan('lead-routing login')}    Log in to existing account`,
-      'Account Required'
-    )
-    process.exit(1)
+  } catch {
+    // Not logged in — offer inline signup or login
+    const action = await select({
+      message: 'You need an account to continue. What would you like to do?',
+      options: [
+        { value: 'signup', label: 'Create a new account' },
+        { value: 'login', label: 'Log in to existing account' },
+      ],
+    })
+    if (isCancel(action)) { cancel('Setup cancelled.'); process.exit(0) }
+
+    if (action === 'signup') {
+      const firstName = await text({ message: 'First name', placeholder: 'John', validate: (v) => v.trim() ? undefined : 'Required' })
+      if (isCancel(firstName)) { cancel('Setup cancelled.'); process.exit(0) }
+      const lastName = await text({ message: 'Last name', placeholder: 'Smith', validate: (v) => v.trim() ? undefined : 'Required' })
+      if (isCancel(lastName)) { cancel('Setup cancelled.'); process.exit(0) }
+      const signupEmail = await text({ message: 'Email', placeholder: 'john@acme.com', validate: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? undefined : 'Invalid email' })
+      if (isCancel(signupEmail)) { cancel('Setup cancelled.'); process.exit(0) }
+      const signupPw = await promptPassword({ message: 'Password (min 8 characters)', validate: (v) => v.length >= 8 ? undefined : 'Must be at least 8 characters' })
+      if (isCancel(signupPw)) { cancel('Setup cancelled.'); process.exit(0) }
+      const confirmPw = await promptPassword({ message: 'Confirm password', validate: (v) => v === signupPw ? undefined : 'Passwords do not match' })
+      if (isCancel(confirmPw)) { cancel('Setup cancelled.'); process.exit(0) }
+
+      log.step('Creating account...')
+      try {
+        await apiSignup({ firstName: (firstName as string).trim(), lastName: (lastName as string).trim(), email: (signupEmail as string).trim(), password: signupPw as string })
+        log.success('Account created!')
+      } catch (err) {
+        log.error(err instanceof Error ? err.message : 'Signup failed')
+        process.exit(1)
+      }
+
+      note(
+        `Check your email (${(signupEmail as string).trim()}) for a verification link.\n` +
+        'After verifying, press Enter to continue.',
+        'Verify Email'
+      )
+      await text({ message: 'Press Enter once you\'ve verified your email...', defaultValue: '' })
+
+      // Now log them in
+      log.step('Logging in...')
+      try {
+        const { token, customer } = await apiLogin((signupEmail as string).trim(), signupPw as string)
+        if (!customer.emailVerified) {
+          log.warn('Email not verified yet.')
+          const resend = await confirm({ message: 'Resend verification email?' })
+          if (resend && !isCancel(resend)) {
+            await apiResendVerification(token).catch(() => {})
+            log.info('Verification email sent. Verify and re-run `lead-routing init`.')
+          }
+          process.exit(1)
+        }
+        saveCredentials({ token, customer, storedAt: new Date().toISOString() })
+        auth = { token, customer, storedAt: new Date().toISOString() }
+      } catch (err) {
+        log.error(err instanceof Error ? err.message : 'Login failed')
+        process.exit(1)
+      }
+    } else {
+      // Login flow
+      const loginEmail = await text({ message: 'Email', placeholder: 'john@acme.com' })
+      if (isCancel(loginEmail)) { cancel('Setup cancelled.'); process.exit(0) }
+      const loginPw = await promptPassword({ message: 'Password' })
+      if (isCancel(loginPw)) { cancel('Setup cancelled.'); process.exit(0) }
+
+      log.step('Authenticating...')
+      try {
+        const { token, customer } = await apiLogin((loginEmail as string).trim(), loginPw as string)
+        if (!customer.emailVerified) {
+          log.warn('Email not verified yet.')
+          const resend = await confirm({ message: 'Resend verification email?' })
+          if (resend && !isCancel(resend)) {
+            await apiResendVerification(token).catch(() => {})
+            log.info('Verification email sent. Verify and re-run `lead-routing init`.')
+          }
+          process.exit(1)
+        }
+        saveCredentials({ token, customer, storedAt: new Date().toISOString() })
+        auth = { token, customer, storedAt: new Date().toISOString() }
+      } catch (err) {
+        log.error(err instanceof Error ? err.message : 'Login failed')
+        process.exit(1)
+      }
+    }
   }
 
   log.success(`Logged in as ${auth.customer.firstName} ${auth.customer.lastName} — ${formatTierBadge(auth.customer.tier)}`)
