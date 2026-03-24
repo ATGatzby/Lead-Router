@@ -1,7 +1,7 @@
 import { promises as dns } from 'node:dns'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { exec } from 'node:child_process'
-import { platform } from 'node:os'
+import { platform, homedir } from 'node:os'
 import { join } from 'node:path'
 import { intro, outro, note, log, confirm, cancel, isCancel, password as promptPassword, select, text } from '@clack/prompts'
 import chalk from 'chalk'
@@ -339,27 +339,28 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       'Next: Connect Salesforce'
     )
 
-    // Generate MCP command for Claude Code
-    let webhookSecret = ''
+    // Write ~/.lead-routing/mcp.json for zero-config MCP server
     try {
+      let webhookSecret = ''
       const envEngineContent = readFileSync(join(dir, '.env.engine'), 'utf-8')
       const match = envEngineContent.match(/^WEBHOOK_SECRET=(.+)$/m)
       if (match) webhookSecret = match[1].trim()
-    } catch { /* non-fatal */ }
 
-    if (webhookSecret) {
-      const mcpCmd =
-        `claude mcp add lead-routing \\\n` +
-        `  -e APP_URL=${cfg.appUrl} \\\n` +
-        `  -e ENGINE_URL=${cfg.engineUrl} \\\n` +
-        `  -e WEBHOOK_SECRET=${webhookSecret} \\\n` +
-        `  -- npx -y @lead-routing/mcp`
-      note(
-        'Paste this command in your terminal to connect Lead Routing to Claude Code:\n\n' +
-          chalk.cyan(mcpCmd),
-        'Claude Code MCP'
-      )
-    }
+      if (webhookSecret) {
+        const mcpDir = join(homedir(), '.lead-routing')
+        mkdirSync(mcpDir, { recursive: true })
+        writeFileSync(
+          join(mcpDir, 'mcp.json'),
+          JSON.stringify({ appUrl: cfg.appUrl, engineUrl: cfg.engineUrl, webhookSecret }, null, 2),
+          'utf-8'
+        )
+        note(
+          'Connect Lead Routing to Claude Code with one command:\n\n' +
+            chalk.cyan('claude mcp add lead-routing -- npx -y @lead-routing/mcp'),
+          'Claude Code MCP'
+        )
+      }
+    } catch { /* non-fatal */ }
 
     // Done
     outro(
