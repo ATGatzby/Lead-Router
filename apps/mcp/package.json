@@ -1,0 +1,33 @@
+{
+  "name": "@lead-routing/mcp",
+  "version": "0.1.1",
+  "description": "MCP server for Lead Routing — route leads, manage rules and teams from Claude Code",
+  "type": "module",
+  "bin": {
+    "lead-routing-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "files": [
+    "dist/"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.9.3"
+  }
+}
