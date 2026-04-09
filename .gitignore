@@ -18,8 +18,11 @@ lead-routing/
 # Claude Code state
 .claude/
 
-# Design preview files
-analytics-preview.html
+# Design preview / prototype HTML files
+*-prototype.html
+*-preview.html
+*-redesign.html
+routing-analysis*.md
 
 # CLI test output
 apps/cli/lead-routing/
@@ -35,3 +38,7 @@ NPXImplementation.md
 investor-pitch.html
 plans/
 preview/
+bugs.md
+securityplan.md
+RegressionSuite.md
+docs/
