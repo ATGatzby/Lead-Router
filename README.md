@@ -1,6 +1,6 @@
 # Lead Routing
 
-> Self-hosted, Salesforce-native lead routing engine with a visual Route Builder, Flow Builder, AI-powered rule generation, round-robin assignment, and a Next.js management UI — deployed to your own server in minutes via a single CLI command.
+> Self-hosted, Salesforce-native lead routing engine with a visual Route Builder, AI-powered rule generation, round-robin assignment, and a Next.js management UI — deployed to your own server in minutes via a single CLI command.
 
 [![npm version](https://img.shields.io/npm/v/@lead-routing/cli)](https://www.npmjs.com/package/@lead-routing/cli)
 [![CI](https://github.com/ATGatzby/Lead-Router/actions/workflows/test.yml/badge.svg)](https://github.com/ATGatzby/Lead-Router/actions/workflows/test.yml)
@@ -14,7 +14,6 @@ When a Lead, Contact, or Account is created or updated in Salesforce, Lead Routi
 
 **Key features:**
 - **Visual Route Builder** — multi-step branches with Trigger → Match → Filter → Assign → Update Field → Create Task pipeline
-- **Flow Builder** — LeanData-style visual decision tree with drag-and-drop nodes for complex routing logic
 - **AI Rule Generator** — describe routing rules in natural language, AI generates the configuration (supports Claude, OpenAI, Gemini)
 - **Scheduled Routes** — bulk search and route records on a cron schedule (daily, weekly, monthly)
 - **Duplicate matching** — configurable lead-to-contact, lead-to-account, and contact-to-account match actions with fuzzy and AI-powered matching
@@ -43,9 +42,7 @@ Salesforce Org
 Routing Engine (Fastify)
   ├─ Validates HMAC signature
   ├─ Checks idempotency (Redis)
-  ├─ Evaluates routing rules (branches, conditions, match config)
-  │   ├─ Route Builder rules: multi-step branches with conditions
-  │   └─ Flow Builder rules: decision tree node traversal
+  ├─ Evaluates routing rules (multi-step branches, conditions, match config)
   ├─ Match step: cross-object duplicate detection (email, phone, domain, company)
   ├─ Round-robin team resolution (Redis Lua atomic INCR)
   ├─ Updates OwnerId in Salesforce via jsforce
@@ -55,7 +52,6 @@ Routing Engine (Fastify)
 
 Management UI (Next.js)
   ├─ Visual Route Builder (multi-step branch canvas)
-  ├─ Visual Flow Builder (decision tree designer)
   ├─ AI-powered rule and trigger generation
   ├─ Scheduled route configuration (bulk search + assign)
   ├─ Round-robin team management (equal + weighted distribution)
@@ -248,7 +244,6 @@ Tests cover:
 - All 17 routing condition operators
 - AND/OR group logic, catch-all rules, field name case normalization
 - Route Builder branch evaluation and multi-step execution
-- Flow Builder decision tree traversal
 - Round-robin assignment and weighted distribution
 - Batch routing and bulk search queue processing
 - Template generators (docker-compose, .env, Caddyfile)
