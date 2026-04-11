@@ -7,17 +7,21 @@ WORKDIR /app
 
 # Copy manifests first (better layer caching)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
-COPY apps/web/package.json      ./apps/web/
-COPY packages/db/package.json   ./packages/db/
-COPY packages/sfdc/package.json ./packages/sfdc/
+COPY apps/web/package.json             ./apps/web/
+COPY packages/db/package.json          ./packages/db/
+COPY packages/sfdc/package.json        ./packages/sfdc/
+COPY packages/hubspot/package.json     ./packages/hubspot/
+COPY packages/crm-adapter/package.json ./packages/crm-adapter/
 
 # Install all deps (devDeps included — needed for next build, prisma generate)
 RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Copy full source
-COPY apps/web/     ./apps/web/
-COPY packages/db/  ./packages/db/
-COPY packages/sfdc/ ./packages/sfdc/
+COPY apps/web/          ./apps/web/
+COPY packages/db/       ./packages/db/
+COPY packages/sfdc/     ./packages/sfdc/
+COPY packages/hubspot/  ./packages/hubspot/
+COPY packages/crm-adapter/ ./packages/crm-adapter/
 
 # Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
 RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
