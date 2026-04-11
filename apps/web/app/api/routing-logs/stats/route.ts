@@ -48,21 +48,21 @@ export async function GET(req: NextRequest) {
     });
 
     // Pivot by assigneeName → { LEAD, CONTACT, ACCOUNT, USER, total }
-    const statsMap = new Map<string, { LEAD: number; CONTACT: number; ACCOUNT: number; USER: number; total: number }>();
+    const statsMap = new Map<string, Record<string, number>>();
 
     for (const row of rows) {
       const name = row.assigneeName!;
       if (!statsMap.has(name)) {
-        statsMap.set(name, { LEAD: 0, CONTACT: 0, ACCOUNT: 0, USER: 0, total: 0 });
+        statsMap.set(name, { LEAD: 0, CONTACT: 0, ACCOUNT: 0, COMPANY: 0, DEAL: 0, USER: 0, total: 0 });
       }
       const entry = statsMap.get(name)!;
       const count = row._count.id;
-      entry[row.objectType] += count;
+      entry[row.objectType] = (entry[row.objectType] ?? 0) + count;
       entry.total += count;
     }
 
     const stats = Array.from(statsMap.entries())
-      .map(([name, counts]) => ({ name, ...counts }))
+      .map(([name, counts]) => ({ name, ...counts }) as { name: string; total: number } & Record<string, number>)
       .sort((a, b) => b.total - a.total);
 
     return NextResponse.json({ stats, from: from.toISOString(), to: to.toISOString(), period });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma, type Prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders, getActorFromHeaders } from "@/lib/auth";
 import { createConnection, fetchActiveSfdcUsers } from "@lead-routing/sfdc";
+import { HubSpotClient, OwnersApi } from "@lead-routing/hubspot";
 
 // GET /api/users — paginated, searchable list of synced users
 export async function GET(req: NextRequest) {
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/users — trigger on-demand SFDC user sync
+// POST /api/users — trigger on-demand user sync (Salesforce or HubSpot)
 export async function POST(req: NextRequest) {
   try {
     const actor = await getActorFromHeaders();
@@ -77,55 +78,109 @@ export async function POST(req: NextRequest) {
     const org = await prisma.organization.findUniqueOrThrow({
       where: { id: orgId },
       select: {
+        crmType: true,
         oauthAccessToken: true,
         oauthRefreshToken: true,
         sfdcInstanceUrl: true,
+        hubspotPortalId: true,
       },
     });
 
-    if (!org.oauthAccessToken || !org.oauthRefreshToken || !org.sfdcInstanceUrl) {
-      return NextResponse.json({ error: "Salesforce org not connected" }, { status: 400 });
-    }
-
-    const conn = createConnection({
-      accessToken: org.oauthAccessToken,
-      refreshToken: org.oauthRefreshToken,
-      instanceUrl: org.sfdcInstanceUrl,
-    });
-
-    const sfdcUsers = await fetchActiveSfdcUsers(conn);
-    const sfdcIds = sfdcUsers.map((u) => u.Id);
-
     let upserted = 0;
-    for (const u of sfdcUsers) {
-      await prisma.user.upsert({
-        where: { orgId_crmUserId: { orgId, crmUserId: u.Id } },
-        create: {
-          orgId,
-          crmUserId: u.Id,
-          name: u.Name,
-          email: u.Email,
-          role: u.UserRole?.Name ?? null,
-          profile: u.Profile?.Name ?? null,
-          department: u.Department ?? null,
-          isActive: true,
-          syncedAt: new Date(),
-        },
-        update: {
-          name: u.Name,
-          email: u.Email,
-          role: u.UserRole?.Name ?? null,
-          profile: u.Profile?.Name ?? null,
-          department: u.Department ?? null,
-          isActive: true,
-          syncedAt: new Date(),
-        },
+    let crmIds: string[] = [];
+
+    if (org.crmType === "HUBSPOT") {
+      // ── HubSpot owner sync ──
+      if (!org.oauthAccessToken) {
+        return NextResponse.json({ error: "HubSpot not connected" }, { status: 400 });
+      }
+
+      const client = new HubSpotClient({
+        accessToken: org.oauthAccessToken,
+        refreshToken: org.oauthRefreshToken ?? undefined,
+        clientId: process.env.HUBSPOT_CLIENT_ID,
+        clientSecret: process.env.HUBSPOT_CLIENT_SECRET,
       });
-      upserted++;
+      const ownersApi = new OwnersApi(client);
+      const owners = await ownersApi.listAllOwners();
+
+      // Filter out archived owners
+      const activeOwners = owners.filter((o) => !o.archived);
+      crmIds = activeOwners.map((o) => o.id);
+
+      for (const o of activeOwners) {
+        const name = [o.firstName, o.lastName].filter(Boolean).join(" ") || o.email;
+        const teamName = o.teams?.[0]?.name ?? null;
+
+        await prisma.user.upsert({
+          where: { orgId_crmUserId: { orgId, crmUserId: o.id } },
+          create: {
+            orgId,
+            crmUserId: o.id,
+            name,
+            email: o.email,
+            role: teamName,
+            profile: null,
+            department: null,
+            isActive: true,
+            syncedAt: new Date(),
+          },
+          update: {
+            name,
+            email: o.email,
+            role: teamName,
+            isActive: true,
+            syncedAt: new Date(),
+          },
+        });
+        upserted++;
+      }
+    } else {
+      // ── Salesforce user sync ──
+      if (!org.oauthAccessToken || !org.oauthRefreshToken || !org.sfdcInstanceUrl) {
+        return NextResponse.json({ error: "Salesforce org not connected" }, { status: 400 });
+      }
+
+      const conn = createConnection({
+        accessToken: org.oauthAccessToken,
+        refreshToken: org.oauthRefreshToken,
+        instanceUrl: org.sfdcInstanceUrl,
+      });
+
+      const sfdcUsers = await fetchActiveSfdcUsers(conn);
+      crmIds = sfdcUsers.map((u) => u.Id);
+
+      for (const u of sfdcUsers) {
+        await prisma.user.upsert({
+          where: { orgId_crmUserId: { orgId, crmUserId: u.Id } },
+          create: {
+            orgId,
+            crmUserId: u.Id,
+            name: u.Name,
+            email: u.Email,
+            role: u.UserRole?.Name ?? null,
+            profile: u.Profile?.Name ?? null,
+            department: u.Department ?? null,
+            isActive: true,
+            syncedAt: new Date(),
+          },
+          update: {
+            name: u.Name,
+            email: u.Email,
+            role: u.UserRole?.Name ?? null,
+            profile: u.Profile?.Name ?? null,
+            department: u.Department ?? null,
+            isActive: true,
+            syncedAt: new Date(),
+          },
+        });
+        upserted++;
+      }
     }
 
+    // Deactivate users no longer in CRM
     const deactivated = await prisma.user.updateMany({
-      where: { orgId, crmUserId: { notIn: sfdcIds }, isActive: true },
+      where: { orgId, crmUserId: { notIn: crmIds }, isActive: true },
       data: { isActive: false },
     });
 

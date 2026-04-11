@@ -88,6 +88,12 @@ function objectLabel(obj: ObjectType): string {
       return "Contact";
     case "ACCOUNT":
       return "Account";
+    case "COMPANY":
+      return "Company";
+    case "DEAL":
+      return "Deal";
+    default:
+      return obj;
   }
 }
 
