@@ -78,7 +78,7 @@ describe("executeTool", () => {
     { tool: "list_rules", mock: "listRules", args: { status: "ACTIVE" } },
     { tool: "get_assignee_stats", mock: "getAssigneeStats", args: {} },
     { tool: "explain_rule", mock: "explainRule", args: { ruleId: "r1" } },
-    { tool: "get_routing_timeline", mock: "getRoutingTimeline", args: { sfdcRecordId: "00Q123" } },
+    { tool: "get_routing_timeline", mock: "getRoutingTimeline", args: { crmRecordId: "00Q123" } },
     { tool: "list_teams", mock: "listTeams", args: { teamId: "t1" } },
     { tool: "list_users", mock: "listUsers", args: { isLicensed: true } },
     { tool: "query_audit_logs", mock: "queryAuditLogs", args: { action: "RULE_CREATED" } },
@@ -117,8 +117,8 @@ describe("executeTool", () => {
     expect(mocks.explainRule).toHaveBeenCalledWith(ORG_ID, "rule_abc");
   });
 
-  it("passes sfdcRecordId directly for get_routing_timeline", async () => {
-    await executeTool("get_routing_timeline", { sfdcRecordId: "00Q999" }, ORG_ID);
+  it("passes crmRecordId directly for get_routing_timeline", async () => {
+    await executeTool("get_routing_timeline", { crmRecordId: "00Q999" }, ORG_ID);
     expect(mocks.getRoutingTimeline).toHaveBeenCalledWith(ORG_ID, "00Q999");
   });
 

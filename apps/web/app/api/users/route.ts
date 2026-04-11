@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         take: limit,
         select: {
           id: true,
-          sfdcUserId: true,
+          crmUserId: true,
           name: true,
           email: true,
           role: true,
@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
     let upserted = 0;
     for (const u of sfdcUsers) {
       await prisma.user.upsert({
-        where: { orgId_sfdcUserId: { orgId, sfdcUserId: u.Id } },
+        where: { orgId_crmUserId: { orgId, crmUserId: u.Id } },
         create: {
           orgId,
-          sfdcUserId: u.Id,
+          crmUserId: u.Id,
           name: u.Name,
           email: u.Email,
           role: u.UserRole?.Name ?? null,
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     const deactivated = await prisma.user.updateMany({
-      where: { orgId, sfdcUserId: { notIn: sfdcIds }, isActive: true },
+      where: { orgId, crmUserId: { notIn: sfdcIds }, isActive: true },
       data: { isActive: false },
     });
 
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       orderBy: [{ isLicensed: "desc" }, { name: "asc" }],
       select: {
         id: true,
-        sfdcUserId: true,
+        crmUserId: true,
         name: true,
         email: true,
         role: true,

@@ -187,8 +187,8 @@ describe("worker processor — conversion check", () => {
       .mockResolvedValueOnce([{ orgId: "org-A" }])
       // Step 2b: unconverted leads for org-A
       .mockResolvedValueOnce([
-        { id: "ct-1", sfdcLeadId: "00Q0001" },
-        { id: "ct-2", sfdcLeadId: "00Q0002" },
+        { id: "ct-1", crmRecordId: "00Q0001" },
+        { id: "ct-2", crmRecordId: "00Q0002" },
       ]);
 
     // SFDC Lead query: one converted, one not
@@ -273,7 +273,7 @@ describe("worker processor — conversion check", () => {
 
     // Second org: has leads
     mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([
-      { id: "ct-10", sfdcLeadId: "00Q0010" },
+      { id: "ct-10", crmRecordId: "00Q0010" },
     ]);
 
     // SFDC returns no conversions for second org
@@ -292,7 +292,7 @@ describe("worker processor — conversion check", () => {
 
     mockPrisma.$queryRawUnsafe
       .mockResolvedValueOnce([{ orgId: "org-C" }])
-      .mockResolvedValueOnce([{ id: "ct-5", sfdcLeadId: "00Q0005" }]);
+      .mockResolvedValueOnce([{ id: "ct-5", crmRecordId: "00Q0005" }]);
 
     // Lead is converted but no opportunity
     mockSfQuery.mockResolvedValueOnce({

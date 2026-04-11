@@ -6,6 +6,7 @@ import type { DetailedConditionGroup } from "./evaluator.js";
 import { getNextMember, getNextWeightedMember } from "./round-robin.js";
 import type { WeightedTeamMember } from "./round-robin.js";
 import { getOrgConnection, getSfdcUserId, getSfdcQueueId, evictOrgConnection } from "./sfdc.js";
+import { updateHubSpotRecordOwner, evictOrgHubSpotClient } from "./hubspot-connection.js";
 import { enqueueRetry } from "./queue.js";
 import { fireWebhook } from "./webhook.js";
 import { updateAggregates, createConversionTracking } from "./aggregate.js";
@@ -18,25 +19,25 @@ import { getRoutingMode } from "./flow-cache.js";
 
 // ─── Decision Trace types ─────────────────────────────────────────────────
 
-interface TraceMatchCheck {
+export interface TraceMatchCheck {
   objectType: string;
   matchField: string;
   found: boolean;
   matchedRecordId?: string;
 }
 
-interface TraceSplitPath {
+export interface TraceSplitPath {
   label: string;
   matched: boolean;
   conditionGroups: DetailedConditionGroup[];
   nestedSplits?: TraceSplit[];
 }
 
-interface TraceSplit {
+export interface TraceSplit {
   paths: TraceSplitPath[];
 }
 
-interface TraceRuleEval {
+export interface TraceRuleEval {
   ruleId: string;
   ruleName: string;
   priority: number;
@@ -58,7 +59,7 @@ interface TraceRuleEval {
   defaultOwner?: { evaluated: boolean; resolved: boolean };
 }
 
-interface DecisionTrace {
+export interface DecisionTrace {
   version: 1;
   trigger: { event: string; objectType: string; recordId: string; timestampMs: number };
   cooldown?: { checked: true; skipped: boolean };
@@ -83,7 +84,7 @@ interface DecisionTrace {
   };
 }
 
-function createTrace(payload: { eventType: string; objectType: string; recordId: string }): DecisionTrace {
+export function createTrace(payload: { eventType: string; objectType: string; recordId: string }): DecisionTrace {
   return {
     version: 1,
     trigger: {
@@ -101,7 +102,7 @@ function createTrace(payload: { eventType: string; objectType: string; recordId:
 
 export interface RoutingPayload {
   orgId: string;
-  objectType: "LEAD" | "CONTACT" | "ACCOUNT";
+  objectType: "LEAD" | "CONTACT" | "ACCOUNT" | "COMPANY" | "DEAL";
   eventType: "INSERT" | "UPDATE" | "BOTH" | "SEARCH";
   recordId: string;
   timestamp: string;
@@ -110,7 +111,7 @@ export interface RoutingPayload {
   ruleId?: string;
   /** Pre-resolved match result from batch matcher (bulk search only) */
   preResolvedMatch?: { type: string; ownerId: string; recordId: string; action?: string } | null;
-  /** When true, skip SFDC updateOwner call — collect assignments instead for bulk write */
+  /** When true, skip CRM updateOwner call — collect assignments instead for bulk write */
   skipSfdcWrite?: boolean;
   /** Mutable array populated when skipSfdcWrite is true — caller reads assignments after routeRecord returns */
   _assignments?: Array<{ recordId: string; ownerId: string; logId: string }>;
@@ -125,10 +126,65 @@ function toSfdcObjectName(objectType: string): string {
   return objectType.charAt(0) + objectType.slice(1).toLowerCase();
 }
 
+/** Convert internal objectType to CRM API object name. For SFDC: "Lead", for HubSpot: "CONTACT" */
+async function toCrmObjectName(orgId: string, objectType: string): Promise<string> {
+  const crmType = await getOrgCrmType(orgId);
+  if (crmType === "HUBSPOT") return objectType; // HubSpot uses uppercase: CONTACT, COMPANY, DEAL
+  return toSfdcObjectName(objectType); // SFDC uses Pascal: Lead, Contact, Account
+}
+
+/** Per-org CRM type cache to avoid repeated DB lookups during a single routing cycle */
+const orgCrmTypeCache = new Map<string, string>();
+
+async function getOrgCrmType(orgId: string): Promise<string> {
+  if (orgCrmTypeCache.has(orgId)) return orgCrmTypeCache.get(orgId)!;
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { crmType: true },
+    });
+    const crmType = org?.crmType ?? "SALESFORCE";
+    orgCrmTypeCache.set(orgId, crmType);
+    return crmType;
+  } catch {
+    // If the query fails (e.g. in test mocks), default to SALESFORCE
+    return "SALESFORCE";
+  }
+}
+
+/**
+ * CRM-agnostic owner update: routes to SFDC jsforce or HubSpot API.
+ * For SFDC: uses jsforce connection + updateOwner from @lead-routing/sfdc
+ * For HubSpot: uses hubspot-connection.ts updateHubSpotRecordOwner
+ */
+async function crmUpdateOwner(
+  orgId: string,
+  objectType: string,
+  recordId: string,
+  ownerId: string,
+  actionField?: string
+): Promise<void> {
+  const crmType = await getOrgCrmType(orgId);
+  if (crmType === "HUBSPOT") {
+    await updateHubSpotRecordOwner(orgId, objectType, recordId, ownerId);
+  } else {
+    const conn = await getOrgConnection(orgId);
+    await updateOwner(conn, toSfdcObjectName(objectType), recordId, ownerId, actionField);
+  }
+}
+
+/** Evict the CRM connection cache for an org (SFDC or HubSpot). */
+async function evictCrmConnection(orgId: string): Promise<void> {
+  // Evict both — one will be a no-op since only one cache will have an entry
+  evictOrgConnection(orgId);
+  evictOrgHubSpotClient(orgId);
+  orgCrmTypeCache.delete(orgId);
+}
+
 // ─── Condition flattening helper ──────────────────────────────────────────────
 
 /** Flatten ConditionGroup[] (from Route Builder) to flat EvalCondition[] for evaluateRule */
-function flattenConditionGroups(rawConditions: any[]): Array<{ groupId: string; fieldName: string; fieldType: string; operator: string; value: string | null }> {
+export function flattenConditionGroups(rawConditions: any[]): Array<{ groupId: string; fieldName: string; fieldType: string; operator: string; value: string | null }> {
   if (!Array.isArray(rawConditions) || rawConditions.length === 0) return [];
   return rawConditions.flatMap((g: any) => {
     if (Array.isArray(g?.conditions)) {
@@ -157,7 +213,7 @@ function flattenConditionGroups(rawConditions: any[]): Array<{ groupId: string; 
 
 // ─── Recursive step execution for nested splits ──────────────────────────────
 
-interface StepExecContext {
+export interface StepExecContext {
   fields: Record<string, unknown>;
   recordId: string;
   objectType: string;
@@ -182,7 +238,7 @@ interface StepExecResult {
  * Returns assignment info from the first "assign" step encountered (at any depth),
  * or null if no assign step was reached.
  */
-async function executeSteps(
+export async function executeSteps(
   steps: any[],
   ctx: StepExecContext,
   traceCtx?: StepTraceContext
@@ -196,10 +252,18 @@ async function executeSteps(
       case "updateField":
         if (!ctx.isDryRun && step.fieldApiName) {
           try {
-            const conn = await getOrgConnection(ctx.orgId);
-            await conn
-              .sobject(toSfdcObjectName(ctx.objectType))
-              .update({ Id: ctx.recordId, [step.fieldApiName as string]: step.fieldValue });
+            const crmType = await getOrgCrmType(ctx.orgId);
+            if (crmType === "HUBSPOT") {
+              const { updateHubSpotRecordProperties } = await import("./hubspot-connection.js");
+              await updateHubSpotRecordProperties(ctx.orgId, ctx.objectType, ctx.recordId, {
+                [step.fieldApiName as string]: String(step.fieldValue ?? ""),
+              });
+            } else {
+              const conn = await getOrgConnection(ctx.orgId);
+              await conn
+                .sobject(toSfdcObjectName(ctx.objectType))
+                .update({ Id: ctx.recordId, [step.fieldApiName as string]: step.fieldValue });
+            }
           } catch (err) {
             console.error(`[router] UPDATE_FIELD step failed for ${ctx.recordId}:`, err);
           }
@@ -209,6 +273,12 @@ async function executeSteps(
       case "createTask":
         if (!ctx.isDryRun) {
           try {
+            const crmType = await getOrgCrmType(ctx.orgId);
+            if (crmType === "HUBSPOT") {
+              // HubSpot: create task via engagements API is complex;
+              // for now, log a warning — task creation is SFDC-only
+              console.warn(`[router] CREATE_TASK step not yet supported for HubSpot, skipping for ${ctx.recordId}`);
+            } else {
             const conn = await getOrgConnection(ctx.orgId);
             const taskData: Record<string, unknown> = {
               Subject: step.subject ?? "",
@@ -227,6 +297,7 @@ async function executeSteps(
               taskData.ActivityDate = due.toISOString().split("T")[0];
             }
             await conn.sobject("Task").create(taskData);
+            }
           } catch (err) {
             console.error(`[router] CREATE_TASK step failed for ${ctx.recordId}:`, err);
           }
@@ -344,7 +415,7 @@ export async function resolveAssigneeFromFields(
       prisma.teamMember.findMany({
         where: { teamId: assigneeTeamId, status: "ACTIVE" },
         orderBy: { createdAt: "asc" },
-        include: { user: { select: { id: true, sfdcUserId: true, name: true, email: true } } },
+        include: { user: { select: { id: true, crmUserId: true, name: true, email: true } } },
       }),
       prisma.roundRobinTeam.findUnique({
         where: { id: assigneeTeamId },
@@ -378,7 +449,7 @@ export async function resolveAssigneeFromFields(
       data: { lastRoutedAt: new Date() },
     });
 
-    const sfdcId = activeMembers.find((m) => m.userId === next.userId)!.user.sfdcUserId;
+    const sfdcId = activeMembers.find((m) => m.userId === next.userId)!.user.crmUserId;
 
     return {
       sfdcOwnerId: sfdcId,
@@ -586,7 +657,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
       await prisma.routingLog.create({
         data: {
           orgId,
-          sfdcRecordId: recordId,
+          crmRecordId: recordId,
           objectType,
           eventType,
           status: "COOLDOWN_SKIPPED" as any,
@@ -651,7 +722,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
     trace.timing.totalMs = Date.now() - routeStartMs;
     try {
       const latestLog = await prisma.routingLog.findFirst({
-        where: { orgId, sfdcRecordId: recordId },
+        where: { orgId, crmRecordId: recordId },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
@@ -705,7 +776,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
   await prisma.routingLog.create({
     data: {
       orgId,
-      sfdcRecordId: recordId,
+      crmRecordId: recordId,
       objectType,
       eventType,
       status: "UNMATCHED",
@@ -739,8 +810,9 @@ async function routeNewStyle(
   // Push early — ruleTrace is mutated in place, so trace always has latest state
   if (trace) trace.rulesEvaluated.push(ruleTrace);
 
-  // Step 1: Match step (optional)
-  if (rule.matchConfig) {
+  // Step 1: Match step (optional — SFDC only, HubSpot uses Search API instead)
+  const orgCrmType = await getOrgCrmType(orgId);
+  if (rule.matchConfig && orgCrmType !== "HUBSPOT") {
     let conn: any;
     try {
       conn = await getOrgConnection(orgId);
@@ -782,7 +854,7 @@ async function routeNewStyle(
                 console.error(`[router] Lead merge failed:`, err);
                 await prisma.routingLog.create({
                   data: {
-                    orgId, sfdcRecordId: recordId, objectType, eventType,
+                    orgId, crmRecordId: recordId, objectType, eventType,
                     ruleId: rule.id, ruleName: rule.name,
                     status: "FAILED", errorMessage: String(err),
                     routingDurationMs: startMs ? Date.now() - startMs : null,
@@ -799,7 +871,7 @@ async function routeNewStyle(
             }
             const mergeLog = await prisma.routingLog.create({
               data: {
-                orgId, sfdcRecordId: recordId, objectType, eventType,
+                orgId, crmRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 status: "MERGED", routingDurationMs: startMs ? Date.now() - startMs : null,
                 isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
@@ -819,12 +891,12 @@ async function routeNewStyle(
               if (payload.skipSfdcWrite) {
                 // defer — will be written in bulk
               } else {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
+                await crmUpdateOwner(orgId, objectType, recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
               }
             }
             const leadOwnerLog = await prisma.routingLog.create({
               data: {
-                orgId, sfdcRecordId: recordId, objectType, eventType,
+                orgId, crmRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
                 status: (!rule.isDryRun && payload.skipSfdcWrite) ? "RETRY" : "SUCCESS",
@@ -842,7 +914,7 @@ async function routeNewStyle(
             }).catch(() => {});
             if (objectType === "LEAD") {
               createConversionTracking({
-                orgId, routingLogId: leadOwnerLog.id, sfdcLeadId: recordId,
+                orgId, routingLogId: leadOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
               }).catch(() => {});
@@ -860,12 +932,12 @@ async function routeNewStyle(
                 if (payload.skipSfdcWrite) {
                   // defer — will be written in bulk
                 } else {
-                  await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+                  await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
                 }
               }
               const leadCustomLog = await prisma.routingLog.create({
                 data: {
-                  orgId, sfdcRecordId: recordId, objectType, eventType,
+                  orgId, crmRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
@@ -885,7 +957,7 @@ async function routeNewStyle(
               }).catch(() => {});
               if (objectType === "LEAD") {
                 createConversionTracking({
-                  orgId, routingLogId: leadCustomLog.id, sfdcLeadId: recordId,
+                  orgId, routingLogId: leadCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                 }).catch(() => {});
@@ -903,12 +975,12 @@ async function routeNewStyle(
               if (payload.skipSfdcWrite) {
                 // defer — will be written in bulk
               } else {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
+                await crmUpdateOwner(orgId, objectType, recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
               }
             }
             const contactOwnerLog = await prisma.routingLog.create({
               data: {
-                orgId, sfdcRecordId: recordId, objectType, eventType,
+                orgId, crmRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
                 status: (!rule.isDryRun && payload.skipSfdcWrite) ? "RETRY" : "SUCCESS",
@@ -926,7 +998,7 @@ async function routeNewStyle(
             }).catch(() => {});
             if (objectType === "LEAD") {
               createConversionTracking({
-                orgId, routingLogId: contactOwnerLog.id, sfdcLeadId: recordId,
+                orgId, routingLogId: contactOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
               }).catch(() => {});
@@ -944,12 +1016,12 @@ async function routeNewStyle(
                 if (payload.skipSfdcWrite) {
                   // defer — will be written in bulk
                 } else {
-                  await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+                  await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
                 }
               }
               const contactCustomLog = await prisma.routingLog.create({
                 data: {
-                  orgId, sfdcRecordId: recordId, objectType, eventType,
+                  orgId, crmRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
@@ -969,7 +1041,7 @@ async function routeNewStyle(
               }).catch(() => {});
               if (objectType === "LEAD") {
                 createConversionTracking({
-                  orgId, routingLogId: contactCustomLog.id, sfdcLeadId: recordId,
+                  orgId, routingLogId: contactCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                 }).catch(() => {});
@@ -988,12 +1060,12 @@ async function routeNewStyle(
               if (payload.skipSfdcWrite) {
                 // defer — will be written in bulk
               } else {
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
+                await crmUpdateOwner(orgId, objectType, recordId, matchResult.ownerId, ROUTING_ACTION_FIELD);
               }
             }
             const accountOwnerLog = await prisma.routingLog.create({
               data: {
-                orgId, sfdcRecordId: recordId, objectType, eventType,
+                orgId, crmRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
                 status: (!rule.isDryRun && payload.skipSfdcWrite) ? "RETRY" : "SUCCESS",
@@ -1011,7 +1083,7 @@ async function routeNewStyle(
             }).catch(() => {});
             if (objectType === "LEAD") {
               createConversionTracking({
-                orgId, routingLogId: accountOwnerLog.id, sfdcLeadId: recordId,
+                orgId, routingLogId: accountOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
               }).catch(() => {});
@@ -1029,12 +1101,12 @@ async function routeNewStyle(
                 if (payload.skipSfdcWrite) {
                   // defer — will be written in bulk
                 } else {
-                  await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+                  await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
                 }
               }
               const accountCustomLog = await prisma.routingLog.create({
                 data: {
-                  orgId, sfdcRecordId: recordId, objectType, eventType,
+                  orgId, crmRecordId: recordId, objectType, eventType,
                   ruleId: rule.id, ruleName: rule.name,
                   assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                   assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
@@ -1054,7 +1126,7 @@ async function routeNewStyle(
               }).catch(() => {});
               if (objectType === "LEAD") {
                 createConversionTracking({
-                  orgId, routingLogId: accountCustomLog.id, sfdcLeadId: recordId,
+                  orgId, routingLogId: accountCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
                 }).catch(() => {});
@@ -1134,7 +1206,7 @@ async function routeNewStyle(
             const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
             const log = await prisma.routingLog.create({
               data: {
-                orgId, sfdcRecordId: recordId, objectType, eventType,
+                orgId, crmRecordId: recordId, objectType, eventType,
                 ruleId: rule.id, ruleName: rule.name,
                 pathLabel: branchLabel, branchId: branch.id,
                 assigneeId: nestedAssignee.sfdcOwnerId, assigneeName: nestedAssignee.assigneeName,
@@ -1148,9 +1220,8 @@ async function routeNewStyle(
 
             if (!rule.isDryRun) {
               try {
-                const conn = await getOrgConnection(orgId);
                 await setCooldown(orgId, recordId);
-                await updateOwner(conn, toSfdcObjectName(objectType), recordId, nestedAssignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+                await crmUpdateOwner(orgId, objectType, recordId, nestedAssignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
                 await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
                 fireWebhook(orgId, {
                   event: `${objectType}_ROUTED`,
@@ -1161,10 +1232,10 @@ async function routeNewStyle(
                 });
               } catch (err: any) {
                 console.error(`[router] nested assignment failed for ${recordId}:`, err);
-                await prisma.routingLog.update({ where: { id: log.id }, data: { status: "ERROR", errorMessage: err?.message ?? String(err) } });
+                await prisma.routingLog.update({ where: { id: log.id }, data: { status: "FAILED", errorMessage: err?.message ?? String(err) } });
               }
             } else {
-              await prisma.routingLog.update({ where: { id: log.id }, data: { status: "DRY_RUN" } });
+              await prisma.routingLog.update({ where: { id: log.id }, data: { status: "UNMATCHED", errorMessage: "Dry run — no assignment made" } });
             }
             return { matched: true, trace: ruleTrace };
           }
@@ -1177,7 +1248,7 @@ async function routeNewStyle(
       const branchLabel = branch.label || `Path ${rule.branches.indexOf(branch) + 1}`;
       const log = await prisma.routingLog.create({
         data: {
-          orgId, sfdcRecordId: recordId, objectType, eventType,
+          orgId, crmRecordId: recordId, objectType, eventType,
           ruleId: rule.id, ruleName: rule.name,
           pathLabel: branchLabel, branchId: branch.id,
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
@@ -1198,7 +1269,7 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
@@ -1216,7 +1287,7 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
@@ -1225,9 +1296,8 @@ async function routeNewStyle(
       }
 
       try {
-        const conn = await getOrgConnection(orgId);
         await setCooldown(orgId, recordId);
-        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+        await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
         updateAggregates({
           orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
@@ -1236,7 +1306,7 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
@@ -1251,13 +1321,13 @@ async function routeNewStyle(
         });
         return "routed";
       } catch (err) {
-        evictOrgConnection(orgId);
+        await evictCrmConnection(orgId);
         await enqueueRetry({
           logId: log.id, orgId, recordId,
-          objectType: toSfdcObjectName(objectType),
+          objectType: await toCrmObjectName(orgId, objectType),
           ownerId: assignee.sfdcOwnerId,
         });
-        console.error(`[router] SFDC update failed for ${recordId}, enqueued for retry:`, err);
+        console.error(`[router] CRM update failed for ${recordId}, enqueued for retry:`, err);
         return "routed";
       }
     }
@@ -1278,7 +1348,7 @@ async function routeNewStyle(
       ruleTrace.outcome = "MATCHED";
       const log = await prisma.routingLog.create({
         data: {
-          orgId, sfdcRecordId: recordId, objectType, eventType,
+          orgId, crmRecordId: recordId, objectType, eventType,
           ruleId: rule.id, ruleName: rule.name,
           pathLabel: "Default Owner",
           assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
@@ -1299,7 +1369,7 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
@@ -1317,7 +1387,7 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
@@ -1326,9 +1396,8 @@ async function routeNewStyle(
       }
 
       try {
-        const conn = await getOrgConnection(orgId);
         await setCooldown(orgId, recordId);
-        await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+        await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
         await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
         updateAggregates({
           orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
@@ -1337,17 +1406,17 @@ async function routeNewStyle(
         }).catch(() => {});
         if (objectType === "LEAD") {
           createConversionTracking({
-            orgId, routingLogId: log.id, sfdcLeadId: recordId,
+            orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
           }).catch(() => {});
         }
         return "routed";
       } catch (err) {
-        evictOrgConnection(orgId);
+        await evictCrmConnection(orgId);
         await enqueueRetry({
           logId: log.id, orgId, recordId,
-          objectType: toSfdcObjectName(objectType),
+          objectType: await toCrmObjectName(orgId, objectType),
           ownerId: assignee.sfdcOwnerId,
         });
         return "routed";
@@ -1358,7 +1427,7 @@ async function routeNewStyle(
   // New-style rule with no matching branch and no default owner → UNMATCHED
   await prisma.routingLog.create({
     data: {
-      orgId, sfdcRecordId: recordId, objectType, eventType,
+      orgId, crmRecordId: recordId, objectType, eventType,
       ruleId: rule.id, ruleName: rule.name,
       status: "UNMATCHED", routingDurationMs: startMs ? Date.now() - startMs : null,
       isDryRun: rule.isDryRun, recordSnapshot: stripPii(fields) as any,
@@ -1397,7 +1466,7 @@ async function routeLegacy(
   if (!assignee) {
     await prisma.routingLog.create({
       data: {
-        orgId, sfdcRecordId: recordId, objectType, eventType,
+        orgId, crmRecordId: recordId, objectType, eventType,
         ruleId: rule.id, ruleName: rule.name,
         status: "FAILED", errorMessage: "No eligible assignee found",
         routingDurationMs: startMs ? Date.now() - startMs : null,
@@ -1414,7 +1483,7 @@ async function routeLegacy(
 
   const log = await prisma.routingLog.create({
     data: {
-      orgId, sfdcRecordId: recordId, objectType, eventType,
+      orgId, crmRecordId: recordId, objectType, eventType,
       ruleId: rule.id, ruleName: rule.name,
       assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
       assignmentType: assignee.assignmentType as "USER" | "ROUND_ROBIN" | "QUEUE",
@@ -1434,7 +1503,7 @@ async function routeLegacy(
     }).catch(() => {});
     if (objectType === "LEAD") {
       createConversionTracking({
-        orgId, routingLogId: log.id, sfdcLeadId: recordId,
+        orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
       }).catch(() => {});
@@ -1452,7 +1521,7 @@ async function routeLegacy(
     }).catch(() => {});
     if (objectType === "LEAD") {
       createConversionTracking({
-        orgId, routingLogId: log.id, sfdcLeadId: recordId,
+        orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
       }).catch(() => {});
@@ -1461,9 +1530,8 @@ async function routeLegacy(
   }
 
   try {
-    const conn = await getOrgConnection(orgId);
     await setCooldown(orgId, recordId);
-    await updateOwner(conn, toSfdcObjectName(objectType), recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
+    await crmUpdateOwner(orgId, objectType, recordId, assignee.sfdcOwnerId, ROUTING_ACTION_FIELD);
     await prisma.routingLog.update({ where: { id: log.id }, data: { status: "SUCCESS" } });
     updateAggregates({
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
@@ -1472,7 +1540,7 @@ async function routeLegacy(
     }).catch(() => {});
     if (objectType === "LEAD") {
       createConversionTracking({
-        orgId, routingLogId: log.id, sfdcLeadId: recordId,
+        orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
       }).catch(() => {});
@@ -1487,13 +1555,13 @@ async function routeLegacy(
     });
     return "routed";
   } catch (err) {
-    evictOrgConnection(orgId);
+    await evictCrmConnection(orgId);
     await enqueueRetry({
       logId: log.id, orgId, recordId,
-      objectType: toSfdcObjectName(objectType),
+      objectType: await toCrmObjectName(orgId, objectType),
       ownerId: assignee.sfdcOwnerId,
     });
-    console.error(`[router] SFDC update failed for ${recordId}, enqueued for retry:`, err);
+    console.error(`[router] CRM update failed for ${recordId}, enqueued for retry:`, err);
     return "routed";
   }
 }

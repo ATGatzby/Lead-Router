@@ -12,6 +12,8 @@ export interface SshInstallConfig {
 export interface InstallConfig {
   appUrl: string
   engineUrl: string
+  /** CRM type — 'salesforce' or 'hubspot' */
+  crmType?: 'salesforce' | 'hubspot'
   /** Local directory where config files are written (./lead-routing/) */
   installDir: string
   /** Absolute path on the remote server (e.g. /root/lead-routing) */

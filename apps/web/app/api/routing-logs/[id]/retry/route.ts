@@ -38,7 +38,7 @@ export async function POST(
     await queue.add("sfdc-update", {
       logId: id,
       orgId,
-      recordId: log.sfdcRecordId,
+      recordId: log.crmRecordId,
       objectType: toPascalObjectType(log.objectType),
       ownerId: log.assigneeId,
     });

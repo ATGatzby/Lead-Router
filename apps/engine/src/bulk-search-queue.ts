@@ -3,6 +3,7 @@ import { Redis } from "ioredis";
 import { prisma } from "@lead-routing/db";
 import { bulkUpdateOwners, type BulkUpdateRecord } from "@lead-routing/sfdc";
 import { routeRecord, type RoutingPayload } from "./router.js";
+import { bulkRouteRecords } from "./bulk-router.js";
 import { getOrgConnection } from "./sfdc.js";
 
 // ─── Job type ─────────────────────────────────────────────────────────────
@@ -42,6 +43,16 @@ export function getBulkSearchQueue(): Queue<BulkSearchJobData> {
 
 // For convenience (lazy access pattern used by enqueue callers)
 export { _queue as bulkSearchQueue };
+
+/** Get the bulk search worker (for graceful shutdown) */
+export function getBulkSearchWorker(): Worker<BulkSearchJobData> | null {
+  return _worker;
+}
+
+/** Get the bulk search Redis (for graceful shutdown) */
+export function getBulkSearchRedis(): Redis | null {
+  return _redis;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -99,7 +110,6 @@ export function initBulkSearchQueue(redisUrl: string): void {
       // ── Simulation mode: skip routing + SFDC, just count records ──────
       if (simulate) {
         const count = records.length;
-        // Simulate ~50μs per record processing time
         await new Promise((resolve) => setTimeout(resolve, count * 0.05));
         if (_redis) {
           await _redis.hincrby(`bulk-run:${runId}`, "routed", count);
@@ -107,110 +117,175 @@ export function initBulkSearchQueue(redisUrl: string): void {
         return { routed: count, failed: 0 };
       }
 
-      // ── Phase A: Collect routing decisions ────────────────────────────
-      const assignments: Array<{ recordId: string; ownerId: string; logId: string }> = [];
+      // ── Phase A: Bulk evaluate + persist (batched I/O) ──────────────
+      const bulkResult = await bulkRouteRecords({
+        orgId,
+        ruleId,
+        runId,
+        objectType: objectType as "LEAD" | "CONTACT" | "ACCOUNT",
+        records: records.map((r) => ({ recordId: r.recordId, fields: r.fields })),
+      });
+
+      const assignments = bulkResult.assignments;
       let routed = 0;
-      let failed = 0;
+      let failed = bulkResult.failed;
 
-      for (const rec of records) {
-        try {
-          const payload: RoutingPayload = {
-            orgId,
-            objectType: objectType as RoutingPayload["objectType"],
-            eventType: "SEARCH",
-            recordId: rec.recordId,
-            timestamp: new Date().toISOString(),
-            fields: rec.fields,
-            ruleId,
-            preResolvedMatch: rec.matchResult
-              ? {
-                  type: rec.matchResult.matchedType,
-                  ownerId: rec.matchResult.ownerId,
-                  recordId: rec.matchResult.matchedRecordId,
-                }
-              : null,
-            skipSfdcWrite: true,
-            _assignments: assignments,
-          };
-
-          await routeRecord(payload, Date.now());
-        } catch (err) {
-          console.error(
-            `[bulk-search-queue] Route error for ${rec.recordId}:`,
-            err instanceof Error ? err.message : err
-          );
-          failed++;
-        }
-      }
-
-      // ── Phase B: Bulk write all assignments ───────────────────────────
+      // ── Phase B: Batch write assignments via SFDC Bulk API 2.0 ──────
+      //    Optimization: Skip records whose owner is already correct.
       if (assignments.length > 0) {
         // Set phase in Redis
         if (_redis) {
           await _redis.hset(`bulk-run:${runId}`, "phase", "writing");
         }
 
-        try {
-          const conn = await getOrgConnection(orgId);
-          const timestamp = new Date().toISOString();
-          const sfdcObjectName = toSfdcObjectName(objectType);
-          const updateRecords: BulkUpdateRecord[] = assignments.map((a) => ({
-            Id: a.recordId,
-            OwnerId: a.ownerId,
-          }));
+        // Build a lookup map: recordId → current OwnerId
+        const currentOwnerMap = new Map<string, string>();
+        for (const r of records) {
+          const currentOwner = r.fields?.OwnerId;
+          if (typeof currentOwner === "string" && currentOwner) {
+            currentOwnerMap.set(r.recordId, currentOwner);
+          }
+        }
 
-          const result = await bulkUpdateOwners(
-            conn,
-            sfdcObjectName,
-            updateRecords,
-            "lrt__Routing_Action__c"
+        // Partition assignments: skip unchanged vs needs update
+        const skippedAssignments: typeof assignments = [];
+        const needsUpdateAssignments: typeof assignments = [];
+
+        for (const a of assignments) {
+          const currentOwner = currentOwnerMap.get(a.recordId);
+          if (currentOwner && a.ownerId && currentOwner === a.ownerId) {
+            skippedAssignments.push(a);
+          } else {
+            needsUpdateAssignments.push(a);
+          }
+        }
+
+        if (skippedAssignments.length > 0) {
+          console.log(
+            `[bulk-search-queue] Skipping ${skippedAssignments.length} records (owner unchanged)`
           );
+        }
 
-          // Reconcile: update routing logs based on write results
-          if (result.successful.length > 0) {
-            const successLogIds = assignments
-              .filter((a) => result.successful.includes(a.recordId))
-              .map((a) => a.logId);
-            if (successLogIds.length > 0) {
-              await prisma.routingLog.updateMany({
-                where: { id: { in: successLogIds } },
-                data: { status: "SUCCESS" },
+        // Mark skipped records as SUCCESS immediately (owner already correct)
+        if (skippedAssignments.length > 0) {
+          routed += skippedAssignments.length;
+
+          // Group by assignee to minimize DB update calls
+          const skippedAssigneeMap = new Map<string, { logIds: string[]; data: Record<string, unknown> }>();
+          for (const a of skippedAssignments) {
+            const key = `${a.ownerId}|${a.assigneeName ?? ""}|${a.assignmentType ?? ""}|${a.teamId ?? ""}|${a.teamName ?? ""}`;
+            if (!skippedAssigneeMap.has(key)) {
+              skippedAssigneeMap.set(key, {
+                logIds: [],
+                data: {
+                  status: "SUCCESS",
+                  assigneeId: a.ownerId ?? null,
+                  assigneeName: a.assigneeName ?? null,
+                  assignmentType: a.assignmentType ?? null,
+                  teamId: a.teamId ?? null,
+                  teamName: a.teamName ?? null,
+                },
               });
             }
-            routed += result.successful.length;
+            skippedAssigneeMap.get(key)!.logIds.push(a.logId);
           }
 
-          if (result.failed.length > 0) {
-            const failLogIds = assignments
-              .filter((a) => result.failed.some((f) => f.id === a.recordId))
-              .map((a) => a.logId);
-            if (failLogIds.length > 0) {
+          await Promise.allSettled(
+            [...skippedAssigneeMap.values()].map((group) =>
+              prisma.routingLog.updateMany({
+                where: { id: { in: group.logIds } },
+                data: group.data,
+              })
+            )
+          );
+        }
+
+        // Process remaining assignments that actually need a SFDC write
+        if (needsUpdateAssignments.length > 0) {
+          try {
+            const conn = await getOrgConnection(orgId);
+            const sfdcObjectName = toSfdcObjectName(objectType);
+            const updateRecords: BulkUpdateRecord[] = needsUpdateAssignments.map((a) => ({
+              Id: a.recordId,
+              OwnerId: a.ownerId,
+            }));
+
+            const result = await bulkUpdateOwners(
+              conn,
+              sfdcObjectName,
+              updateRecords,
+              "lrt__Routing_Action__c"
+            );
+
+            // Reconcile: update routing logs — populate assignee fields on success
+            if (result.successful.length > 0) {
+              // Group by assignee to minimize DB update calls
+              const assigneeMap = new Map<string, { logIds: string[]; data: Record<string, unknown> }>();
+              for (const successId of result.successful) {
+                const a = needsUpdateAssignments.find((x) => x.recordId === successId);
+                if (!a) continue;
+                const key = `${a.ownerId}|${a.assigneeName ?? ""}|${a.assignmentType ?? ""}|${a.teamId ?? ""}|${a.teamName ?? ""}`;
+                if (!assigneeMap.has(key)) {
+                  assigneeMap.set(key, {
+                    logIds: [],
+                    data: {
+                      status: "SUCCESS",
+                      assigneeId: a.ownerId ?? null,
+                      assigneeName: a.assigneeName ?? null,
+                      assignmentType: a.assignmentType ?? null,
+                      teamId: a.teamId ?? null,
+                      teamName: a.teamName ?? null,
+                    },
+                  });
+                }
+                assigneeMap.get(key)!.logIds.push(a.logId);
+              }
+
+              await Promise.allSettled(
+                [...assigneeMap.values()].map((group) =>
+                  prisma.routingLog.updateMany({
+                    where: { id: { in: group.logIds } },
+                    data: group.data,
+                  })
+                )
+              );
+
+              routed += result.successful.length;
+            }
+
+            if (result.failed.length > 0) {
+              const failedIds = new Set(result.failed.map((f) => f.id));
+              const failLogIds = needsUpdateAssignments
+                .filter((a) => failedIds.has(a.recordId))
+                .map((a) => a.logId);
+              if (failLogIds.length > 0) {
+                await prisma.routingLog.updateMany({
+                  where: { id: { in: failLogIds } },
+                  data: { status: "FAILED", errorMessage: "Bulk API write failed" },
+                });
+              }
+              failed += result.failed.length;
+            }
+
+            // Count unprocessed as failed
+            if (result.unprocessed > 0) {
+              failed += result.unprocessed;
+            }
+          } catch (err: any) {
+            console.error(
+              `[bulk-search-queue] Bulk write failed for batch:`,
+              err.message
+            );
+            // Mark only needsUpdate assignments as failed (skipped ones are already SUCCESS)
+            const allLogIds = needsUpdateAssignments.map((a) => a.logId);
+            if (allLogIds.length > 0) {
               await prisma.routingLog.updateMany({
-                where: { id: { in: failLogIds } },
-                data: { status: "FAILED", errorMessage: "Bulk API write failed" },
+                where: { id: { in: allLogIds } },
+                data: { status: "FAILED", errorMessage: `Bulk write error: ${err.message}` },
               });
             }
-            failed += result.failed.length;
+            failed += needsUpdateAssignments.length;
           }
-
-          // Count unprocessed as failed
-          if (result.unprocessed > 0) {
-            failed += result.unprocessed;
-          }
-        } catch (err: any) {
-          console.error(
-            `[bulk-search-queue] Bulk write failed for batch:`,
-            err.message
-          );
-          // Mark ALL assignments as failed
-          const allLogIds = assignments.map((a) => a.logId);
-          if (allLogIds.length > 0) {
-            await prisma.routingLog.updateMany({
-              where: { id: { in: allLogIds } },
-              data: { status: "FAILED", errorMessage: `Bulk write error: ${err.message}` },
-            });
-          }
-          failed += assignments.length;
         }
       }
 
@@ -226,10 +301,6 @@ export function initBulkSearchQueue(redisUrl: string): void {
     {
       connection: _redis,
       concurrency: 15,
-      limiter: {
-        max: 30,
-        duration: 1000,
-      },
     }
   );
 

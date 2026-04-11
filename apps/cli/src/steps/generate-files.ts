@@ -72,6 +72,10 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     feedbackToEmail: cfg.feedbackToEmail || undefined,
     licenseKey: license.licenseKey,
     licenseTier: license.licenseTier,
+    crmType: cfg.crmType,
+    hubspotClientId: cfg.hubspotClientId,
+    hubspotClientSecret: cfg.hubspotClientSecret,
+    hubspotAppId: cfg.hubspotAppId,
   })
   const envWeb = join(dir, '.env.web')
   writeFileSync(envWeb, envWebContent, 'utf8')
@@ -85,6 +89,8 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     internalApiKey: cfg.internalApiKey,
     licenseKey: license.licenseKey,
     licenseTier: license.licenseTier,
+    crmType: cfg.crmType,
+    hubspotClientSecret: cfg.hubspotClientSecret,
   })
   const envEngine = join(dir, '.env.engine')
   writeFileSync(envEngine, envEngineContent, 'utf8')
@@ -95,6 +101,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
   writeConfig(dir, {
     appUrl: cfg.appUrl,
     engineUrl: cfg.engineUrl,
+    crmType: cfg.crmType,
     installDir: dir,
     remoteDir: sshCfg.remoteDir,
     ssh: {

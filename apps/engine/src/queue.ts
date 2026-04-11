@@ -3,6 +3,7 @@ import { redis } from "./redis.js";
 import { prisma } from "@lead-routing/db";
 import { updateOwner } from "@lead-routing/sfdc";
 import { getOrgConnection, evictOrgConnection } from "./sfdc.js";
+import { updateHubSpotRecordOwner, evictOrgHubSpotClient } from "./hubspot-connection.js";
 
 const QUEUE_NAME = "routing-retries";
 
@@ -12,8 +13,8 @@ export interface RetryJobData {
   logId: string;
   orgId: string;
   recordId: string;
-  objectType: string; // 'Lead' | 'Contact' | 'Account' (Pascal case for jsforce)
-  ownerId: string;    // SFDC User ID or Queue ID
+  objectType: string; // 'LEAD' | 'CONTACT' | 'ACCOUNT' | 'COMPANY' | 'DEAL'
+  ownerId: string;    // SFDC User/Queue ID or HubSpot Owner ID
 }
 
 // ─── Queue ────────────────────────────────────────────────────────────────
@@ -31,14 +32,40 @@ export const routingQueue = new Queue<RetryJobData>(QUEUE_NAME, {
   },
 });
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+/** Capitalise first letter: LEAD → Lead (for jsforce sobject names) */
+function toSfdcObjectName(objectType: string): string {
+  return objectType.charAt(0) + objectType.slice(1).toLowerCase();
+}
+
+/** Get the CRM type for an org from the database */
+async function getOrgCrmType(orgId: string): Promise<string> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { crmType: true },
+    });
+    return org?.crmType ?? "SALESFORCE";
+  } catch {
+    return "SALESFORCE";
+  }
+}
+
 // ─── Worker ───────────────────────────────────────────────────────────────
 
 export const routingWorker = new Worker<RetryJobData>(
   QUEUE_NAME,
   async (job: Job<RetryJobData>) => {
     const { orgId, recordId, objectType, ownerId } = job.data;
-    const conn = await getOrgConnection(orgId);
-    await updateOwner(conn, objectType, recordId, ownerId);
+    const crmType = await getOrgCrmType(orgId);
+
+    if (crmType === "HUBSPOT") {
+      await updateHubSpotRecordOwner(orgId, objectType, recordId, ownerId);
+    } else {
+      const conn = await getOrgConnection(orgId);
+      await updateOwner(conn, toSfdcObjectName(objectType), recordId, ownerId);
+    }
   },
   { connection: redis }
 );
@@ -60,12 +87,20 @@ routingWorker.on("completed", async (job: Job<RetryJobData>) => {
 routingWorker.on("failed", async (job: Job<RetryJobData> | undefined, err: Error) => {
   if (!job) return;
 
-  // If the failure is an auth error, evict the cached connection so the next
-  // retry (or next routing event) creates a fresh connection with latest DB tokens.
+  // If the failure is an auth error, evict the cached connection/client so the next
+  // retry (or next routing event) creates a fresh one with latest DB tokens.
   const msg = err.message ?? "";
+
+  // SFDC auth errors
   if (msg.includes("invalid_grant") || msg.includes("expired") || msg.includes("INVALID_SESSION_ID")) {
     evictOrgConnection(job.data.orgId);
     console.warn(`[queue] Evicted stale SFDC connection for org ${job.data.orgId} (${msg})`);
+  }
+
+  // HubSpot auth errors
+  if (msg.includes("401") || msg.includes("UNAUTHORIZED")) {
+    evictOrgHubSpotClient(job.data.orgId);
+    console.warn(`[queue] Evicted stale HubSpot client for org ${job.data.orgId} (${msg})`);
   }
 
   if (job.attemptsMade >= 3) {

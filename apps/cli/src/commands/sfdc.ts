@@ -24,6 +24,12 @@ export async function runSfdcDeploy(): Promise<void> {
   const dir = findInstallDir()
   const config = dir ? readConfig(dir) : null
 
+  // ── Guard: only run for Salesforce orgs ────────────────────────────────────
+  if (config?.crmType === 'hubspot') {
+    log.error('This installation is configured for HubSpot. The sfdc deploy command is only available for Salesforce.')
+    process.exit(1)
+  }
+
   if (config?.appUrl && config?.engineUrl) {
     appUrl = config.appUrl
     engineUrl = config.engineUrl

@@ -8,7 +8,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Open' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Open' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -19,7 +19,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Open' AND LeadSource = 'Web' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Open' AND LeadSource = 'Web' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -29,7 +29,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Company LIKE '%Acme%' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Company LIKE '%Acme%' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -69,7 +69,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate > LAST_N_DAYS:7 LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate > LAST_N_DAYS:7 AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -79,14 +79,14 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate = TODAY LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate = TODAY AND IsConverted = false LIMIT 2000"
     );
   });
 
-  it("returns no WHERE clause for empty criteria", () => {
+  it("returns IsConverted filter for empty Lead criteria", () => {
     const soql = buildSoqlFromCriteria("Lead", []);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE IsConverted = false LIMIT 2000"
     );
   });
 
@@ -96,7 +96,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Company = 'O\\'Reilly' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Company = 'O\\'Reilly' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -106,7 +106,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Description LIKE '%it\\'s%' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Description LIKE '%it\\'s%' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -116,7 +116,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status IN ('Open','Closed','Pending') LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status IN ('Open','Closed','Pending') AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -126,7 +126,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Industry NOT IN ('Tech','Finance') LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Industry NOT IN ('Tech','Finance') AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -137,7 +137,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Email = null AND Phone != null LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Email = null AND Phone != null AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -154,7 +154,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria, ["Id", "Name", "Status", "Company"]);
     expect(soql).toBe(
-      "SELECT Id, Name, Status, Company FROM Lead WHERE Status = 'Active' LIMIT 2000"
+      "SELECT Id, Name, Status, Company FROM Lead WHERE Status = 'Active' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -164,7 +164,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate >= LAST_N_DAYS:30 LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE CreatedDate >= LAST_N_DAYS:30 AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -176,7 +176,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Active' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Status = 'Active' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -188,7 +188,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Industry = 'Tech' LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Industry = 'Tech' AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -199,7 +199,7 @@ describe("buildSoqlFromCriteria", () => {
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Email = null LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE Email = null AND IsConverted = false LIMIT 2000"
     );
   });
 
@@ -213,14 +213,14 @@ describe("buildSoqlFromCriteria", () => {
     );
   });
 
-  it("returns no WHERE when all criteria have empty values", () => {
+  it("returns IsConverted filter when all criteria have empty values", () => {
     const criteria: SearchCriterion[] = [
       { field: "AnnualRevenue", operator: "gt", value: "" },
       { field: "Status", operator: "contains", value: "" },
     ];
     const soql = buildSoqlFromCriteria("Lead", criteria);
     expect(soql).toBe(
-      "SELECT Id, OwnerId, Name, Email FROM Lead LIMIT 2000"
+      "SELECT Id, OwnerId, Name, Email FROM Lead WHERE IsConverted = false LIMIT 2000"
     );
   });
 });

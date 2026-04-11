@@ -25,6 +25,28 @@ export async function setCooldown(
 }
 
 /**
+ * Set cooldowns for multiple records in a single Redis pipeline.
+ * Uses the same key format and TTL as setCooldown().
+ */
+export async function setCooldownBatch(
+  orgId: string,
+  recordIds: string[],
+  ttlSeconds: number = DEFAULT_TTL_SECONDS,
+): Promise<void> {
+  if (recordIds.length === 0) return;
+  try {
+    const pipeline = redis.pipeline();
+    for (const recordId of recordIds) {
+      const key = cooldownKey(orgId, recordId);
+      pipeline.set(key, "1", "EX", ttlSeconds);
+    }
+    await pipeline.exec();
+  } catch (err) {
+    console.error("[cooldown] Batch set failed:", err);
+  }
+}
+
+/**
  * Check whether a record is in cooldown.
  * Returns false if Redis is unavailable (fail-open).
  */

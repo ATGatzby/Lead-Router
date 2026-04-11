@@ -22,7 +22,7 @@ const mockUsersResponse = {
   users: [
     {
       id: "u1",
-      sfdcUserId: "005xx000001",
+      crmUserId: "005xx000001",
       name: "Alice Smith",
       email: "alice@example.com",
       role: "AE",
@@ -34,7 +34,7 @@ const mockUsersResponse = {
     },
     {
       id: "u2",
-      sfdcUserId: "005xx000002",
+      crmUserId: "005xx000002",
       name: "Bob Jones",
       email: "bob@example.com",
       role: "SDR",

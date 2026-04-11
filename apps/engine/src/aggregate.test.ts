@@ -172,7 +172,7 @@ describe("createConversionTracking", () => {
   const trackingInput = {
     orgId: "org-1",
     routingLogId: "log-1",
-    sfdcLeadId: "00Q000000000001",
+    crmRecordId: "00Q000000000001",
     ruleId: "rule-1",
     ruleName: "Enterprise Rule",
     pathLabel: "Path A",
@@ -189,7 +189,7 @@ describe("createConversionTracking", () => {
       data: {
         orgId: "org-1",
         routingLogId: "log-1",
-        sfdcLeadId: "00Q000000000001",
+        crmRecordId: "00Q000000000001",
         ruleId: "rule-1",
         ruleName: "Enterprise Rule",
         pathLabel: "Path A",

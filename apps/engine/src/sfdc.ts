@@ -47,14 +47,14 @@ export function evictOrgConnection(orgId: string): void {
   connCache.delete(orgId);
 }
 
-/** Get the SFDC User ID for a given internal User.id */
+/** Get the CRM User/Owner ID for a given internal User.id */
 export async function getSfdcUserId(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { sfdcUserId: true },
+    select: { crmUserId: true },
   });
   if (!user) throw new Error(`User ${userId} not found — may have been deleted or not synced`);
-  return user.sfdcUserId;
+  return user.crmUserId;
 }
 
 /** Get the SFDC Queue ID for a given internal SfdcQueue.id */

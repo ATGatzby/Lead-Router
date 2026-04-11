@@ -10,6 +10,6 @@ export default defineConfig({
   // All other deps (fastify, ioredis, bullmq, …) stay external — the Docker runner
   // installs them via pnpm install --prod.
   // @prisma/client is also external — it ships native query-engine binaries.
-  noExternal: ['@lead-routing/db', '@lead-routing/sfdc'],
+  noExternal: ['@lead-routing/db', '@lead-routing/sfdc', '@lead-routing/hubspot', '@lead-routing/crm-adapter'],
   external: ['@prisma/client'],
 })

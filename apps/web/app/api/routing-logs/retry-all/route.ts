@@ -18,7 +18,7 @@ export async function POST() {
       },
       select: {
         id: true,
-        sfdcRecordId: true,
+        crmRecordId: true,
         objectType: true,
         assigneeId: true,
       },
@@ -42,7 +42,7 @@ export async function POST() {
         data: {
           logId: log.id,
           orgId,
-          recordId: log.sfdcRecordId,
+          recordId: log.crmRecordId,
           objectType: toPascalObjectType(log.objectType),
           ownerId: log.assigneeId!,
         },

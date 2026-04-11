@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const routePayloadSchema = z.object({
   sfdcOrgId: z.string().min(1),
-  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT"]),
+  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"]),
   eventType: z.enum(["INSERT", "UPDATE", "BOTH", "SEARCH"]),
   recordId: z.string().min(1),
   timestamp: z.string(),
@@ -12,7 +12,7 @@ export const routePayloadSchema = z.object({
 
 export const batchPayloadSchema = z.object({
   sfdcOrgId: z.string().min(1),
-  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT"]),
+  objectType: z.enum(["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"]),
   eventType: z.enum(["INSERT", "UPDATE", "BOTH", "SEARCH"]),
   timestamp: z.string(),
   ruleId: z.string().optional(),

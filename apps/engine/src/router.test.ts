@@ -365,12 +365,17 @@ describe("routeRecord — legacy ROUND_ROBIN assignment", () => {
       {
         id: "tm-1", userId: "user-1", status: "ACTIVE", teamId: "team-1",
         assignmentCount: 0, createdAt: new Date(),
-        user: { id: "user-1", sfdcUserId: "005RR_USER", name: "Bob", email: "bob@test.com" },
+        user: { id: "user-1", crmUserId: "005RR_USER", name: "Bob", email: "bob@test.com" },
       },
     ];
     mockPrisma.teamMember.findMany.mockResolvedValue(members);
     mockGetNextMember.mockResolvedValue({
       id: "tm-1", userId: "user-1", name: "Bob", email: "bob@test.com", assignmentCount: 0,
+    });
+    // Mock getSfdcUserId to return the correct CRM user ID
+    mockGetSfdcUserId.mockImplementation(async (userId: string) => {
+      if (userId === "user-1") return "005RR_USER";
+      return "005SFDC_USER";
     });
 
     const result = await routeRecord(makePayload());
@@ -428,7 +433,7 @@ describe("routeRecord — legacy ROUND_ROBIN assignment", () => {
       {
         id: "tm-1", userId: "user-1", status: "ACTIVE", teamId: "team-1",
         assignmentCount: 0, createdAt: new Date(),
-        user: { id: "user-1", sfdcUserId: "005RR_USER", name: "Bob", email: "bob@test.com" },
+        user: { id: "user-1", crmUserId: "005RR_USER", name: "Bob", email: "bob@test.com" },
       },
     ]);
     mockGetNextMember.mockResolvedValue(null);
@@ -1397,12 +1402,17 @@ describe("routeRecord — branch ROUND_ROBIN assignment", () => {
       {
         id: "tm-1", userId: "user-1", status: "ACTIVE", teamId: "team-1",
         assignmentCount: 0, createdAt: new Date(),
-        user: { id: "user-1", sfdcUserId: "005RR", name: "Charlie", email: "charlie@test.com" },
+        user: { id: "user-1", crmUserId: "005RR", name: "Charlie", email: "charlie@test.com" },
       },
     ];
     mockPrisma.teamMember.findMany.mockResolvedValue(members);
     mockGetNextMember.mockResolvedValue({
       id: "tm-1", userId: "user-1", name: "Charlie", email: "charlie@test.com", assignmentCount: 0,
+    });
+    // Mock getSfdcUserId to return the correct CRM user ID
+    mockGetSfdcUserId.mockImplementation(async (userId: string) => {
+      if (userId === "user-1") return "005RR";
+      return "005SFDC_USER";
     });
 
     const result = await routeRecord(makePayload());
@@ -1430,12 +1440,17 @@ describe("routeRecord — default owner ROUND_ROBIN", () => {
       {
         id: "tm-d1", userId: "user-d1", status: "ACTIVE", teamId: "team-default",
         assignmentCount: 5, createdAt: new Date(),
-        user: { id: "user-d1", sfdcUserId: "005DEFAULT_RR", name: "DefaultUser", email: "d@t.com" },
+        user: { id: "user-d1", crmUserId: "005DEFAULT_RR", name: "DefaultUser", email: "d@t.com" },
       },
     ];
     mockPrisma.teamMember.findMany.mockResolvedValue(members);
     mockGetNextMember.mockResolvedValue({
       id: "tm-d1", userId: "user-d1", name: "DefaultUser", email: "d@t.com", assignmentCount: 5,
+    });
+    // Mock getSfdcUserId to return the correct CRM user ID
+    mockGetSfdcUserId.mockImplementation(async (userId: string) => {
+      if (userId === "user-d1") return "005DEFAULT_RR";
+      return "005SFDC_USER";
     });
 
     const result = await routeRecord(makePayload());
@@ -1766,14 +1781,14 @@ describe("routeRecord — decision trace", () => {
     const rule = makeLegacyRule();
     mockGetActiveRules.mockReturnValue([rule]);
     mockEvaluateRule.mockReturnValue(true);
-    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", crmUserId: "005SFDC_USER" });
 
     await routeRecord(makePayload());
 
     // attachTrace calls findFirst then update
     expect(mockPrisma.routingLog.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { orgId: "org-1", sfdcRecordId: "00Q000000000001" },
+        where: { orgId: "org-1", crmRecordId: "00Q000000000001" },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       })
@@ -1878,7 +1893,7 @@ describe("routeRecord — decision trace", () => {
     const rule = makeLegacyRule();
     mockGetActiveRules.mockReturnValue([rule]);
     mockEvaluateRule.mockReturnValue(true);
-    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", crmUserId: "005SFDC_USER" });
     mockPrisma.routingLog.findFirst.mockResolvedValue(null);
 
     // Should not throw
@@ -1890,7 +1905,7 @@ describe("routeRecord — decision trace", () => {
     const rule = makeNewStyleRule();
     mockGetActiveRules.mockReturnValue([rule]);
     mockEvaluateRule.mockReturnValue(true);
-    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", sfdcUserId: "005SFDC_USER" });
+    mockPrisma.user.findUnique.mockResolvedValue({ name: "Alice", crmUserId: "005SFDC_USER" });
 
     await routeRecord(makePayload());
 
@@ -1920,12 +1935,12 @@ describe("routeRecord — weighted round-robin assignment", () => {
     {
       id: "tm-1", userId: "user-1", status: "ACTIVE", teamId: "team-1",
       assignmentCount: 0, weight: 60, createdAt: new Date(),
-      user: { id: "user-1", sfdcUserId: "005WRR_USER1", name: "Alice", email: "alice@test.com" },
+      user: { id: "user-1", crmUserId: "005WRR_USER1", name: "Alice", email: "alice@test.com" },
     },
     {
       id: "tm-2", userId: "user-2", status: "ACTIVE", teamId: "team-1",
       assignmentCount: 0, weight: 40, createdAt: new Date(),
-      user: { id: "user-2", sfdcUserId: "005WRR_USER2", name: "Bob", email: "bob@test.com" },
+      user: { id: "user-2", crmUserId: "005WRR_USER2", name: "Bob", email: "bob@test.com" },
     },
   ];
 
@@ -1945,6 +1960,12 @@ describe("routeRecord — weighted round-robin assignment", () => {
     mockGetNextWeightedMember.mockResolvedValue({
       id: "tm-1", userId: "user-1", name: "Alice", email: "alice@test.com",
       assignmentCount: 0, weight: 60,
+    });
+    // Mock getSfdcUserId to return the correct CRM user ID
+    mockGetSfdcUserId.mockImplementation(async (userId: string) => {
+      if (userId === "user-1") return "005WRR_USER1";
+      if (userId === "user-2") return "005WRR_USER2";
+      return "005SFDC_USER";
     });
 
     const result = await routeRecord(makePayload());

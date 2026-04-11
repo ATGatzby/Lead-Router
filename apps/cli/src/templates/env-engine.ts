@@ -7,6 +7,8 @@ export interface EngineEnvConfig {
   logLevel?: string
   licenseKey?: string
   licenseTier: string
+  crmType?: 'salesforce' | 'hubspot'
+  hubspotClientSecret?: string
 }
 
 export function renderEnvEngine(c: EngineEnvConfig): string {
@@ -35,5 +37,12 @@ export function renderEnvEngine(c: EngineEnvConfig): string {
     `LICENSE_KEY=${c.licenseKey ?? ''}`,
     `LICENSE_TIER=${c.licenseTier}`,
     `LICENSE_API_URL=https://lead-routing-license.artyagi2011.workers.dev`,
+    ...(c.crmType === 'hubspot'
+      ? [
+          ``,
+          `# HubSpot`,
+          `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? ''}`,
+        ]
+      : []),
   ].join('\n')
 }

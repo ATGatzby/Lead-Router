@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { TriggerConfig } from "../types"
-import { triggerEventLabel } from "../types"
+import { triggerEventLabel, objectTypeLabel } from "../types"
 
 interface Props {
   trigger: TriggerConfig
@@ -16,12 +16,7 @@ interface Props {
 export function TriggerStepCard({ trigger, stepNumber, onEdit }: Props) {
   const label = triggerEventLabel(trigger.objectType, trigger.triggerEvent)
 
-  const objectLabel =
-    trigger.objectType === "LEAD"
-      ? "Lead"
-      : trigger.objectType === "CONTACT"
-      ? "Contact"
-      : "Account"
+  const objectLabel = objectTypeLabel(trigger.objectType)
 
   return (
     <div

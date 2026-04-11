@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     const rows = logs.map((log) => {
       const cols = [
-        log.sfdcRecordId,
+        log.crmRecordId,
         log.objectType,
         log.eventType,
         log.ruleName ?? "",

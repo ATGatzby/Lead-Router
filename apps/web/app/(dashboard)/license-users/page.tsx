@@ -27,7 +27,7 @@ import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
 
 interface UserRecord {
   id: string;
-  sfdcUserId: string;
+  crmUserId: string;
   name: string;
   email: string;
   role: string | null;

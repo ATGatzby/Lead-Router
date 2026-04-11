@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     let objectFilter = "";
     let idx = 4;
     if (objectType) {
-      objectFilter = ` AND a."objectType" = $${idx++}::"SfdcObjectType"`;
+      objectFilter = ` AND a."objectType" = $${idx++}::"CrmObjectType"`;
       params.push(objectType);
     }
 
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
         tm.weight                     AS target_weight,
         SUM(a."totalCount")::integer  AS total
       FROM routing_daily_aggregates a
-      LEFT JOIN users u ON u."sfdcUserId" = a."assigneeId"
+      LEFT JOIN users u ON u."crmUserId" = a."assigneeId"
       LEFT JOIN team_members tm ON tm."teamId" = a."teamId" AND tm."userId" = u.id
       WHERE a."orgId" = $1 AND a.date >= $2 AND a.date <= $3
         AND a."teamId" IS NOT NULL

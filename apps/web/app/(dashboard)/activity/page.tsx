@@ -17,7 +17,7 @@ import { TraceDetail, NoTraceDetail } from "@/components/record-journey/JourneyS
 
 interface RoutingLog {
   id: string;
-  sfdcRecordId: string;
+  crmRecordId: string;
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
   eventType: string;
   ruleId: string | null;
@@ -143,11 +143,11 @@ function buildRecursiveSet(logs: RoutingLog[]): Set<string> {
   for (const log of logs) {
     if (log.status !== "SUCCESS") continue;
     const ts = new Date(log.createdAt).getTime();
-    const existing = byRecord.get(log.sfdcRecordId);
+    const existing = byRecord.get(log.crmRecordId);
     if (existing) {
       existing.push(ts);
     } else {
-      byRecord.set(log.sfdcRecordId, [ts]);
+      byRecord.set(log.crmRecordId, [ts]);
     }
   }
   for (const [recordId, timestamps] of byRecord) {
@@ -375,7 +375,7 @@ export default function HistoryPage() {
             >
               {/* Record ID */}
               <div className="flex items-center gap-1.5 min-w-0">
-                {recursiveIds.has(log.sfdcRecordId) && log.status === "SUCCESS" && (
+                {recursiveIds.has(log.crmRecordId) && log.status === "SUCCESS" && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -389,10 +389,10 @@ export default function HistoryPage() {
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <span className="font-mono text-xs truncate">{log.sfdcRecordId}</span>
+                <span className="font-mono text-xs truncate">{log.crmRecordId}</span>
                 {log.recordSnapshot && <RecordSnapshotPopover snapshot={log.recordSnapshot} />}
                 <a
-                  href={`https://salesforce.com/${log.sfdcRecordId}`}
+                  href={`https://salesforce.com/${log.crmRecordId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-foreground shrink-0"
@@ -471,9 +471,9 @@ export default function HistoryPage() {
         <SheetContent side="right" className="sm:max-w-xl w-full">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <span className="font-mono text-sm">{selectedLog?.sfdcRecordId}</span>
+              <span className="font-mono text-sm">{selectedLog?.crmRecordId}</span>
               <a
-                href={`https://salesforce.com/${selectedLog?.sfdcRecordId}`}
+                href={`https://salesforce.com/${selectedLog?.crmRecordId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"

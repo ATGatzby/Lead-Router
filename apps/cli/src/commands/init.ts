@@ -222,30 +222,46 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     log.step('Step 1/9  License validation')
     const licenseResult = { tier: auth.customer.tier as 'free' | 'pro', key: undefined as string | undefined }
 
-    // Step 2 — Install Salesforce Package
-    log.step('Step 2/9  Install Salesforce Package')
-    note(
-      'The Lead Router managed package installs the required Connected App,\n' +
-        'triggers, and custom objects in your Salesforce org.\n\n' +
-        `Install URL: ${chalk.cyan(MANAGED_PACKAGE_INSTALL_URL)}`,
-      'Salesforce Package'
-    )
-    log.info('Opening install URL in your browser...')
-    openBrowser(MANAGED_PACKAGE_INSTALL_URL)
-    log.info(`${chalk.dim('If the browser didn\'t open, visit the URL above manually.')}`)
-
-    const installed = await confirm({
-      message: 'Have you installed the package? (Click "Install for All Users" in Salesforce)',
-      initialValue: false,
+    // CRM selection — determines which integration steps to run
+    const crmChoice = await select({
+      message: 'Which CRM will you connect?',
+      options: [
+        { value: 'salesforce', label: 'Salesforce' },
+        { value: 'hubspot', label: 'HubSpot' },
+      ],
     })
-    if (isCancel(installed)) {
-      cancel('Setup cancelled.')
-      process.exit(0)
-    }
-    if (!installed) {
-      log.warn('You can install the package later from Integrations → Salesforce in the web app.')
+    if (isCancel(crmChoice)) { cancel('Setup cancelled.'); process.exit(0) }
+    const crmType = crmChoice as 'salesforce' | 'hubspot'
+
+    // Step 2 — Install Salesforce Package (Salesforce only)
+    if (crmType === 'salesforce') {
+      log.step('Step 2/9  Install Salesforce Package')
+      note(
+        'The Lead Router managed package installs the required Connected App,\n' +
+          'triggers, and custom objects in your Salesforce org.\n\n' +
+          `Install URL: ${chalk.cyan(MANAGED_PACKAGE_INSTALL_URL)}`,
+        'Salesforce Package'
+      )
+      log.info('Opening install URL in your browser...')
+      openBrowser(MANAGED_PACKAGE_INSTALL_URL)
+      log.info(`${chalk.dim('If the browser didn\'t open, visit the URL above manually.')}`)
+
+      const installed = await confirm({
+        message: 'Have you installed the package? (Click "Install for All Users" in Salesforce)',
+        initialValue: false,
+      })
+      if (isCancel(installed)) {
+        cancel('Setup cancelled.')
+        process.exit(0)
+      }
+      if (!installed) {
+        log.warn('You can install the package later from Integrations → Salesforce in the web app.')
+      } else {
+        log.success('Salesforce package installed')
+      }
     } else {
-      log.success('Salesforce package installed')
+      log.step('Step 2/9  HubSpot credentials (collected in step 5)')
+      log.info('HubSpot credentials will be collected during configuration.')
     }
 
     // Step 3 — Local prerequisites (Node.js)
@@ -254,7 +270,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
     // Step 4 — SSH connection details + immediate connection test
     log.step('Step 4/9  SSH connection')
-    const sshCfg = await collectSshConfig({
+    let sshCfg = await collectSshConfig({
       sshPort: options.sshPort,
       sshUser: options.sshUser,
       sshKey: options.sshKey,
@@ -262,21 +278,35 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     })
 
     if (!dryRun) {
-      try {
-        await ssh.connect(sshCfg)
-        log.success(`Connected to ${sshCfg.host}`)
-      } catch (err) {
-        log.error(`SSH connection failed: ${String(err)}`)
-        log.info('Check your password and re-run `lead-routing init`.')
-        process.exit(1)
+      let sshConnected = false
+      while (!sshConnected) {
+        try {
+          await ssh.connect(sshCfg)
+          log.success(`Connected to ${sshCfg.host}`)
+          sshConnected = true
+        } catch (err) {
+          log.error(`SSH connection failed: ${String(err)}`)
+          const retry = await confirm({ message: 'Re-enter SSH details and try again?' })
+          if (isCancel(retry) || !retry) {
+            cancel('Setup cancelled.')
+            process.exit(0)
+          }
+          sshCfg = await collectSshConfig({
+            sshPort: options.sshPort,
+            sshUser: options.sshUser,
+            sshKey: options.sshKey,
+            remoteDir: options.remoteDir,
+          })
+        }
       }
     }
 
     // Step 5 — App configuration
     log.step('Step 5/9  Configuration')
-    const cfg = await collectConfig({
+    let cfg = await collectConfig({
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
+      crmType,
     })
 
     // DNS pre-flight
@@ -317,7 +347,54 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
     // Step 9 — Health check on public HTTPS URLs
     log.step('Step 9/9  Verifying health')
-    await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
+    let healthy = false
+    while (!healthy) {
+      try {
+        await verifyHealth(cfg.appUrl, cfg.engineUrl, ssh, remoteDir)
+        healthy = true
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.error(`Health check failed: ${message}`)
+        const retry = await confirm({ message: 'Re-enter URLs and retry?' })
+        if (isCancel(retry) || !retry) {
+          log.info(`Run ${chalk.cyan('lead-routing init --resume')} to retry health checks later.`)
+          process.exit(1)
+        }
+        // Re-collect just the URLs
+        const newAppUrl = await text({
+          message: 'App URL',
+          initialValue: cfg.appUrl,
+          validate: (v) => {
+            if (!v) return 'Required'
+            try { const u = new URL(v); if (u.protocol !== 'https:') return 'Must be HTTPS' } catch { return 'Invalid URL' }
+          },
+        })
+        if (isCancel(newAppUrl)) { cancel('Setup cancelled.'); process.exit(0) }
+        const newEngineUrl = await text({
+          message: 'Engine URL',
+          initialValue: cfg.engineUrl,
+          validate: (v) => {
+            if (!v) return 'Required'
+            try { const u = new URL(v); if (u.protocol !== 'https:') return 'Must be HTTPS' } catch { return 'Invalid URL' }
+          },
+        })
+        if (isCancel(newEngineUrl)) { cancel('Setup cancelled.'); process.exit(0) }
+
+        cfg.appUrl = (newAppUrl as string).trim().replace(/\/+$/, '')
+        cfg.engineUrl = (newEngineUrl as string).trim().replace(/\/+$/, '')
+
+        // Regenerate files with new URLs and re-upload
+        log.step('Regenerating config files with new URLs...')
+        const { dir: newDir } = generateFiles(cfg, sshCfg, {
+          licenseKey: licenseResult.key,
+          licenseTier: licenseResult.tier,
+        })
+        await uploadFiles(ssh, newDir, remoteDir)
+        log.step('Restarting services with new config...')
+        await startServices(ssh, remoteDir)
+        log.step('Retrying health check...')
+      }
+    }
 
     // Remove ADMIN_PASSWORD from .env.web now that the seed has run
     try {
@@ -333,11 +410,19 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       // Non-fatal
     }
 
-    note(
-      `Open ${cfg.appUrl} → Integrations → Salesforce to connect your org.\n` +
-        'The managed package is already installed — just click "Connect Salesforce" to authorize.',
-      'Next: Connect Salesforce'
-    )
+    if (crmType === 'salesforce') {
+      note(
+        `Open ${cfg.appUrl} → Integrations → Salesforce to connect your org.\n` +
+          'The managed package is already installed — just click "Connect Salesforce" to authorize.',
+        'Next: Connect Salesforce'
+      )
+    } else {
+      note(
+        `Open ${cfg.appUrl} → Integrations → HubSpot to connect your portal.\n` +
+          'Click "Connect HubSpot" to authorize the integration.',
+        'Next: Connect HubSpot'
+      )
+    }
 
     // Write ~/.lead-routing/mcp.json for zero-config MCP server
     try {
@@ -400,6 +485,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     } catch { /* non-fatal */ }
 
     // Done
+    const crmSteps = crmType === 'salesforce'
+      ? `  ${chalk.cyan('2.')} Go to Integrations → Salesforce → Connect\n` +
+        `  ${chalk.cyan('3.')} Complete the onboarding wizard in Salesforce\n`
+      : `  ${chalk.cyan('2.')} Go to Integrations → HubSpot → Connect\n` +
+        `  ${chalk.cyan('3.')} Authorize the HubSpot integration\n`
+
     outro(
       chalk.green("✔  You're live!") +
         '\n\n' +
@@ -408,8 +499,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         `  Admin email:    ${chalk.white(cfg.adminEmail)}\n\n` +
         chalk.bold('  Next steps:\n') +
         `  ${chalk.cyan('1.')} Open ${chalk.cyan(cfg.appUrl)} and log in\n` +
-        `  ${chalk.cyan('2.')} Go to Integrations → Salesforce → Connect\n` +
-        `  ${chalk.cyan('3.')} Complete the onboarding wizard in Salesforce\n` +
+        crmSteps +
         `  ${chalk.cyan('4.')} Create your first routing rule\n\n` +
         `  Run ${chalk.cyan('lead-routing doctor')} to check service health at any time.\n` +
         `  Run ${chalk.cyan('lead-routing deploy')} to update to a new version.`

@@ -19,7 +19,7 @@ const SESSION_OPTIONS = {
 const PUBLIC_PREFIXES = [
   "/login",
   "/register",
-  "/api/auth/",
+  "/api/auth/",        // covers /api/auth/sfdc/ and /api/auth/hubspot/ OAuth flows
   "/api/cli-auth/",    // CLI OAuth bridge — request + poll endpoints (no user session)
   "/api/setup/",       // /api/setup/status + /api/setup/onboarding-done (Apex callouts, no session)
   "/api/fields/sync",  // Called by OnboardingController.syncFieldSchema — X-Sfdc-Org-Id auth

@@ -27,6 +27,7 @@ import { Filter } from "lucide-react"
 import { ConditionBuilder } from "@/components/condition-builder"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { TriggerConfig, ObjectType, TriggerEvent } from "../types"
+import { objectTypeLabel } from "../types"
 import { AITriggerGenerator } from "./AITriggerGenerator"
 
 interface FieldsResponse {
@@ -204,7 +205,7 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
             />
             {criteriaCount === 0 && (
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                No criteria defined — all {objectType === "LEAD" ? "Lead" : objectType === "CONTACT" ? "Contact" : "Account"} records will be processed
+                No criteria defined — all {objectTypeLabel(objectType)} records will be processed
               </p>
             )}
           </div>

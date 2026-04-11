@@ -1,0 +1,12 @@
+{
+  "adminEmail": "artyagi2011@gmail.com",
+  "dbPassword": "94292ed91244e289ed41d94609d3ef89",
+  "redisPassword": "aac0b48761f8519501a820d1fba06aaf",
+  "sessionSecret": "8870460557f84b1e1ee278a2ec3e994548faa1a8f4e0e2da9a16119b123aa2e0",
+  "engineWebhookSecret": "d2d9cb82d9f1f6e175587795223f839c318838d80f6931022bad3affa19e7618",
+  "internalApiKey": "26a8569d38a9e5459efba3016bea02326c571b559f17d95936c7cbd84c6030b2",
+  "sfdcClientId": "",
+  "sfdcClientSecret": "",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "engineTunnelUrl": ""
+}

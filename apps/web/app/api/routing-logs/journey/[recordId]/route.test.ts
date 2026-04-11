@@ -108,7 +108,7 @@ describe("GET /api/routing-logs/journey/[recordId]", () => {
 
     expect(mockPrisma.routingLog.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { orgId: "org-42", sfdcRecordId: "00QgL00000BUX3QU" },
+        where: { orgId: "org-42", crmRecordId: "00QgL00000BUX3QU" },
       })
     );
   });

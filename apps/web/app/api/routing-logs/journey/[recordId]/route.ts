@@ -24,7 +24,7 @@ export async function GET(
   }
 
   const logs = await prisma.routingLog.findMany({
-    where: { orgId, sfdcRecordId: recordId },
+    where: { orgId, crmRecordId: recordId },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {

@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeadRouter — Routing Rules (Light)</title>
+
+<!-- Fonts: Clash Display + Cabinet Grotesk from Fontshare -->
+<link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&f[]=cabinet-grotesk@400,500,700&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* Warm off-white surfaces */
+  --bg-page: #f8f7f4;
+  --bg-white: #ffffff;
+  --bg-sidebar: #1a1625;
+  --bg-sidebar-hover: rgba(255,255,255,0.06);
+  --bg-sidebar-active: rgba(255,255,255,0.10);
+  --bg-card: #ffffff;
+  --bg-card-hover: #ffffff;
+  --bg-muted: #f3f2ef;
+  --bg-input: #f3f2ef;
+
+  /* Borders */
+  --border: #e8e6e1;
+  --border-hover: #d4d1cc;
+  --border-focus: rgba(109,90,205,0.45);
+  --border-sidebar: rgba(255,255,255,0.08);
+
+  /* Text */
+  --ink: #1a1625;
+  --ink-secondary: #5c5670;
+  --ink-tertiary: #9590a6;
+  --ink-faint: #c2bdd0;
+  --ink-sidebar: #e8e6f0;
+  --ink-sidebar-dim: rgba(255,255,255,0.45);
+  --ink-sidebar-faint: rgba(255,255,255,0.25);
+
+  /* Accent — warm violet */
+  --accent: #6d5acd;
+  --accent-light: #8577d9;
+  --accent-surface: rgba(109,90,205,0.07);
+  --accent-surface-strong: rgba(109,90,205,0.12);
+  --accent-glow: rgba(109,90,205,0.2);
+
+  /* Status */
+  --green: #16a34a;
+  --green-surface: rgba(22,163,74,0.08);
+  --green-glow: rgba(22,163,74,0.2);
+  --amber: #d97706;
+  --amber-surface: rgba(217,119,6,0.08);
+  --teal: #0d9488;
+  --teal-surface: rgba(13,148,136,0.07);
+  --red: #dc2626;
+  --red-surface: rgba(220,38,38,0.06);
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 100px;
+
+  --font-display: 'Clash Display', sans-serif;
+  --font-body: 'Cabinet Grotesk', sans-serif;
+
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-sm: 0 1px 2px rgba(26,22,37,0.04);
+  --shadow-md: 0 2px 8px rgba(26,22,37,0.06), 0 1px 2px rgba(26,22,37,0.04);
+  --shadow-lg: 0 8px 30px rgba(26,22,37,0.08), 0 2px 6px rgba(26,22,37,0.04);
+  --shadow-card-hover: 0 12px 40px rgba(26,22,37,0.10), 0 2px 8px rgba(26,22,37,0.05);
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  background: var(--bg-page);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Noise ───────────────────────────────────────────────────────── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0.018;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
+}
+
+.shell { display: flex; height: 100vh; }
+
+/* ── Soft ambient wash ──────────────────────────────────────────── */
+.wash {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.wash__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  will-change: transform;
+}
+.wash__orb:nth-child(1) {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(109,90,205,0.06), transparent 70%);
+  top: -10%; right: 20%;
+  animation: orbA 30s ease-in-out infinite alternate;
+}
+.wash__orb:nth-child(2) {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(251,191,36,0.04), transparent 70%);
+  bottom: -5%; left: 15%;
+  animation: orbB 26s ease-in-out infinite alternate;
+}
+.wash__orb:nth-child(3) {
+  width: 350px; height: 350px;
+  background: radial-gradient(circle, rgba(13,148,136,0.04), transparent 70%);
+  top: 40%; left: 50%;
+  animation: orbA 34s ease-in-out infinite alternate-reverse;
+}
+@keyframes orbA {
+  0% { transform: translate(0,0); }
+  100% { transform: translate(50px,-40px); }
+}
+@keyframes orbB {
+  0% { transform: translate(0,0) scale(1); }
+  100% { transform: translate(-40px,30px) scale(1.1); }
+}
+
+/* ── Sidebar (stays dark — contrast anchor) ─────────────────────── */
+.sidebar {
+  width: 230px;
+  min-width: 230px;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  position: relative;
+  border-right: none;
+  box-shadow: 4px 0 20px rgba(26,22,37,0.08);
+}
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
+  opacity: 0.3;
+}
+
+.sb-header {
+  padding: 18px 14px 14px;
+  border-bottom: 1px solid var(--border-sidebar);
+}
+.workspace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.workspace:hover { background: var(--bg-sidebar-hover); }
+.ws-logo {
+  width: 30px; height: 30px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, var(--accent), #ec4899);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(109,90,205,0.25);
+}
+.ws-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-sidebar);
+  line-height: 1.2;
+}
+.ws-tier {
+  font-size: 10px;
+  color: var(--ink-sidebar-faint);
+  font-weight: 500;
+}
+
+.sb-nav {
+  flex: 1;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+.sb-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--ink-sidebar-faint);
+  padding: 14px 10px 5px;
+}
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-sidebar-dim);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-expo);
+  position: relative;
+  margin-bottom: 1px;
+}
+.sb-item:hover {
+  color: var(--ink-sidebar);
+  background: var(--bg-sidebar-hover);
+}
+.sb-item.active {
+  color: var(--ink-sidebar);
+  background: var(--bg-sidebar-active);
+}
+.sb-item.active::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 2.5px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent-light);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.sb-item svg {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  opacity: 0.4;
+  stroke-width: 1.8;
+}
+.sb-item.active svg { opacity: 0.85; }
+.sb-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px; height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: rgba(109,90,205,0.2);
+  color: var(--accent-light);
+}
+
+.sb-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-sidebar);
+}
+.sb-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sb-user:hover { background: var(--bg-sidebar-hover); }
+.sb-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f97316, #ec4899);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+}
+.sb-user-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-sidebar-dim);
+}
+
+/* ── Main ───────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* ── Top Bar ────────────────────────────────────────────────────── */
+.topbar {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-shrink: 0;
+  background: rgba(248,247,244,0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 5;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-tertiary);
+  font-weight: 500;
+}
+.breadcrumb strong { color: var(--ink); font-weight: 600; }
+.breadcrumb svg { width: 12px; height: 12px; opacity: 0.35; }
+.topbar-spacer { flex: 1; }
+
+.cmd-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.3s var(--ease-expo);
+  box-shadow: var(--shadow-sm);
+}
+.cmd-trigger:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+  color: var(--ink-secondary);
+}
+.cmd-trigger svg { width: 13px; height: 13px; }
+.cmd-key {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  font-family: var(--font-body);
+}
+
+.tb-icon-btn {
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.tb-icon-btn:hover {
+  background: var(--bg-muted);
+  color: var(--ink);
+}
+.tb-icon-btn svg { width: 17px; height: 17px; stroke-width: 1.8; }
+.tb-notif-dot {
+  position: absolute;
+  top: 7px; right: 7px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+/* ── Content ────────────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 40px;
+}
+.content::-webkit-scrollbar { width: 5px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: rgba(26,22,37,0.1); border-radius: 3px; }
+
+/* ── Hero ───────────────────────────────────────────────────────── */
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  animation: up 0.6s var(--ease-expo) both;
+}
+@keyframes up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+}
+.hero-desc {
+  font-size: 14px;
+  color: var(--ink-tertiary);
+  margin-top: 4px;
+}
+
+.hero-actions { display: flex; gap: 8px; }
+
+.btn-outline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.btn-outline:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-white);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+}
+.btn-outline svg { width: 14px; height: 14px; stroke-width: 1.8; }
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: var(--r-md);
+  border: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+  background: var(--accent);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s var(--ease-expo);
+  box-shadow:
+    0 1px 3px rgba(109,90,205,0.25),
+    0 0 0 1px rgba(109,90,205,0.15);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  background: var(--accent-light);
+  box-shadow:
+    0 6px 20px rgba(109,90,205,0.2),
+    0 0 0 1px rgba(109,90,205,0.2);
+}
+.btn-primary:active { transform: translateY(0); }
+.btn-primary svg { width: 14px; height: 14px; stroke-width: 2; }
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer 4.5s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+/* ── Metrics ────────────────────────────────────────────────────── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+  animation: up 0.6s 0.06s var(--ease-expo) both;
+}
+
+.metric {
+  padding: 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s var(--ease-expo);
+}
+.metric:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-tertiary);
+  margin-bottom: 8px;
+}
+.metric-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+.metric-value .unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink-tertiary);
+  margin-left: 2px;
+}
+.metric-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+.metric-delta.up {
+  color: var(--green);
+  background: var(--green-surface);
+}
+.metric-delta svg { width: 10px; height: 10px; }
+
+/* Subtle sparkline inside metric */
+.spark {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  opacity: 0.5;
+}
+
+/* ── Filters ────────────────────────────────────────────────────── */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  animation: up 0.6s 0.12s var(--ease-expo) both;
+}
+.tab-group {
+  display: flex;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  padding: 3px;
+  gap: 2px;
+  box-shadow: var(--shadow-sm);
+}
+.tab-btn {
+  padding: 5px 14px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  color: var(--ink-tertiary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: all 0.2s var(--ease-expo);
+}
+.tab-btn:hover {
+  color: var(--ink-secondary);
+  background: var(--bg-muted);
+}
+.tab-btn.active {
+  color: var(--ink);
+  background: var(--bg-muted);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+.tab-btn .n {
+  font-size: 10px;
+  margin-left: 3px;
+  color: var(--ink-faint);
+}
+.filters-spacer { flex: 1; }
+.filter-input {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  width: 180px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.35s var(--ease-expo);
+}
+.filter-input:focus-within {
+  width: 240px;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-surface);
+}
+.filter-input svg { width: 13px; height: 13px; color: var(--ink-faint); flex-shrink: 0; }
+.filter-input input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+.filter-input input::placeholder { color: var(--ink-faint); }
+
+/* ── Column Header ──────────────────────────────────────────────── */
+.col-head {
+  display: grid;
+  grid-template-columns: 44px 1fr auto auto auto;
+  align-items: center;
+  padding: 0 20px 8px;
+  animation: up 0.6s 0.12s var(--ease-expo) both;
+}
+.col-head span {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--ink-faint);
+}
+.col-head .ch-stats { padding: 0 20px; display: flex; gap: 24px; }
+.col-head .ch-stats span { min-width: 55px; text-align: right; }
+.col-head .ch-status { padding: 0 12px; min-width: 85px; }
+
+/* ── Rule Cards ─────────────────────────────────────────────────── */
+.rules { display: flex; flex-direction: column; gap: 6px; }
+
+.rule {
+  display: grid;
+  grid-template-columns: 44px 1fr auto auto auto;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.4s var(--ease-expo),
+    border-color 0.2s,
+    box-shadow 0.4s var(--ease-expo);
+  animation: cardUp 0.5s var(--ease-expo) both;
+}
+.rule:nth-child(1) { animation-delay: 0.16s; }
+.rule:nth-child(2) { animation-delay: 0.21s; }
+.rule:nth-child(3) { animation-delay: 0.26s; }
+.rule:nth-child(4) { animation-delay: 0.31s; }
+.rule:nth-child(5) { animation-delay: 0.36s; }
+
+@keyframes cardUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rule:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Accent line on top edge hover */
+.rule::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
+  opacity: 0;
+  transition: all 0.3s var(--ease-expo);
+}
+.rule:hover::before {
+  opacity: 1;
+  left: 10%;
+  right: 10%;
+}
+
+.rule.paused { opacity: 0.5; }
+.rule.paused:hover { opacity: 0.7; }
+
+/* Icon */
+.rule-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+}
+.rule-icon svg { width: 16px; height: 16px; stroke-width: 1.8; }
+.rule-icon.rt {
+  background: linear-gradient(135deg, rgba(109,90,205,0.1), rgba(139,92,246,0.08));
+  color: var(--accent);
+  border: 1px solid rgba(109,90,205,0.1);
+}
+.rule-icon.sc {
+  background: linear-gradient(135deg, rgba(13,148,136,0.08), rgba(6,182,212,0.06));
+  color: var(--teal);
+  border: 1px solid rgba(13,148,136,0.08);
+}
+
+/* Info */
+.rule-info { padding-left: 14px; min-width: 0; }
+.rule-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.rule-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.1px;
+}
+.pill {
+  display: inline-flex;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  border: 1px solid transparent;
+}
+.pill-rt {
+  background: var(--accent-surface);
+  color: var(--accent);
+  border-color: rgba(109,90,205,0.1);
+}
+.pill-sc {
+  background: var(--teal-surface);
+  color: var(--teal);
+  border-color: rgba(13,148,136,0.08);
+}
+.pill-obj {
+  background: var(--bg-muted);
+  color: var(--ink-tertiary);
+  border-color: var(--border);
+  font-weight: 500;
+}
+
+.rule-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+}
+.dot {
+  width: 2.5px; height: 2.5px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+/* Stats */
+.rule-stats {
+  display: flex;
+  gap: 24px;
+  padding: 0 20px;
+}
+.rs { text-align: right; min-width: 55px; }
+.rs-val {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+.rs-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+/* Status */
+.rule-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  min-width: 85px;
+}
+.pip {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+.pip.on {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+}
+.pip.on::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--green);
+  animation: pulse 2.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0; transform: scale(0.7); }
+  50% { opacity: 0.3; transform: scale(1.2); }
+}
+.pip.off {
+  background: var(--amber);
+  box-shadow: 0 0 4px rgba(217,119,6,0.15);
+}
+.stxt { font-size: 12px; font-weight: 500; }
+.stxt.on { color: var(--green); }
+.stxt.off { color: var(--amber); }
+
+/* Actions */
+.rule-acts {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transform: translateX(8px);
+  transition: all 0.3s var(--ease-expo);
+}
+.rule:hover .rule-acts {
+  opacity: 1;
+  transform: translateX(0);
+}
+.act {
+  width: 30px; height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.act:hover {
+  background: var(--bg-muted);
+  color: var(--ink);
+}
+.act.play { color: var(--teal); }
+.act.play:hover { background: var(--teal-surface); }
+.act.del:hover { background: var(--red-surface); color: var(--red); }
+.act svg { width: 14px; height: 14px; stroke-width: 1.8; }
+
+/* ── Command Palette ────────────────────────────────────────────── */
+.cmd-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(26,22,37,0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  place-items: start center;
+  padding-top: 18vh;
+}
+.cmd-overlay.open { display: grid; }
+.cmd-box {
+  width: 520px;
+  max-width: 90vw;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: 0 30px 70px rgba(26,22,37,0.18), 0 0 0 1px var(--border);
+  overflow: hidden;
+  animation: cmdPop 0.22s var(--ease-expo);
+}
+@keyframes cmdPop {
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+}
+.cmd-bar {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.cmd-bar svg { width: 16px; height: 16px; color: var(--ink-tertiary); }
+.cmd-bar input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.cmd-bar input::placeholder { color: var(--ink-faint); }
+.cmd-list { padding: 6px; }
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+  font-weight: 500;
+}
+.cmd-item:hover {
+  background: var(--bg-muted);
+  color: var(--ink);
+}
+.cmd-item svg { width: 14px; height: 14px; opacity: 0.5; }
+.cmd-item .sc { margin-left: auto; font-size: 10px; color: var(--ink-faint); }
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+#toasts {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 600;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+}
+.toast {
+  padding: 10px 18px;
+  border-radius: var(--r-md);
+  background: var(--ink);
+  color: var(--bg-page);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(26,22,37,0.2);
+  animation: toastUp 0.3s var(--ease-expo);
+}
+@keyframes toastUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+}
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .content { padding: 20px 16px; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .rule-stats { display: none; }
+  .col-head .ch-stats { display: none; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="wash">
+  <div class="wash__orb"></div>
+  <div class="wash__orb"></div>
+  <div class="wash__orb"></div>
+</div>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sb-header">
+      <div class="workspace">
+        <div class="ws-logo">A</div>
+        <div>
+          <div class="ws-name">Acme Corp</div>
+          <div class="ws-tier">Pro</div>
+        </div>
+        <svg style="width:12px;height:12px;color:var(--ink-sidebar-faint);margin-left:auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+      </div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-label">Overview</div>
+      <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</div>
+      <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Analytics</div>
+      <div class="sb-label">Routing</div>
+      <div class="sb-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 3v6m0 6v6M3 12h6m6 0h6"/></svg>Routing Rules<span class="sb-badge">5</span></div>
+      <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>License Users</div>
+      <div class="sb-label">Connect</div>
+      <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>Integrations</div>
+      <div class="sb-label">System</div>
+      <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44"/><circle cx="12" cy="12" r="3"/></svg>Settings</div>
+    </nav>
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-avatar">AT</div>
+        <div class="sb-user-name">Arun Tyagi</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="breadcrumb">
+        Home
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        <strong>Routing Rules</strong>
+      </div>
+      <div class="topbar-spacer"></div>
+      <button class="cmd-trigger" onclick="toggleCmd()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        Search...
+        <span class="cmd-key">&thinsp;&#8984;K&thinsp;</span>
+      </button>
+      <button class="tb-icon-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="tb-notif-dot"></span>
+      </button>
+    </header>
+
+    <div class="content">
+      <div class="hero">
+        <div>
+          <h1 class="hero-title">Routing Rules</h1>
+          <p class="hero-desc">Manage how leads, contacts, and accounts get assigned</p>
+        </div>
+        <div class="hero-actions">
+          <button class="btn-outline" onclick="toast('Syncing fields...')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            Sync Fields
+          </button>
+          <button class="btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            New Route
+          </button>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Total Routed</div>
+          <div class="metric-value"><span class="ctr" data-to="4466">0</span></div>
+          <div class="metric-delta up">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m18 15-6-6-6 6"/></svg>
+            +247 today
+          </div>
+          <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(109,90,205,0.12)"/>
+                <stop offset="100%" stop-color="transparent"/>
+              </linearGradient>
+            </defs>
+            <polygon fill="url(#sg)" points="0,30 0,26 20,24 40,20 60,22 80,15 100,18 120,12 140,14 160,8 180,10 200,3 200,30"/>
+            <polyline fill="none" stroke="rgba(109,90,205,0.35)" stroke-width="1.5" points="0,26 20,24 40,20 60,22 80,15 100,18 120,12 140,14 160,8 180,10 200,3"/>
+          </svg>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Active Rules</div>
+          <div class="metric-value"><span class="ctr" data-to="4">0</span><span class="unit">/5</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Scheduled Runs</div>
+          <div class="metric-value"><span class="ctr" data-to="39">0</span><span class="unit">total</span></div>
+          <div class="metric-delta up">Next: 6:00 AM UTC</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Avg Route Time</div>
+          <div class="metric-value">1.2<span class="unit">s</span></div>
+          <div class="metric-delta up">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m18 15-6-6-6 6"/></svg>
+            -0.3s vs last week
+          </div>
+        </div>
+      </div>
+
+      <div class="filters">
+        <div class="tab-group">
+          <button class="tab-btn active" onclick="filter('all',this)">All<span class="n">5</span></button>
+          <button class="tab-btn" onclick="filter('rt',this)">Real-Time<span class="n">3</span></button>
+          <button class="tab-btn" onclick="filter('sc',this)">Scheduled<span class="n">2</span></button>
+        </div>
+        <div class="filters-spacer"></div>
+        <div class="filter-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="Filter rules..." oninput="search(this.value)" />
+        </div>
+      </div>
+
+      <div class="col-head">
+        <span></span>
+        <span style="padding-left:14px">Rule</span>
+        <div class="ch-stats"><span>Metrics</span><span></span></div>
+        <span class="ch-status">Status</span>
+        <span></span>
+      </div>
+
+      <div class="rules" id="rules">
+        <!-- 1 -->
+        <div class="rule" data-t="rt" data-n="enterprise lead router">
+          <div class="rule-icon rt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+          <div class="rule-info">
+            <div class="rule-name-row">
+              <span class="rule-name">Enterprise Lead Router</span>
+              <span class="pill pill-rt">Real-Time</span>
+              <span class="pill pill-obj">Lead</span>
+            </div>
+            <div class="rule-meta">Created or Updated<span class="dot"></span>3 routing paths<span class="dot"></span>Last routed 4m ago</div>
+          </div>
+          <div class="rule-stats">
+            <div class="rs"><div class="rs-val"><span class="ctr" data-to="2089">0</span></div><div class="rs-lbl">Routed</div></div>
+            <div class="rs"><div class="rs-val">3</div><div class="rs-lbl">Paths</div></div>
+          </div>
+          <div class="rule-status"><div class="pip on"></div><span class="stxt on">Active</span></div>
+          <div class="rule-acts">
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button class="act del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+        <!-- 2 -->
+        <div class="rule" data-t="sc" data-n="hot lead search">
+          <div class="rule-icon sc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div class="rule-info">
+            <div class="rule-name-row">
+              <span class="rule-name">Hot Lead Search</span>
+              <span class="pill pill-sc">Scheduled</span>
+              <span class="pill pill-obj">Lead</span>
+            </div>
+            <div class="rule-meta">Daily at 6:00 AM UTC<span class="dot"></span>3 criteria<span class="dot"></span>Last run: Mar 14 &middot; 247 records</div>
+          </div>
+          <div class="rule-stats">
+            <div class="rs"><div class="rs-val"><span class="ctr" data-to="1842">0</span></div><div class="rs-lbl">Routed</div></div>
+            <div class="rs"><div class="rs-val">39</div><div class="rs-lbl">Runs</div></div>
+          </div>
+          <div class="rule-status"><div class="pip on"></div><span class="stxt on">Active</span></div>
+          <div class="rule-acts">
+            <button class="act play" onclick="event.stopPropagation();toast('Running Hot Lead Search...')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="act del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+        <!-- 3 -->
+        <div class="rule paused" data-t="sc" data-n="stale lead cleanup">
+          <div class="rule-icon sc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div class="rule-info">
+            <div class="rule-name-row">
+              <span class="rule-name">Stale Lead Cleanup</span>
+              <span class="pill pill-sc">Scheduled</span>
+              <span class="pill pill-obj">Lead</span>
+            </div>
+            <div class="rule-meta">One-time<span class="dot"></span>Not yet run</div>
+          </div>
+          <div class="rule-stats">
+            <div class="rs"><div class="rs-val" style="color:var(--ink-faint)">0</div><div class="rs-lbl">Routed</div></div>
+            <div class="rs"><div class="rs-val" style="color:var(--ink-faint)">0</div><div class="rs-lbl">Runs</div></div>
+          </div>
+          <div class="rule-status"><div class="pip off"></div><span class="stxt off">Paused</span></div>
+          <div class="rule-acts">
+            <button class="act play"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="act del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+        <!-- 4 -->
+        <div class="rule" data-t="rt" data-n="contact enrichment">
+          <div class="rule-icon rt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+          <div class="rule-info">
+            <div class="rule-name-row">
+              <span class="rule-name">Contact Enrichment</span>
+              <span class="pill pill-rt">Real-Time</span>
+              <span class="pill pill-obj">Contact</span>
+            </div>
+            <div class="rule-meta">Created only<span class="dot"></span>2 routing paths<span class="dot"></span>Last routed 2h ago</div>
+          </div>
+          <div class="rule-stats">
+            <div class="rs"><div class="rs-val"><span class="ctr" data-to="89">0</span></div><div class="rs-lbl">Routed</div></div>
+            <div class="rs"><div class="rs-val">2</div><div class="rs-lbl">Paths</div></div>
+          </div>
+          <div class="rule-status"><div class="pip on"></div><span class="stxt on">Active</span></div>
+          <div class="rule-acts">
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button class="act del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+        <!-- 5 -->
+        <div class="rule" data-t="rt" data-n="apac territory router">
+          <div class="rule-icon rt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+          <div class="rule-info">
+            <div class="rule-name-row">
+              <span class="rule-name">APAC Territory Router</span>
+              <span class="pill pill-rt">Real-Time</span>
+              <span class="pill pill-obj">Lead</span>
+            </div>
+            <div class="rule-meta">Created or Updated<span class="dot"></span>5 routing paths<span class="dot"></span>Last routed 18m ago</div>
+          </div>
+          <div class="rule-stats">
+            <div class="rs"><div class="rs-val"><span class="ctr" data-to="456">0</span></div><div class="rs-lbl">Routed</div></div>
+            <div class="rs"><div class="rs-val">5</div><div class="rs-lbl">Paths</div></div>
+          </div>
+          <div class="rule-status"><div class="pip on"></div><span class="stxt on">Active</span></div>
+          <div class="rule-acts">
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button class="act del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-overlay" id="cmdOverlay" onclick="if(event.target===this)toggleCmd()">
+  <div class="cmd-box">
+    <div class="cmd-bar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Type a command or search..." autofocus />
+    </div>
+    <div class="cmd-list">
+      <div class="cmd-item" onclick="toggleCmd();toast('Creating route...')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>Create new route<span class="sc">N</span></div>
+      <div class="cmd-item" onclick="toggleCmd()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>View analytics<span class="sc">A</span></div>
+      <div class="cmd-item" onclick="toggleCmd()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Sync Salesforce fields</div>
+      <div class="cmd-item" onclick="toggleCmd()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25"/><circle cx="12" cy="12" r="3"/></svg>Open settings<span class="sc">S</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+function runCounters() {
+  document.querySelectorAll('.ctr').forEach(el => {
+    const to = +el.dataset.to;
+    if (!to) return;
+    const dur = 1000 + Math.random() * 400;
+    const t0 = performance.now();
+    (function tick(now) {
+      const p = Math.min((now - t0) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 4);
+      el.textContent = Math.round(ease * to).toLocaleString();
+      if (p < 1) requestAnimationFrame(tick);
+    })(t0);
+  });
+}
+setTimeout(runCounters, 500);
+
+function filter(type, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.rule').forEach(r => {
+    r.style.display = (type === 'all' || r.dataset.t === type) ? 'grid' : 'none';
+  });
+}
+
+function search(q) {
+  const lq = q.toLowerCase().trim();
+  document.querySelectorAll('.rule').forEach(r => {
+    r.style.display = (!lq || r.dataset.n.includes(lq)) ? 'grid' : 'none';
+  });
+}
+
+function toggleCmd() {
+  const o = document.getElementById('cmdOverlay');
+  o.classList.toggle('open');
+  if (o.classList.contains('open')) o.querySelector('input').focus();
+}
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); toggleCmd(); }
+  if (e.key === 'Escape') document.getElementById('cmdOverlay').classList.remove('open');
+});
+
+function toast(msg) {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = msg;
+  c.appendChild(t);
+  setTimeout(() => {
+    t.style.transition = 'opacity .25s, transform .25s';
+    t.style.opacity = '0';
+    t.style.transform = 'translateY(8px)';
+    setTimeout(() => t.remove(), 250);
+  }, 2500);
+}
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type ObjectType = "LEAD" | "CONTACT" | "ACCOUNT";
+type ObjectType = "LEAD" | "CONTACT" | "ACCOUNT" | "COMPANY" | "DEAL";
 type TriggerEvent = "INSERT" | "UPDATE" | "BOTH";
 type AssignmentType = "USER" | "ROUND_ROBIN" | "QUEUE";
 

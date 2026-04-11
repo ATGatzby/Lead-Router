@@ -13,6 +13,8 @@
   "dependencies": {
     "@lead-routing/db": "workspace:*",
     "@lead-routing/sfdc": "workspace:*",
+    "@lead-routing/hubspot": "workspace:*",
+    "@lead-routing/crm-adapter": "workspace:*",
     "bullmq": "^5.51.0",
     "fastify": "^5.3.2",
     "ioredis": "^5.6.1",

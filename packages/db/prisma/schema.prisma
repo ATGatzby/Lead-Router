@@ -10,11 +10,33 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-enum SfdcObjectType {
+enum CrmType {
+  SALESFORCE
+  HUBSPOT
+}
+
+enum CrmObjectType {
   LEAD
   CONTACT
   ACCOUNT
+  COMPANY
+  DEAL
   USER
+}
+
+enum SlaMetCriteria {
+  ANY_ACTIVITY        // notes_last_contacted changed
+  STATUS_CHANGE       // hs_lead_status changed from initial value
+  SPECIFIC_STATUS     // hs_lead_status reaches a target value
+  MEETING_BOOKED      // engagements_last_meeting_booked changed
+}
+
+enum SlaInstanceStatus {
+  ACTIVE              // Timer running
+  MET                 // Rep took action in time
+  BREACHED            // Timer expired, breach actions executed
+  ESCALATED           // Max re-routes exceeded, needs manual attention
+  CANCELLED           // Record re-routed manually or deleted
 }
 
 enum TriggerEvent {
@@ -100,11 +122,16 @@ enum FlowNodeType {
 
 model Organization {
   id                String   @id @default(cuid())
+  crmType           CrmType? // null until CRM connected
   sfdcOrgId         String?  @unique   // null until CRM is connected in onboarding
   sfdcInstanceUrl   String?            // null until CRM is connected
   oauthAccessToken  String?            // null until CRM is connected
   oauthRefreshToken String?            // null until CRM is connected
   webhookSecret     String   // HMAC secret for verifying Apex trigger payloads
+  // HubSpot-specific fields
+  hubspotPortalId   String?  @unique   // null until HubSpot connected
+  hubspotAppId      String?            // HubSpot developer app ID
+  hubspotSubscriptionId String?        // HubSpot webhook subscription ID
   // Integration / package deploy tracking
   packageDeployedAt DateTime?
   packageDeployId   String?
@@ -154,6 +181,8 @@ model Organization {
   routingMode             Json?
   routingFlows            RoutingFlow[]
   apiTokens               ApiToken[]
+  slaPolicies             SlaPolicy[]
+  slaInstances            SlaInstance[]
 
   @@map("organizations")
 }
@@ -192,7 +221,7 @@ model Invite {
 model User {
   id           String    @id @default(cuid())
   orgId        String
-  sfdcUserId   String
+  crmUserId    String    // stores SFDC user ID or HubSpot owner ID
   name         String
   email        String
   role         String?
@@ -200,7 +229,7 @@ model User {
   department   String?
   isLicensed   Boolean   @default(false)
   licensedVia  String?   // "individual" | "role" | "profile" | "custom_field" — how user was licensed
-  isActive     Boolean   @default(true) // false if no longer in SFDC
+  isActive     Boolean   @default(true) // false if no longer in CRM
   lastRoutedAt DateTime?
   syncedAt     DateTime  @default(now())
   createdAt    DateTime  @default(now())
@@ -211,7 +240,7 @@ model User {
   branchAssignments RoutingBranch[] @relation("BranchAssigneeUser")
   defaultOwnerRules RoutingRule[]   @relation("DefaultOwnerUser")
 
-  @@unique([orgId, sfdcUserId])
+  @@unique([orgId, crmUserId])
   @@map("users")
 }
 
@@ -230,6 +259,7 @@ model RoundRobinTeam {
   routingRules      RoutingRule[]   @relation("TeamRules")
   branchAssignments RoutingBranch[] @relation("BranchAssigneeTeam")
   defaultOwnerRules RoutingRule[]   @relation("DefaultOwnerTeam")
+  slaRuleAssignments SlaRuleAssignment[]
 
   @@map("round_robin_teams")
 }
@@ -254,7 +284,7 @@ model TeamMember {
 model RoutingRule {
   id               String          @id @default(cuid())
   orgId            String
-  objectType       SfdcObjectType
+  objectType       CrmObjectType
   triggerEvent     TriggerEvent
   name             String
   priority         Int
@@ -303,6 +333,7 @@ model RoutingRule {
   matchConfig RouteMatchConfig?
   triggerConditions TriggerCondition[]
   bulkSearchRuns BulkSearchRun[]
+  slaRuleAssignments SlaRuleAssignment[]
 
   @@map("routing_rules")
 }
@@ -326,6 +357,7 @@ model RoutingBranch {
 
   conditions  BranchCondition[]
   routingLogs RoutingLog[]
+  slaRuleAssignments SlaRuleAssignment[]
 
   @@map("routing_branches")
 }
@@ -419,8 +451,8 @@ model RuleCondition {
 model RoutingLog {
   id             String          @id @default(cuid())
   orgId          String
-  sfdcRecordId   String
-  objectType     SfdcObjectType
+  crmRecordId    String
+  objectType     CrmObjectType
   eventType      TriggerEvent
   ruleId         String?
   ruleName       String?
@@ -446,12 +478,13 @@ model RoutingLog {
   org                Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   branch             RoutingBranch?  @relation(fields: [branchId], references: [id])
   conversionTracking ConversionTracking?
+  slaInstance        SlaInstance?
 
   @@index([orgId, createdAt])
   @@index([orgId, status])
   @@index([orgId, teamId])
   @@index([orgId, ruleId])
-  @@index([orgId, sfdcRecordId, createdAt])
+  @@index([orgId, crmRecordId, createdAt])
   @@map("routing_logs")
 }
 
@@ -476,7 +509,7 @@ model AuditLog {
 model RoutingFlow {
   id           String         @id @default(cuid())
   orgId        String
-  objectType   SfdcObjectType
+  objectType   CrmObjectType
   name         String         @default("Untitled Flow")
   status       FlowStatus     @default(DRAFT)
   triggerEvent TriggerEvent   @default(BOTH)
@@ -551,7 +584,7 @@ model SfdcQueue {
 model FieldSchema {
   id             String         @id @default(cuid())
   orgId          String
-  objectType     SfdcObjectType
+  objectType     CrmObjectType
   fieldApiName   String
   fieldLabel     String
   fieldType      String // TEXT | NUMBER | DATE | DATETIME | BOOLEAN | PICKLIST | MULTI_PICKLIST | LOOKUP
@@ -604,7 +637,7 @@ model RoutingDailyAggregate {
   branchId       String?
   teamId         String?
   assigneeId     String?
-  objectType     SfdcObjectType?
+  objectType     CrmObjectType?
   successCount   Int             @default(0)
   failedCount    Int             @default(0)
   unmatchedCount Int             @default(0)
@@ -629,7 +662,7 @@ model ConversionTracking {
   id                   String    @id @default(cuid())
   orgId                String
   routingLogId         String    @unique
-  sfdcLeadId           String
+  crmRecordId          String
   isConverted          Boolean   @default(false)
   convertedAt          DateTime?
   opportunityId        String?
@@ -649,7 +682,7 @@ model ConversionTracking {
   routingLog RoutingLog   @relation(fields: [routingLogId], references: [id], onDelete: Cascade)
 
   @@index([orgId, isConverted])
-  @@index([orgId, sfdcLeadId])
+  @@index([orgId, crmRecordId])
   @@map("conversion_tracking")
 }
 
@@ -771,4 +804,81 @@ model AiChatFeedback {
 
   @@index([orgId, rating])
   @@map("ai_chat_feedback")
+}
+
+model SlaPolicy {
+  id                    String          @id @default(cuid())
+  orgId                 String
+  name                  String
+  deadlineMinutes       Int             // e.g., 15
+  metCriteria           SlaMetCriteria  @default(ANY_ACTIVITY)
+  metTargetValue        String?         // For SPECIFIC_STATUS: target value
+  breachAction          String          @default("REROUTE") // REROUTE | NOTIFY_ONLY
+  maxReroutes           Int             @default(3) // Circuit breaker
+  // Business hours (V1 — org-level, prevents midnight loops)
+  enforceBusinessHours  Boolean         @default(false)
+  businessHoursStart    String?         // "09:00"
+  businessHoursEnd      String?         // "18:00"
+  businessTimezone      String?         // "America/New_York"
+  businessDays          String?         // "1,2,3,4,5" (Mon-Fri)
+  isActive              Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  org                   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ruleAssignments       SlaRuleAssignment[]
+  instances             SlaInstance[]
+
+  @@unique([orgId, name])
+  @@map("sla_policies")
+}
+
+model SlaRuleAssignment {
+  id          String        @id @default(cuid())
+  slaPolicyId String
+  ruleId      String?       // Apply to entire rule
+  teamId      String?       // Apply to specific team
+  branchId    String?       // Apply to specific branch/path
+
+  slaPolicy   SlaPolicy     @relation(fields: [slaPolicyId], references: [id], onDelete: Cascade)
+  rule        RoutingRule?   @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  team        RoundRobinTeam? @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  branch      RoutingBranch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([slaPolicyId, ruleId, teamId, branchId])
+  @@map("sla_rule_assignments")
+}
+
+model SlaInstance {
+  id              String            @id @default(cuid())
+  orgId           String
+  slaPolicyId     String
+  routingLogId    String            @unique
+  crmRecordId     String
+  objectType      CrmObjectType
+  assigneeId      String            // CRM user/owner ID
+  ruleId          String?           // Which rule triggered this
+  status          SlaInstanceStatus @default(ACTIVE)
+  startedAt       DateTime
+  deadline        DateTime
+  metAt           DateTime?
+  breachedAt      DateTime?
+  responseTimeMs  Int?              // metAt - startedAt
+  breachAction    String?           // What was done on breach
+  reassignedTo    String?           // New owner after re-route
+  rerouteCount    Int               @default(0) // For circuit breaker
+  lastAttemptAt   DateTime?         // When sweeper last attempted breach processing (v2.1)
+  attemptCount    Int               @default(0) // Failed re-route attempt count (v2.1)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  org             Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slaPolicy       SlaPolicy         @relation(fields: [slaPolicyId], references: [id], onDelete: Cascade)
+  routingLog      RoutingLog        @relation(fields: [routingLogId], references: [id], onDelete: Cascade)
+
+  @@index([status, deadline])             // Sweeper query
+  @@index([orgId, status])                // Per-org active count
+  @@index([orgId, crmRecordId, status])   // Webhook lookup + circuit breaker count
+  @@index([orgId, slaPolicyId, status])   // Compliance reporting
+  @@map("sla_instances")
 }

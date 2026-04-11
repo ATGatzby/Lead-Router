@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup Guide — OpenEdgeAI Lead Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Guide-specific styles */
+  .docs-content code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: rgba(255,255,255,0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent-cyan);
+  }
+  .docs-content .cli-block code,
+  .docs-content .docs-code-block code {
+    background: none; padding: 0; color: inherit; font-size: inherit;
+  }
+
+  /* Step cards */
+  .step-flow {
+    display: flex; flex-direction: column; gap: 0;
+    position: relative; padding-left: 28px; margin: 20px 0;
+  }
+  .step-flow::before {
+    content: ''; position: absolute; left: 13px; top: 8px; bottom: 8px;
+    width: 2px; background: linear-gradient(to bottom, var(--accent-blue), var(--accent-violet), var(--accent-cyan));
+    border-radius: 1px; opacity: 0.3;
+  }
+  .step-item {
+    position: relative; padding: 14px 0;
+  }
+  .step-item::before {
+    content: attr(data-step); position: absolute; left: -28px; top: 14px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--bg-card); border: 2px solid rgba(79,125,247,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: var(--accent-blue);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .step-item strong { color: var(--text-primary); font-weight: 600; }
+  .step-item p { color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; margin: 0; }
+
+  /* Feature grid */
+  .feature-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;
+  }
+  .feature-card {
+    padding: 16px 18px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); transition: border-color 0.2s;
+  }
+  .feature-card:hover { border-color: var(--border-hover); }
+  .feature-card strong { color: var(--text-primary); font-size: 13.5px; display: block; margin-bottom: 4px; }
+  .feature-card span { color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+
+  /* Pricing comparison */
+  .plan-compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0;
+  }
+  .plan-card {
+    padding: 24px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); position: relative; overflow: hidden;
+  }
+  .plan-card.pro { border-color: rgba(79,125,247,0.3); }
+  .plan-card.pro::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--gradient-hero);
+  }
+  .plan-card .plan-name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 8px; }
+  .plan-card .plan-price { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.02em; }
+  .plan-card .plan-price span { font-size: 14px; font-weight: 400; color: var(--text-tertiary); }
+  .plan-card .plan-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+  .plan-card ul { list-style: none; padding: 0; margin: 0; }
+  .plan-card li { padding: 6px 0; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .plan-card li::before { content: '✓'; color: var(--accent-green); font-weight: 600; font-size: 12px; }
+
+  /* Method cards */
+  .method-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 16px 0;
+  }
+  .method-card {
+    padding: 14px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); text-align: center;
+  }
+  .method-card strong { display: block; font-size: 13px; color: var(--text-primary); margin-bottom: 4px; }
+  .method-card span { font-size: 12px; color: var(--text-tertiary); }
+
+  /* Activity tab badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(52,211,153,0.12); color: var(--accent-green); }
+  .badge-red { background: rgba(239,68,68,0.12); color: #ef4444; }
+  .badge-yellow { background: rgba(251,191,36,0.12); color: var(--accent-amber); }
+  .badge-blue { background: rgba(79,125,247,0.12); color: var(--accent-blue); }
+  .badge-violet { background: rgba(139,92,246,0.12); color: var(--accent-violet); }
+  .badge-amber { background: rgba(251,191,36,0.12); color: #d97706; }
+  .badge-pro { background: linear-gradient(135deg, rgba(79,125,247,0.15), rgba(139,92,246,0.1)); color: var(--accent-blue); border: 1px solid rgba(79,125,247,0.2); }
+
+  /* Flow diagram */
+  .flow-diagram {
+    display: flex; align-items: center; gap: 0; padding: 20px 0; flex-wrap: wrap; justify-content: center;
+  }
+  .flow-node {
+    padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    border: 1px solid; text-align: center; min-width: 100px;
+  }
+  .flow-node.trigger { background: rgba(139,92,246,0.08); border-color: rgba(139,92,246,0.25); color: var(--accent-violet); }
+  .flow-node.match { background: rgba(79,125,247,0.08); border-color: rgba(79,125,247,0.25); color: var(--accent-blue); }
+  .flow-node.filter { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.25); color: var(--accent-green); }
+  .flow-node.default { background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.25); color: var(--accent-amber); }
+  .flow-arrow { padding: 0 8px; color: var(--text-tertiary); font-size: 16px; }
+
+  /* CLI commands table */
+  .cmd-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  .cmd-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+  .cmd-table td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-secondary); }
+  .cmd-table td:first-child { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-cyan); white-space: nowrap; }
+
+  @media (max-width: 768px) {
+    .plan-compare { grid-template-columns: 1fr; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .method-grid { grid-template-columns: 1fr 1fr; }
+    .flow-diagram { gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Background effects -->
+<div class="bg-orbs"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+<div class="bg-grid"></div>
+
+<!-- Navigation -->
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">LR</div>
+      <div class="logo-text">Lead Router <span>docs</span></div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/docs.html">Documentation</a></li>
+      <li><a href="/docs/setup-guide.html" style="color:var(--text-primary);font-weight:500;">Setup Guide</a></li>
+      <li><a href="/login.html" class="btn-nav-ghost">Log In</a></li>
+      <li><a href="/signup.html" class="btn-nav">Get Started</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Docs layout -->
+<div class="docs-layout">
+
+  <!-- Sidebar -->
+  <aside class="docs-sidebar" id="sidebar">
+    <div class="docs-search-wrap">
+      <input type="text" class="docs-search form-input" placeholder="Search guide..." id="searchInput" style="padding:8px 12px;font-size:13px;">
+    </div>
+
+    <div class="docs-sidebar-section">Getting Started</div>
+    <a href="#overview" class="active"><span class="step-num">1</span> Overview</a>
+    <a href="#create-account"><span class="step-num">2</span> Create Account</a>
+    <a href="#choose-plan"><span class="step-num">3</span> Choose a Plan</a>
+
+    <div class="docs-sidebar-section">Deployment</div>
+    <a href="#deploy-cli"><span class="step-num">4</span> Deploy with CLI</a>
+    <a href="#connect-salesforce"><span class="step-num">5</span> Connect Salesforce</a>
+
+    <div class="docs-sidebar-section">Configuration</div>
+    <a href="#license-users"><span class="step-num">6</span> License Users</a>
+    <a href="#create-teams"><span class="step-num">7</span> Create Teams</a>
+    <a href="#routing-rules"><span class="step-num">8</span> Build Routing Rules</a>
+
+    <div class="docs-sidebar-section">Monitoring</div>
+    <a href="#activity"><span class="step-num">9</span> Activity & Monitoring</a>
+    <a href="#analytics"><span class="step-num">10</span> Analytics</a>
+
+    <div class="docs-sidebar-section">Intelligence</div>
+    <a href="#ai-assistant"><span class="step-num">11</span> AI Assistant</a>
+
+    <div class="docs-sidebar-section">Management</div>
+    <a href="#settings"><span class="step-num">12</span> Settings</a>
+    <a href="#upgrading"><span class="step-num">13</span> Upgrading to Pro</a>
+
+    <div class="docs-sidebar-section">Reference</div>
+    <a href="#cli-commands">CLI Commands</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+  </aside>
+
+  <!-- Main content -->
+  <main class="docs-content">
+
+    <div class="docs-breadcrumb">
+      <a href="/">Home</a> <span>›</span> <a href="/docs.html">Docs</a> <span>›</span> <span style="color:var(--text-primary)">Setup Guide</span>
+    </div>
+
+    <!-- ═══════════════ 1. OVERVIEW ═══════════════ -->
+    <section class="docs-section" id="overview">
+      <h2>Getting Started with Lead Router</h2>
+      <p>Lead Router is a <strong style="color:var(--text-primary)">self-hosted</strong> Salesforce lead routing engine. You deploy it on your own server — your data never leaves your infrastructure. No per-API-call fees, no vendor lock-in.</p>
+
+      <div class="docs-callout tip">
+        <strong>How it works</strong>
+        Salesforce triggers fire when records are created or updated. Those events hit your routing engine, which evaluates your rules and assigns records to the right rep, team, or queue — in real time.
+      </div>
+
+      <h3>What you'll need</h3>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <strong>VPS with Docker</strong>
+          <span>Any Linux server — Hetzner, DigitalOcean, Vultr, AWS, or bare metal. 2GB RAM minimum.</span>
+        </div>
+        <div class="feature-card">
+          <strong>Salesforce Org</strong>
+          <span>Production or sandbox org. You'll install a managed package that sends trigger events.</span>
+        </div>
+        <div class="feature-card">
+          <strong>Node.js 20+</strong>
+          <span>Required on your local machine to run the CLI installer. Not needed on the server.</span>
+        </div>
+        <div class="feature-card">
+          <strong>Two HTTPS Domains</strong>
+          <span>One for the web dashboard, one for the engine (e.g. <code>app.acme.com</code> + <code>engine.acme.com</code>).</span>
+        </div>
+      </div>
+
+      <div class="docs-callout info">
+        <strong>Architecture at a glance</strong>
+        The CLI deploys 5 Docker containers: <strong>Web</strong> (Next.js dashboard), <strong>Engine</strong> (Fastify routing engine), <strong>PostgreSQL</strong>, <strong>Redis</strong>, and <strong>Caddy</strong> (reverse proxy with auto-HTTPS via Let's Encrypt).
+      </div>
+    </section>
+
+    <!-- ═══════════════ 2. CREATE ACCOUNT ═══════════════ -->
+    <section class="docs-section" id="create-account">
+      <h2>Create Your Account</h2>
+      <p>Before deploying, create a free account to manage your license and installations.</p>
+
+      <div class="step-flow">
+        <div class="step-item" data-step="1">
+          <strong>Visit the signup page</strong>
+          <p>Go to <code>openedgeai.tech/signup.html</code> or click "Get Started" on the homepage.</p>
+        </div>
+        <div class="step-item" data-step="2">
+          <strong>Fill out the form</strong>
+          <p>Enter your first name, last name, email, and a password (minimum 8 characters). Accept the Terms of Service.</p>
+        </div>
+        <div class="step-item" data-step="3">
+          <strong>Verify your email</strong>
+          <p>Check your inbox for a verification link. Click it to activate your account. The link expires in 24 hours.</p>
+        </div>
+        <div class="step-item" data-step="4">
+          <strong>Log in</strong>
+          <p>Go to <code>openedgeai.tech/login.html</code> and sign in. You can also log in via the CLI with <code>lead-routing login</code>.</p>
+        </div>
+      </div>
+
+      <div class="docs-callout tip">
+        <strong>CLI alternative</strong>
+        You can also sign up and log in entirely from the terminal:<br>
+        <code>npx @lead-routing/cli@latest signup</code> then <code>npx @lead-routing/cli@latest login</code>
+      </div>
+    </section>
+
+    <!-- ═══════════════ 3. CHOOSE PLAN ═══════════════ -->
+    <section class="docs-section" id="choose-plan">
+      <h2>Choose Your Plan</h2>
+      <p>Lead Router has two tiers. Start free and upgrade when you need more.</p>
+
+      <div class="plan-compare">
+        <div class="plan-card">
+          <div class="plan-name">Free</div>
+          <div class="plan-price">$0 <span>/forever</span></div>
+          <div class="plan-desc">Everything you need to get started.</div>
+          <ul>
+            <li>5 licensed users</li>
+            <li>100,000 routes/month</li>
+            <li>Visual route builder</li>
+            <li>Round-robin teams</li>
+            <li>Activity & audit logs</li>
+            <li>Lead triggers only</li>
+          </ul>
+        </div>
+        <div class="plan-card pro">
+          <div class="plan-name">Pro</div>
+          <div class="plan-price">$39.99 <span>/month</span></div>
+          <div class="plan-desc">Renews at $39.99/month. Cancel anytime.</div>
+          <ul>
+            <li>Unlimited licensed users</li>
+            <li>Unlimited routes</li>
+            <li>Full analytics & conversions</li>
+            <li>AI-powered matching</li>
+            <li>Lead + Contact + Account triggers</li>
+            <li>AI Assistant for insights</li>
+            <li>Priority support</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="docs-callout info">
+        <strong>Upgrade anytime</strong>
+        Purchase a Pro license at <code>openedgeai.tech/pricing</code> via Stripe, or activate an existing key in <strong>Settings → License</strong> in the web app.
+      </div>
+    </section>
+
+    <!-- ═══════════════ 4. DEPLOY WITH CLI ═══════════════ -->
+    <section class="docs-section" id="deploy-cli">
+      <h2>Deploy with the CLI</h2>
+      <p>The CLI wizard handles everything: generating config, SSHing into your server, pulling Docker images, and verifying health.</p>
+
+      <div class="docs-code-block">
+        <div class="cli-titlebar">
+          <div class="cli-dot cli-dot-r"></div><div class="cli-dot cli-dot-y"></div><div class="cli-dot cli-dot-g"></div>
+          <div class="cli-titlebar-text">Terminal</div>
+        </div>
+        <div class="cli-body">
+          <div class="cli-line"><span class="cli-prompt-char">$</span> <span class="cli-cmd-text">npx @lead-routing/cli@latest init</span></div>
+        </div>
+      </div>
+
+      <h3>The 9-step wizard</h3>
+
+      <div class="step-flow">
+        <div class="step-item" data-step="1">
+          <strong>License validation</strong>
+          <p>Enter your Pro license key, or press Enter to continue with the free tier. The CLI shows your tier limits.</p>
+        </div>
+        <div class="step-item" data-step="2">
+          <strong>Install Salesforce package</strong>
+          <p>The CLI opens a browser link to install the managed package in your Salesforce org. Click "Install for All Users" in Salesforce. You can also do this later from the web app.</p>
+        </div>
+        <div class="step-item" data-step="3">
+          <strong>Prerequisites check</strong>
+          <p>Verifies Node.js 20+ is installed on your local machine.</p>
+        </div>
+        <div class="step-item" data-step="4">
+          <strong>SSH connection</strong>
+          <p>Enter your VPS hostname/IP, SSH port (default 22), username (default root), and password or private key path. The CLI tests the connection before proceeding.</p>
+        </div>
+        <div class="step-item" data-step="5">
+          <strong>App configuration</strong>
+          <p><strong>App URL</strong> — public HTTPS URL for the web dashboard (e.g. <code>https://routing.acme.com</code>).<br>
+          <strong>Engine URL</strong> — public HTTPS URL Salesforce will call (e.g. <code>https://engine.acme.com</code>).<br>
+          <strong>Admin email + password</strong> — creates the first login user for the web app.<br>
+          Database and Redis are managed automatically via Docker.</p>
+        </div>
+        <div class="step-item" data-step="6">
+          <strong>Generate config files</strong>
+          <p>Creates <code>docker-compose.yml</code>, <code>.env.web</code>, <code>.env.engine</code>, <code>Caddyfile</code>, and <code>lead-routing.json</code> in a local <code>./lead-routing/</code> directory.</p>
+        </div>
+        <div class="step-item" data-step="7">
+          <strong>Remote setup</strong>
+          <p>Uploads all config files to your VPS via SFTP, then runs <code>docker compose pull</code> to fetch the latest images from the container registry.</p>
+        </div>
+        <div class="step-item" data-step="8">
+          <strong>Start services</strong>
+          <p>Runs <code>docker compose up -d</code> on the server. Caddy auto-provisions Let's Encrypt TLS certificates. The web container runs database migrations and seeds the admin user on first boot.</p>
+        </div>
+        <div class="step-item" data-step="9">
+          <strong>Health verification</strong>
+          <p>Polls both HTTPS endpoints (up to 2 minutes) until they return healthy. Once verified, you'll see your dashboard URL and admin credentials.</p>
+        </div>
+      </div>
+
+      <div class="docs-callout warning">
+        <strong>DNS must be configured first</strong>
+        Point your App URL and Engine URL domains to your VPS IP address <em>before</em> running the CLI. Caddy needs DNS to resolve to provision TLS certificates.
+      </div>
+
+      <div class="docs-callout tip">
+        <strong>Interrupted deploy?</strong>
+        Run <code>lead-routing init --resume</code> to skip config generation and re-attempt the remote setup and health check.
+      </div>
+    </section>
+
+    <!-- ═══════════════ 5. CONNECT SALESFORCE ═══════════════ -->
+    <section class="docs-section" id="connect-salesforce">
+      <h2>Connect Salesforce</h2>
+      <p>After deployment, log into your web app and connect your Salesforce org.</p>
+
+      <div class="step-flow">
+        <div class="step-item" data-step="1">
+          <strong>Log into the dashboard</strong>
+          <p>Open your App URL and sign in with the admin email and password you set during deployment.</p>
+        </div>
+        <div class="step-item" data-step="2">
+          <strong>Go to Integrations → Salesforce</strong>
+          <p>Click <strong>Connect Salesforce</strong>. You'll be redirected to Salesforce to authorize the OAuth connection. Grant access to complete the flow.</p>
+        </div>
+        <div class="step-item" data-step="3">
+          <strong>Deploy the managed package</strong>
+          <p>If you didn't install the package during CLI setup, click <strong>Deploy Package</strong> from the Salesforce integration page. This installs Apex triggers, custom settings, and the onboarding wizard.</p>
+        </div>
+        <div class="step-item" data-step="4">
+          <strong>Configure objects</strong>
+          <p>Toggle which Salesforce objects to route: <strong>Lead</strong> (free), <strong>Contact</strong>, <strong>Account</strong>, and <strong>Opportunity</strong> (Pro). Click <strong>Save Configuration</strong>.</p>
+        </div>
+        <div class="step-item" data-step="5">
+          <strong>Sync fields</strong>
+          <p>Click <strong>Sync Fields</strong> to pull your custom fields from Salesforce. These fields become available in routing rule conditions.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ 6. LICENSE USERS ═══════════════ -->
+    <section class="docs-section" id="license-users">
+      <h2>License Users</h2>
+      <p>Only licensed users can be assigned records through routing. Navigate to <strong>License Users</strong> in the sidebar to manage who gets routed to.</p>
+
+      <h3>5 licensing methods</h3>
+      <div class="method-grid">
+        <div class="method-card">
+          <strong>Individual</strong>
+          <span>Select specific users one by one</span>
+        </div>
+        <div class="method-card">
+          <strong>By Role</strong>
+          <span>License all users in a Salesforce role</span>
+        </div>
+        <div class="method-card">
+          <strong>By Profile</strong>
+          <span>License all users with a profile</span>
+        </div>
+        <div class="method-card">
+          <strong>By Queue</strong>
+          <span>License queue members as routing targets</span>
+        </div>
+        <div class="method-card">
+          <strong>Custom Field</strong>
+          <span>License by any custom field value</span>
+        </div>
+      </div>
+
+      <p>The seats counter at the top shows how many seats you've used vs. purchased. Free tier includes 5 seats; Pro is unlimited.</p>
+
+      <div class="docs-callout tip">
+        <strong>Bulk actions</strong>
+        Use the bulk action bar to assign or revoke licenses for multiple users at once.
+      </div>
+    </section>
+
+    <!-- ═══════════════ 7. CREATE TEAMS ═══════════════ -->
+    <section class="docs-section" id="create-teams">
+      <h2>Create Teams</h2>
+      <p>Teams group licensed users for round-robin or weighted distribution. Navigate to <strong>Teams</strong> in the sidebar.</p>
+
+      <div class="step-flow">
+        <div class="step-item" data-step="1">
+          <strong>Create a team</strong>
+          <p>Click <strong>New Team</strong>, give it a name and optional description.</p>
+        </div>
+        <div class="step-item" data-step="2">
+          <strong>Add members</strong>
+          <p>Search for licensed users and add them. You can pause or remove members at any time.</p>
+        </div>
+        <div class="step-item" data-step="3">
+          <strong>Choose distribution mode</strong>
+          <p><strong>Round-Robin</strong> — cycles through members equally, one after another.<br>
+          <strong>Weighted</strong> — assigns based on percentage weights (e.g., a senior rep gets 40%, a junior rep gets 10%). Weights auto-normalize to 100%.</p>
+        </div>
+      </div>
+
+      <div class="docs-callout info">
+        <strong>Slot preview</strong>
+        In weighted mode, a visual pie chart shows how the next 20 assignments will be distributed across team members.
+      </div>
+    </section>
+
+    <!-- ═══════════════ 8. BUILD ROUTING RULES ═══════════════ -->
+    <section class="docs-section" id="routing-rules">
+      <h2>Build Routing Rules</h2>
+      <p>Navigate to <strong>Routing Rules</strong> and click <strong>New Route</strong>. Choose between two types:</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <strong>⚡ Real-Time Route</strong>
+          <span>Triggers on record insert or update in Salesforce. Routes instantly as records are created/modified.</span>
+        </div>
+        <div class="feature-card">
+          <strong>🔍 Scheduled Route</strong>
+          <span>Runs on a schedule (daily, weekly, monthly). Queries Salesforce using search criteria and routes matching records in batch.</span>
+        </div>
+      </div>
+
+      <h3>Route builder canvas</h3>
+      <p>The visual route builder lets you chain steps together:</p>
+
+      <div class="flow-diagram">
+        <div class="flow-node trigger">Trigger</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node match">Match</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node filter">Filter + Assign</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node default">Default Owner</div>
+      </div>
+
+      <h3>Step types</h3>
+
+      <p><strong style="color:var(--accent-violet)">Trigger</strong> (Real-Time) or <strong style="color:var(--accent-violet)">Search Trigger</strong> (Scheduled) — Defines when the rule fires. For real-time: choose insert, update, or both, and optionally set trigger conditions to filter before routing. For scheduled: define SOQL search criteria, frequency, and batch size.</p>
+
+      <p><strong style="color:var(--accent-blue)">Match</strong> <em>(optional)</em> — Checks for existing records before routing. Configure which objects to search (Leads, Contacts, Accounts) and matching fields:</p>
+      <ul>
+        <li><strong>Email</strong> — exact match</li>
+        <li><strong>Phone</strong> — normalized match (strips formatting)</li>
+        <li><strong>Domain</strong> — extracts domain from email, matches against Account website</li>
+        <li><strong>Company Name</strong> — three matching modes:
+          <ul>
+            <li><strong>Strict</strong> — exact match after normalizing (removes Inc, LLC, Corp, etc.)</li>
+            <li><strong>Fuzzy</strong> — Levenshtein similarity + 400+ known abbreviation pairs (IBM ↔ International Business Machines)</li>
+            <li><strong>AI Smart</strong> <span class="badge badge-pro">PRO</span> — semantic matching via your configured AI provider</li>
+          </ul>
+        </li>
+      </ul>
+      <p>When a match is found, choose an action: merge with the matched record, assign to its owner, assign to a custom user/team, or skip routing.</p>
+
+      <p><strong style="color:var(--accent-green)">Filter + Assign</strong> — Create multiple branching paths with conditions (e.g., "Industry = Technology → assign to Tech Team"). Each path can assign to a specific user, team (round-robin), or Salesforce queue.</p>
+
+      <p><strong style="color:var(--accent-amber)">Default Owner</strong> — Fallback assignment if no filter paths match. Every rule should have one.</p>
+
+      <div class="docs-callout tip">
+        <strong>Dry run mode</strong>
+        Toggle "Dry Run" on any rule to simulate routing without actually changing record ownership in Salesforce. Check the Activity tab to see what <em>would have</em> happened.
+      </div>
+    </section>
+
+    <!-- ═══════════════ 9. ACTIVITY ═══════════════ -->
+    <section class="docs-section" id="activity">
+      <h2>Activity & Monitoring</h2>
+      <p>The <strong>Activity</strong> section has five sub-tabs for full visibility into your routing operations.</p>
+
+      <h3>Routing History</h3>
+      <p>A paginated log of every routing event. Each row shows the record ID, object type, rule name, assignee, duration, and status:</p>
+      <p>
+        <span class="badge badge-green">SUCCESS</span>
+        <span class="badge badge-red">FAILED</span>
+        <span class="badge badge-yellow">UNMATCHED</span>
+        <span class="badge badge-blue">RETRY</span>
+        <span class="badge badge-violet">MERGED</span>
+        <span class="badge badge-amber">COOLDOWN</span>
+      </p>
+      <p>Expand any row to see the full decision trace — which rule matched, which path was taken, and why.</p>
+
+      <h3>Assignment Stats</h3>
+      <p>Per-rep distribution breakdown. See how many Leads, Contacts, and Accounts each rep received over a given period (today, this week, this month). Sortable bar chart.</p>
+
+      <h3>Failed Routings</h3>
+      <p>Shows records that failed or are in retry status. <strong>Retry</strong> re-enqueues individual records; <strong>Retry All</strong> bulk re-enqueues everything. <strong>Dismiss</strong> removes entries from the list.</p>
+
+      <h3>Audit Log</h3>
+      <p>Tracks every admin action: rule creation, team changes, user licensing, settings updates. Each entry shows who did what, when, and a before/after state diff.</p>
+
+      <h3>Record Journey</h3>
+      <p>Search by any Salesforce Record ID (15-18 characters) to see every routing event for that specific record. The timeline shows trigger type, rule name, path taken, assignee, and status for each event.</p>
+    </section>
+
+    <!-- ═══════════════ 10. ANALYTICS ═══════════════ -->
+    <section class="docs-section" id="analytics">
+      <h2>Analytics <span class="badge badge-pro">PRO</span></h2>
+      <p>The Analytics dashboard gives you a bird's-eye view of your routing performance. Free users see sample data with a paywall overlay.</p>
+
+      <h3>KPI cards</h3>
+      <div class="feature-grid">
+        <div class="feature-card"><strong>Total Routed</strong><span>Count of records routed with trend vs. prior period</span></div>
+        <div class="feature-card"><strong>Success Rate</strong><span>Percentage of successfully assigned records</span></div>
+        <div class="feature-card"><strong>Avg Speed-to-Lead</strong><span>Time from trigger to assignment in seconds</span></div>
+        <div class="feature-card"><strong>Conversion Rate</strong><span>Percentage of routed leads that converted</span></div>
+      </div>
+
+      <h3>Charts</h3>
+      <ul>
+        <li><strong>Records Routed Over Time</strong> — area/bar chart with day/week/month granularity, grouped by status, object type, rule, or team</li>
+        <li><strong>Top Rules</strong> — leaderboard showing highest-volume rules with success rates</li>
+        <li><strong>Status Breakdown</strong> — donut chart showing Success, Failed, Unmatched, and Merged percentages</li>
+      </ul>
+
+      <h3>System health</h3>
+      <p>Three cards monitor anti-recursion safeguards: <strong>Recursive Events</strong> (bounces detected), <strong>Cooldown Skips</strong> (records held by anti-recursion), and <strong>Stamp Skips</strong> (records marked as already routed).</p>
+    </section>
+
+    <!-- ═══════════════ 11. AI ASSISTANT ═══════════════ -->
+    <section class="docs-section" id="ai-assistant">
+      <h2>AI Assistant <span class="badge badge-pro">PRO</span></h2>
+      <p>A natural language chat interface for querying your routing data, analyzing performance, and getting optimization recommendations.</p>
+
+      <h3>What it can do</h3>
+      <ul>
+        <li>Query routing data in plain English ("Which rule routed the most leads this week?")</li>
+        <li>Performance analysis and anomaly detection</li>
+        <li>Conversion and pipeline insights</li>
+        <li>Rule optimization recommendations</li>
+      </ul>
+
+      <h3>Configuration</h3>
+      <p>Go to <strong>Settings → AI Assistant</strong> and select your provider:</p>
+      <ul>
+        <li><strong>Claude</strong> (Recommended) — Sonnet 4.5</li>
+        <li><strong>OpenAI</strong> — GPT-4o, GPT-4o mini, o3-mini</li>
+        <li><strong>Gemini</strong> — 2.5 Flash, 2.5 Pro</li>
+        <li><strong>Custom</strong> — any OpenAI-compatible endpoint</li>
+      </ul>
+      <p>Paste your API key and select a model. Your key is stored encrypted (AES-256-GCM) and never leaves your server.</p>
+    </section>
+
+    <!-- ═══════════════ 12. SETTINGS ═══════════════ -->
+    <section class="docs-section" id="settings">
+      <h2>Settings</h2>
+      <p>The Settings page has four tabs.</p>
+
+      <h3>General</h3>
+      <p><strong>Reconnect Salesforce</strong> — re-authenticate if your OAuth token expires. <strong>Sync Webhook Secret</strong> — pushes the webhook secret to Salesforce custom settings (needed if you changed it).</p>
+
+      <h3>Webhooks</h3>
+      <p>Set a <strong>notification webhook URL</strong> to receive a POST request on every successful routing. Useful for Slack, WhatsApp, or custom integrations. Available variables:</p>
+      <ul>
+        <li><code>{{rep_name}}</code> — assigned rep's name</li>
+        <li><code>{{object_type}}</code> — Lead, Contact, or Account</li>
+        <li><code>{{record_id}}</code> — Salesforce record ID</li>
+        <li><code>{{rule_name}}</code> — which rule matched</li>
+        <li><code>{{timestamp}}</code> — when it was routed</li>
+        <li><code>{{record_url}}</code> — direct link to the Salesforce record</li>
+      </ul>
+
+      <h3>AI Assistant</h3>
+      <p>Configure your AI provider and model (see <a href="#ai-assistant" style="color:var(--accent-blue)">AI Assistant</a> section above).</p>
+
+      <h3>License</h3>
+      <p>View your current tier, usage (rules, seats, objects), and license details (key, activation date, expiry). Activate or deactivate a license key from here. See <a href="#upgrading" style="color:var(--accent-blue)">Upgrading to Pro</a> below.</p>
+    </section>
+
+    <!-- ═══════════════ 13. UPGRADING ═══════════════ -->
+    <section class="docs-section" id="upgrading">
+      <h2>Upgrading to Pro</h2>
+      <p>Two ways to upgrade:</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <strong>1. Buy online</strong>
+          <span>Go to <code>openedgeai.tech/pricing</code>, click "Get Started" on the Pro plan. Complete Stripe checkout. Your license key arrives by email.</span>
+        </div>
+        <div class="feature-card">
+          <strong>2. Activate in web app</strong>
+          <span>Go to <strong>Settings → License</strong>, paste your license key, and click <strong>Activate License</strong>. Pro features unlock instantly.</span>
+        </div>
+      </div>
+
+      <div class="docs-callout info">
+        <strong>Instant activation</strong>
+        No restart required. Once activated, all Pro features (unlimited users, analytics, AI matching, all object triggers) are immediately available.
+      </div>
+
+      <p>Your license is validated weekly via a heartbeat check. If the license server is unreachable, a <strong>30-day grace period</strong> ensures uninterrupted service.</p>
+    </section>
+
+    <!-- ═══════════════ 14. CLI COMMANDS ═══════════════ -->
+    <section class="docs-section" id="cli-commands">
+      <h2>CLI Commands Reference</h2>
+
+      <table class="cmd-table">
+        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>lead-routing init</td><td>Deploy a new installation (9-step wizard). Use <code>--resume</code> to retry a failed deploy, <code>--dry-run</code> to generate files without deploying.</td></tr>
+          <tr><td>lead-routing deploy</td><td>Update a running installation to the latest version. Pulls new Docker images and recreates containers.</td></tr>
+          <tr><td>lead-routing doctor</td><td>Health check — verifies SSH connectivity, Docker status, container health, and HTTPS endpoints.</td></tr>
+          <tr><td>lead-routing logs [service]</td><td>Stream logs from a specific service (<code>web</code>, <code>engine</code>, <code>postgres</code>, <code>redis</code>, <code>caddy</code>).</td></tr>
+          <tr><td>lead-routing status</td><td>Show running container status (names, uptime, health, ports).</td></tr>
+          <tr><td>lead-routing config show</td><td>Display key config values for the current installation (app URL).</td></tr>
+          <tr><td>lead-routing config sfdc</td><td>Salesforce credential management info (now handled via web app OAuth).</td></tr>
+          <tr><td>lead-routing login</td><td>Authenticate with your OpenEdgeAI account. Saves credentials to <code>~/.lead-routing/credentials.json</code>.</td></tr>
+          <tr><td>lead-routing signup</td><td>Create a new OpenEdgeAI account from the terminal.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════ 15. TROUBLESHOOTING ═══════════════ -->
+    <section class="docs-section" id="troubleshooting">
+      <h2>Troubleshooting</h2>
+
+      <h3>DNS not resolving</h3>
+      <p>The CLI warns if your domain doesn't resolve. Make sure your A record points to your VPS IP. DNS propagation can take up to 48 hours, but usually completes in minutes. You can continue the wizard — Caddy will retry certificate provisioning.</p>
+
+      <h3>SSH connection failed</h3>
+      <p>Double-check your hostname, port, username, and password. If using a private key, ensure the path is correct and the key has proper permissions (<code>chmod 600</code>). Some VPS providers disable password auth by default — check <code>/etc/ssh/sshd_config</code>.</p>
+
+      <h3>Docker not running on VPS</h3>
+      <p>The CLI checks for Docker during remote setup. If Docker isn't installed, install it with: <code>curl -fsSL https://get.docker.com | sh</code>. Make sure the Docker daemon is running: <code>systemctl start docker</code>.</p>
+
+      <h3>Let's Encrypt rate limit</h3>
+      <p>Let's Encrypt allows 5 certificates per registered domain per 168 hours. If you hit this limit during repeated deploys, use different subdomains or wait for the window to reset. Caddy caches existing certificates in a Docker volume.</p>
+
+      <h3>Salesforce OAuth callback mismatch</h3>
+      <p>The OAuth callback URL must match <code>SFDC_REDIRECT_URI</code> in your <code>.env.web</code> exactly. This is set to <code>{APP_URL}/api/auth/sfdc/callback</code> during init. If you change your App URL, update <code>.env.web</code> and recreate the web container.</p>
+
+      <h3>Health check times out</h3>
+      <p>If the CLI's health check fails after 2 minutes, SSH into your VPS and check: <code>docker compose logs web --tail 50</code>. Common causes: Caddy can't reach Let's Encrypt (firewall blocking ports 80/443), database migration failure, or missing environment variables.</p>
+
+      <div class="docs-callout info">
+        <strong>Still stuck?</strong>
+        Run <code>lead-routing doctor</code> for a comprehensive health check, or check the container logs with <code>lead-routing logs web</code> or <code>lead-routing logs engine</code>.
+      </div>
+    </section>
+
+    <!-- Prev/Next -->
+    <div class="docs-prev-next">
+      <a href="/docs.html">
+        <div class="label">← Previous</div>
+        <div class="title">Full Documentation</div>
+      </a>
+      <a href="/" class="next">
+        <div class="label">Back to →</div>
+        <div class="title">Homepage</div>
+      </a>
+    </div>
+
+  </main>
+
+  <!-- Table of contents -->
+  <aside class="docs-toc" id="toc">
+    <div class="docs-toc-title">On this page</div>
+    <a href="#overview" class="active">Overview</a>
+    <a href="#create-account">Create Account</a>
+    <a href="#choose-plan">Choose a Plan</a>
+    <a href="#deploy-cli">Deploy with CLI</a>
+    <a href="#connect-salesforce">Connect Salesforce</a>
+    <a href="#license-users">License Users</a>
+    <a href="#create-teams">Create Teams</a>
+    <a href="#routing-rules">Build Routing Rules</a>
+    <a href="#activity">Activity & Monitoring</a>
+    <a href="#analytics">Analytics</a>
+    <a href="#ai-assistant">AI Assistant</a>
+    <a href="#settings">Settings</a>
+    <a href="#upgrading">Upgrading to Pro</a>
+    <a href="#cli-commands">CLI Commands</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+  </aside>
+
+</div>
+
+<!-- Mobile hamburger -->
+<button class="docs-hamburger" id="hamburger" aria-label="Toggle navigation">☰</button>
+<div class="docs-backdrop" id="backdrop"></div>
+
+<script>
+// Sidebar active state + scroll spy
+const sections = document.querySelectorAll('.docs-section');
+const sidebarLinks = document.querySelectorAll('.docs-sidebar a[href^="#"]');
+const tocLinks = document.querySelectorAll('.docs-toc a[href^="#"]');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      sidebarLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+      tocLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+sections.forEach(s => observer.observe(s));
+
+// Mobile sidebar toggle
+const hamburger = document.getElementById('hamburger');
+const sidebar = document.getElementById('sidebar');
+const backdrop = document.getElementById('backdrop');
+
+hamburger?.addEventListener('click', () => {
+  sidebar.classList.toggle('mobile-open');
+  backdrop.classList.toggle('visible');
+});
+backdrop?.addEventListener('click', () => {
+  sidebar.classList.remove('mobile-open');
+  backdrop.classList.remove('visible');
+});
+
+// Close mobile sidebar on link click
+sidebarLinks.forEach(link => {
+  link.addEventListener('click', () => {
+    sidebar.classList.remove('mobile-open');
+    backdrop.classList.remove('visible');
+  });
+});
+
+// Search filter
+const searchInput = document.getElementById('searchInput');
+searchInput?.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  sidebarLinks.forEach(a => {
+    const text = a.textContent.toLowerCase();
+    a.style.display = text.includes(q) ? '' : 'none';
+  });
+});
+</script>
+
+</body>
+</html>

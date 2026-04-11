@@ -23,15 +23,6 @@ public with sharing class RoutingEngineCallout {
 
         List<SObject> records = queryRecords(objectType, recordIds);
 
-        // Filter records through trigger criteria before making the callout.
-        // Records that don't match any active rule's pre-callout conditions are dropped here
-        // so the engine never sees them. No criteria configured → all records pass.
-        records = CriteriaEvaluator.filter(records, objectType, eventType);
-        if (records.isEmpty()) {
-            System.debug('RoutingEngineCallout: all records filtered by trigger criteria — skipping callout');
-            return;
-        }
-
         // Send all records in a single batch HTTP call to /route/batch
         String batchPayload = RoutingPayloadBuilder.buildBatch(objectType, eventType, records);
         sendBatchPayload(batchPayload, secret, engineEndpoint);

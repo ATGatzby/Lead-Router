@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 interface RoutingLog {
   id: string;
-  sfdcRecordId: string;
+  crmRecordId: string;
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
   retryCount: number;
   errorMessage: string | null;
@@ -151,7 +151,7 @@ export default function FailedRoutingsPage() {
               key={log.id}
               className="grid grid-cols-[1.4fr_80px_80px_80px_2fr_160px] items-center gap-3 px-4 py-3 border-b last:border-b-0 bg-card"
             >
-              <span className="font-mono text-xs">{log.sfdcRecordId}</span>
+              <span className="font-mono text-xs">{log.crmRecordId}</span>
               <span className="text-sm text-muted-foreground capitalize">
                 {log.objectType.charAt(0) + log.objectType.slice(1).toLowerCase()}
               </span>

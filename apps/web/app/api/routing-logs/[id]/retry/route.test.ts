@@ -57,7 +57,7 @@ describe("POST /api/routing-logs/[id]/retry", () => {
     orgId: "org-1",
     status: "FAILED",
     assigneeId: "005001",
-    sfdcRecordId: "00Q001",
+    crmRecordId: "00Q001",
     objectType: "LEAD",
   };
 

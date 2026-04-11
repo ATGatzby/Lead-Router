@@ -82,7 +82,7 @@ batchWorker.on("failed", async (job: Job<BatchJobData> | undefined, err: Error) 
     await prisma.routingLog.create({
       data: {
         orgId,
-        sfdcRecordId: recordId,
+        crmRecordId: recordId,
         objectType: objectType as any,
         eventType: eventType as any,
         status: "FAILED",

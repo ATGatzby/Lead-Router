@@ -24,7 +24,7 @@ import type {
   PathStepSplit,
   RoutePath,
 } from "./types"
-import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, resolveObjectType, migrateStateToV2, findPathById, updatePathById, updateSplitStep, flattenAllPaths, flattenAllSplits, getPathDepth, MAX_SPLIT_DEPTH } from "./types"
+import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, objectTypeLabel, resolveObjectType, migrateStateToV2, findPathById, updatePathById, updateSplitStep, flattenAllPaths, flattenAllSplits, getPathDepth, MAX_SPLIT_DEPTH } from "./types"
 import type { RuleConditions } from "@/components/condition-builder"
 import type { ConditionGroup } from "@/components/condition-builder/types"
 import { EnglishView } from "./EnglishView"
@@ -279,7 +279,7 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "searchTrigger": {
       if (!state.searchTrigger) return "Not configured"
       const freq = state.searchTrigger.frequency ? state.searchTrigger.frequency.charAt(0) + state.searchTrigger.frequency.slice(1).toLowerCase() : "One-time"
-      const obj = state.searchTrigger.objectType === "LEAD" ? "Lead" : state.searchTrigger.objectType === "CONTACT" ? "Contact" : "Account"
+      const obj = objectTypeLabel(state.searchTrigger.objectType)
       const criteriaCount = Array.isArray(state.searchTrigger.searchCriteria)
         ? state.searchTrigger.searchCriteria.flatMap((g: any) => Array.isArray(g?.conditions) ? g.conditions : [g]).length
         : 0
@@ -2124,21 +2124,36 @@ export function RouteBuilder({
             ? (findPathById(state.paths, activeAssignPathId)?.label ?? "Path")
             : "Path"
         }
-        action={
-          activeAssignPathId
-            ? (findPathById(state.paths, activeAssignPathId)?.action ?? {
-                assignmentType: null,
-                assigneeId: null,
-                assigneeName: null,
-              })
-            : { assignmentType: null, assigneeId: null, assigneeName: null }
-        }
+        action={(() => {
+          if (!activeAssignPathId) return { assignmentType: null, assigneeId: null, assigneeName: null }
+          const path = findPathById(state.paths, activeAssignPathId)
+          if (!path) return { assignmentType: null, assigneeId: null, assigneeName: null }
+          // Read from steps[] if assign step exists (V2)
+          const assignNode = nodes.find((n) => n.type === "assign" && n.pathId === activeAssignPathId)
+          if (assignNode?.stepIndex !== undefined && path.steps?.[assignNode.stepIndex]?.type === "assign") {
+            const step = path.steps[assignNode.stepIndex] as any
+            return { assignmentType: step.assignmentType ?? null, assigneeId: step.assigneeId ?? null, assigneeName: step.assigneeName ?? null }
+          }
+          return path.action ?? { assignmentType: null, assigneeId: null, assigneeName: null }
+        })()}
         onSave={(action: PathAction) => {
           if (!activeAssignPathId) return
           const pathId = activeAssignPathId
+          // Find the assign node to get its stepIndex
+          const assignNode = nodes.find((n) => n.type === "assign" && n.pathId === pathId)
           setState((s) => ({
             ...s,
-            paths: updatePathById(s.paths, pathId, (p) => ({ ...p, action })),
+            paths: updatePathById(s.paths, pathId, (p) => {
+              // Update legacy path.action
+              const updated = { ...p, action }
+              // Also update the step in path.steps[] if it exists
+              if (assignNode?.stepIndex !== undefined && updated.steps?.[assignNode.stepIndex]?.type === "assign") {
+                const newSteps = [...updated.steps]
+                newSteps[assignNode.stepIndex] = { ...newSteps[assignNode.stepIndex], ...action }
+                updated.steps = newSteps
+              }
+              return updated
+            }),
           }))
         }}
       />

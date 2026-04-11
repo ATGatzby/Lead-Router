@@ -9,6 +9,15 @@ import { randomUUID } from "node:crypto";
 import { routePayloadSchema, batchPayloadSchema } from "../lib/schemas.js";
 import { stripPii } from "../lib/strip-pii.js";
 
+/** Fetch all synced field API names for an org+objectType from the DB. */
+async function getSyncedPropertyNames(orgId: string, objectType: string): Promise<string[] | undefined> {
+  const schemas = await prisma.fieldSchema.findMany({
+    where: { orgId, objectType: objectType as any },
+    select: { fieldApiName: true },
+  });
+  return schemas.length > 0 ? schemas.map((s) => s.fieldApiName) : undefined;
+}
+
 interface WebhookBody {
   sfdcOrgId: string;   // Salesforce org ID (18-char), used to look up internal orgId
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
@@ -70,7 +79,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.create({
         data: {
           orgId,
-          sfdcRecordId: recordId,
+          crmRecordId: recordId,
           objectType,
           eventType,
           status: "FAILED",
@@ -99,7 +108,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.create({
         data: {
           orgId,
-          sfdcRecordId: recordId,
+          crmRecordId: recordId,
           objectType,
           eventType,
           status: "FAILED",
@@ -141,7 +150,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.create({
         data: {
           orgId,
-          sfdcRecordId: recordId,
+          crmRecordId: recordId,
           objectType,
           eventType,
           status: "FAILED",
@@ -212,7 +221,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.createMany({
         data: records.map((r) => ({
           orgId,
-          sfdcRecordId: r.recordId,
+          crmRecordId: r.recordId,
           objectType,
           eventType,
           status: "FAILED" as const,
@@ -241,7 +250,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.createMany({
         data: records.map((r) => ({
           orgId,
-          sfdcRecordId: r.recordId,
+          crmRecordId: r.recordId,
           objectType,
           eventType,
           status: "FAILED" as const,
@@ -281,7 +290,7 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       await prisma.routingLog.createMany({
         data: quotaCapped.map((r) => ({
           orgId,
-          sfdcRecordId: r.recordId,
+          crmRecordId: r.recordId,
           objectType,
           eventType,
           status: "FAILED" as const,
@@ -317,5 +326,150 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
       duplicates,
       batchId,
     });
+  });
+
+  // ── POST /route/hubspot — native HubSpot webhook receiver ──────────────
+  // HubSpot sends an array of event objects. We validate the signature,
+  // fetch each record's properties from HubSpot, then feed into routeRecord().
+
+  interface HubSpotEvent {
+    objectId: number;
+    subscriptionType: string; // e.g. "contact.creation", "company.creation"
+    portalId: number;
+    occurredAt: number;
+    eventId: number;
+    subscriptionId: number;
+    attemptNumber: number;
+    changeSource?: string;
+    propertyName?: string;
+    propertyValue?: string;
+  }
+
+  const SUBSCRIPTION_TO_OBJECT: Record<string, string> = {
+    "contact.creation": "CONTACT",
+    "contact.propertyChange": "CONTACT",
+    "company.creation": "COMPANY",
+    "company.propertyChange": "COMPANY",
+    "deal.creation": "DEAL",
+    "deal.propertyChange": "DEAL",
+  };
+
+  const SUBSCRIPTION_TO_EVENT: Record<string, string> = {
+    "contact.creation": "INSERT",
+    "contact.propertyChange": "UPDATE",
+    "company.creation": "INSERT",
+    "company.propertyChange": "UPDATE",
+    "deal.creation": "INSERT",
+    "deal.propertyChange": "UPDATE",
+  };
+
+  app.post<{ Body: HubSpotEvent[] }>("/route/hubspot", {
+    config: { rawBody: true },
+  }, async (request, reply) => {
+    const startMs = Date.now();
+    const events = request.body;
+
+    if (!Array.isArray(events) || events.length === 0) {
+      return reply.status(400).send({ error: "Expected array of events" });
+    }
+
+    // All events in a batch share the same portalId
+    const portalId = String(events[0].portalId);
+
+    // ── 1. Look up org by portalId ─────────────────────────────────────
+    const org = await prisma.organization.findUnique({
+      where: { hubspotPortalId: portalId },
+      select: { id: true, isActive: true, plan: true, routingQuotaUsed: true, quotaResetAt: true },
+    });
+
+    if (!org) {
+      app.log.warn({ portalId }, "HubSpot webhook for unknown portal");
+      return reply.status(200).send({ status: "unknown_portal" });
+    }
+
+    if (!org.isActive) {
+      return reply.status(200).send({ status: "org_suspended" });
+    }
+
+    // ── 2. Validate HubSpot signature ──────────────────────────────────
+    const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
+    if (clientSecret) {
+      const sig = request.headers["x-hubspot-signature-v3"] as string | undefined;
+      const ts = request.headers["x-hubspot-request-timestamp"] as string | undefined;
+      if (sig && ts) {
+        const { WebhooksApi } = await import("@lead-routing/hubspot");
+        const webhooks = new WebhooksApi("", "");
+        const rawBody = (request as unknown as { rawBody: string }).rawBody ?? JSON.stringify(events);
+        const fullUrl = `https://${request.headers.host ?? ""}${request.url}`;
+        const valid = webhooks.validateSignature(rawBody, sig, clientSecret, fullUrl, "POST", ts);
+        if (!valid) {
+          app.log.warn("HubSpot webhook signature validation failed");
+          return reply.status(401).send({ error: "Invalid signature" });
+        }
+      }
+    }
+
+    // ── 3. Process each event ──────────────────────────────────────────
+    const { getOrgHubSpotClient, toCrmObjectType } = await import("../hubspot-connection.js");
+    const results: Array<{ eventId: number; status: string }> = [];
+
+    for (const event of events) {
+      const objectType = SUBSCRIPTION_TO_OBJECT[event.subscriptionType];
+      const eventType = SUBSCRIPTION_TO_EVENT[event.subscriptionType];
+      if (!objectType || !eventType) {
+        results.push({ eventId: event.eventId, status: "unsupported_type" });
+        continue;
+      }
+
+      const recordId = String(event.objectId);
+      const timestamp = new Date(event.occurredAt).toISOString();
+
+      // Dedupe
+      const isNew = await claimIdempotencyKey(org.id, recordId, eventType, timestamp);
+      if (!isNew) {
+        results.push({ eventId: event.eventId, status: "duplicate" });
+        continue;
+      }
+
+      // Fetch record properties from HubSpot (all synced fields)
+      let fields: Record<string, unknown>;
+      try {
+        const { crmApi } = await getOrgHubSpotClient(org.id);
+        const properties = await getSyncedPropertyNames(org.id, objectType);
+        const record = await crmApi.getObject(toCrmObjectType(objectType), recordId, properties);
+        fields = record.properties ?? {};
+      } catch (err) {
+        app.log.error({ err, recordId, objectType }, "Failed to fetch record from HubSpot");
+        results.push({ eventId: event.eventId, status: "fetch_failed" });
+        continue;
+      }
+
+      // Route
+      const payload: RoutingPayload = {
+        orgId: org.id,
+        objectType: objectType as any,
+        eventType: eventType as "INSERT" | "UPDATE",
+        recordId,
+        timestamp,
+        fields,
+      };
+
+      try {
+        const result = await routeRecord(payload, startMs);
+        if (result === "routed") {
+          await prisma.organization.update({
+            where: { id: org.id },
+            data: { routingQuotaUsed: { increment: 1 } },
+          });
+        }
+        results.push({ eventId: event.eventId, status: result });
+      } catch (err) {
+        app.log.error({ err, recordId }, "Routing error for HubSpot event");
+        results.push({ eventId: event.eventId, status: "error" });
+      }
+    }
+
+    app.log.info({ portalId, processed: results.length, latencyMs: Date.now() - startMs }, "HubSpot webhook batch processed");
+    return reply.send({ results, latencyMs: Date.now() - startMs });
   });
 }

@@ -1,7 +1,7 @@
 import type { ConditionGroup } from "@/components/condition-builder/types"
 
 export type AssignmentType = "USER" | "ROUND_ROBIN" | "QUEUE"
-export type ObjectType = "LEAD" | "CONTACT" | "ACCOUNT"
+export type ObjectType = "LEAD" | "CONTACT" | "ACCOUNT" | "COMPANY" | "DEAL"
 export type TriggerEvent = "INSERT" | "UPDATE" | "BOTH"
 export type LeadMatchAction = "SFDC_MERGE" | "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM"
 export type ContactMatchAction = "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP"
@@ -254,12 +254,23 @@ export function flattenAllSplits(paths: RoutePath[], depth = 0): FlatSplit[] {
 
 // ─── Existing helpers ─────────────────────────────────────────────────────
 
+/** Human-readable label for an object type */
+export function objectTypeLabel(objectType: ObjectType): string {
+  switch (objectType) {
+    case "LEAD": return "Lead"
+    case "CONTACT": return "Contact"
+    case "ACCOUNT": return "Account"
+    case "COMPANY": return "Company"
+    case "DEAL": return "Deal"
+  }
+}
+
 /** Human-readable label for a trigger event */
 export function triggerEventLabel(
   objectType: ObjectType,
   event: TriggerEvent,
 ): string {
-  const obj = objectType === "LEAD" ? "Lead" : objectType === "CONTACT" ? "Contact" : "Account"
+  const obj = objectTypeLabel(objectType)
   switch (event) {
     case "INSERT":
       return `${obj} Created`
