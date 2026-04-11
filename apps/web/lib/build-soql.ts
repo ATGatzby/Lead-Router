@@ -154,10 +154,18 @@ export function buildSoqlFromCriteria(
     (c) => c.field && c.operator && (noValueOps.has(c.operator) || (c.value !== undefined && c.value !== ""))
   );
 
+  // Exclude converted leads — SFDC rejects owner updates on converted records
+  // Skip if user already has an explicit IsConverted condition
+  const hasExplicitConvertedFilter = validCriteria.some((c) => c.field === "IsConverted");
+  const convertedFilter = objectType === "Lead" && !hasExplicitConvertedFilter ? "IsConverted = false" : "";
+
   if (validCriteria.length === 0) {
-    return `${selectClause} LIMIT ${limit}`;
+    return convertedFilter
+      ? `${selectClause} WHERE ${convertedFilter} LIMIT ${limit}`
+      : `${selectClause} LIMIT ${limit}`;
   }
 
   const whereClauses = validCriteria.map(criterionToClause);
+  if (convertedFilter) whereClauses.push(convertedFilter);
   return `${selectClause} WHERE ${whereClauses.join(" AND ")} LIMIT ${limit}`;
 }

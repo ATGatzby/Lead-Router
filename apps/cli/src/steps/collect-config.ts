@@ -1,9 +1,12 @@
 import { text, password, note, cancel, isCancel } from '@clack/prompts'
 import { generateSecret } from '../utils/crypto.js'
 
+export type CrmType = 'salesforce' | 'hubspot'
+
 export interface CollectedConfig {
   appUrl: string
   engineUrl: string
+  crmType: CrmType
   managedDb: boolean
   databaseUrl: string
   dbPassword: string
@@ -19,6 +22,12 @@ export interface CollectedConfig {
   sessionSecret: string
   engineWebhookSecret: string
   internalApiKey: string
+  /** HubSpot App ID — only set when crmType is 'hubspot' */
+  hubspotAppId?: string
+  /** HubSpot Client ID — only set when crmType is 'hubspot' */
+  hubspotClientId?: string
+  /** HubSpot Client Secret — only set when crmType is 'hubspot' */
+  hubspotClientSecret?: string
 }
 
 export interface ConfigCollectOptions {
@@ -26,6 +35,8 @@ export interface ConfigCollectOptions {
   externalDb?: string
   /** External Redis URL — skips managed Docker container */
   externalRedis?: string
+  /** CRM type selected earlier in the wizard */
+  crmType?: CrmType
 }
 
 function bail(value: unknown): never {
@@ -37,6 +48,8 @@ function bail(value: unknown): never {
 }
 
 export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<CollectedConfig> {
+  const crmType = opts.crmType ?? 'salesforce'
+
   note(
     'You will need:\n' +
       '  • Public HTTPS URLs for the web app and routing engine',
@@ -60,14 +73,15 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   if (isCancel(appUrl)) bail(appUrl)
 
   // ── Engine URL ─────────────────────────────────────────────────────────────
+  const crmLabel = crmType === 'hubspot' ? 'HubSpot' : 'Salesforce'
   const engineUrl = await text({
-    message: 'Engine URL (public URL Salesforce will use to route leads)',
+    message: `Engine URL (public URL ${crmLabel} will use to route leads)`,
     placeholder: 'https://engine.acme.com  or  https://acme.com:3001',
     validate: (v) => {
       if (!v) return 'Required'
       try {
         const u = new URL(v)
-        if (u.protocol !== 'https:') return 'Must be an HTTPS URL (Salesforce requires HTTPS)'
+        if (u.protocol !== 'https:') return `Must be an HTTPS URL (${crmLabel} requires HTTPS)`
       } catch {
         return 'Must be a valid URL (e.g. https://engine.acme.com)'
       }
@@ -115,9 +129,46 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   const engineWebhookSecret = generateSecret(32)
   const internalApiKey = generateSecret(32)
 
+  // ── HubSpot credentials (only when crmType is 'hubspot') ──────────────────
+  let hubspotAppId: string | undefined
+  let hubspotClientId: string | undefined
+  let hubspotClientSecret: string | undefined
+
+  if (crmType === 'hubspot') {
+    note(
+      'Create a HubSpot app at https://developers.hubspot.com/\n' +
+        'You will need the App ID, Client ID, and Client Secret.',
+      'HubSpot Credentials'
+    )
+
+    const rawAppId = await text({
+      message: 'HubSpot App ID',
+      placeholder: '123456',
+      validate: (v) => (!v?.trim() ? 'Required' : undefined),
+    })
+    if (isCancel(rawAppId)) bail(rawAppId)
+    hubspotAppId = (rawAppId as string).trim()
+
+    const rawClientId = await text({
+      message: 'HubSpot Client ID',
+      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+      validate: (v) => (!v?.trim() ? 'Required' : undefined),
+    })
+    if (isCancel(rawClientId)) bail(rawClientId)
+    hubspotClientId = (rawClientId as string).trim()
+
+    const rawClientSecret = await password({
+      message: 'HubSpot Client Secret',
+      validate: (v) => (!v?.trim() ? 'Required' : undefined),
+    })
+    if (isCancel(rawClientSecret)) bail(rawClientSecret)
+    hubspotClientSecret = (rawClientSecret as string).trim()
+  }
+
   return {
     appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
     engineUrl: (engineUrl as string).trim().replace(/\/+$/, ''),
+    crmType,
     managedDb,
     databaseUrl,
     dbPassword: managedDb ? dbPassword : '',
@@ -131,5 +182,8 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
     sessionSecret,
     engineWebhookSecret,
     internalApiKey,
+    hubspotAppId,
+    hubspotClientId,
+    hubspotClientSecret,
   }
 }

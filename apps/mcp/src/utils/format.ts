@@ -36,7 +36,7 @@ export function formatLogsSummary(logs: any[]): string {
   if (!logs.length) return "No routing logs found.";
   return logs
     .map((l: any) =>
-      `• ${l.sfdcRecordId} — ${l.status}${l.ruleName ? ` via ${l.ruleName}` : ""}${l.assigneeName ? ` → ${l.assigneeName}` : ""} (${new Date(l.createdAt).toLocaleString()})`
+      `• ${l.crmRecordId} — ${l.status}${l.ruleName ? ` via ${l.ruleName}` : ""}${l.assigneeName ? ` → ${l.assigneeName}` : ""} (${new Date(l.createdAt).toLocaleString()})`
     )
     .join("\n");
 }

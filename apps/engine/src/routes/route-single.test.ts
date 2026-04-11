@@ -78,7 +78,7 @@ function makeOrg(overrides = {}) {
     plan: "PAID",
     isActive: true,
     routingQuotaUsed: 0,
-    quotaResetAt: new Date("2026-04-01"),
+    quotaResetAt: new Date("2027-01-01"),
     ...overrides,
   };
 }
@@ -237,7 +237,7 @@ describe("POST /route (single)", () => {
     expect(mockRoutingLogCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         orgId: "org-1",
-        sfdcRecordId: body.recordId,
+        crmRecordId: body.recordId,
         objectType: "LEAD",
         eventType: "INSERT",
         status: "FAILED",
@@ -416,7 +416,7 @@ describe("POST /route (single)", () => {
     expect(mockRoutingLogCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         orgId: "org-1",
-        sfdcRecordId: body.recordId,
+        crmRecordId: body.recordId,
         objectType: "LEAD",
         eventType: "INSERT",
         status: "FAILED",

@@ -32,7 +32,7 @@ export async function queryRoutingLogs(
     take: filters.limit ?? 50,
     select: {
       id: true,
-      sfdcRecordId: true,
+      crmRecordId: true,
       objectType: true,
       eventType: true,
       ruleName: true,
@@ -244,9 +244,9 @@ export async function explainRule(orgId: string, ruleId: string) {
   });
 }
 
-export async function getRoutingTimeline(orgId: string, sfdcRecordId: string) {
+export async function getRoutingTimeline(orgId: string, crmRecordId: string) {
   return prisma.routingLog.findMany({
-    where: { orgId, sfdcRecordId },
+    where: { orgId, crmRecordId },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {
@@ -291,7 +291,7 @@ export async function listTeams(orgId: string, filters: { teamId?: string }) {
               id: true,
               name: true,
               email: true,
-              sfdcUserId: true,
+              crmUserId: true,
               isActive: true,
             },
           },
@@ -323,7 +323,7 @@ export async function listUsers(
     take: filters.limit ?? 100,
     select: {
       id: true,
-      sfdcUserId: true,
+      crmUserId: true,
       name: true,
       email: true,
       role: true,

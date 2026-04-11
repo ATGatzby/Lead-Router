@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     let objectFilter = "";
     let idx = 4;
     if (objectType) {
-      objectFilter = ` AND a."objectType" = $${idx++}::"SfdcObjectType"`;
+      objectFilter = ` AND a."objectType" = $${idx++}::"CrmObjectType"`;
       params.push(objectType);
     }
 

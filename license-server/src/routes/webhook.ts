@@ -68,7 +68,7 @@ webhook.post('/', async (c) => {
         // Generate license key and JWT
         const licenseKey = generateLicenseKey()
         const validUntil = new Date()
-        validUntil.setFullYear(validUntil.getFullYear() + 1)
+        validUntil.setMonth(validUntil.getMonth() + 1)
         const validUntilStr = validUntil.toISOString()
 
         const jwt = await signLicenseJwt(
@@ -143,9 +143,9 @@ webhook.post('/', async (c) => {
           break
         }
 
-        // Extend validity by 1 year from now
+        // Extend validity by 1 month from now
         const newValidUntil = new Date()
-        newValidUntil.setFullYear(newValidUntil.getFullYear() + 1)
+        newValidUntil.setMonth(newValidUntil.getMonth() + 1)
 
         await extendLicenseValidity(c.env.DB, subscriptionId, newValidUntil.toISOString())
         console.log(`License extended for subscription: ${subscriptionId}`)

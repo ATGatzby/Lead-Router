@@ -1,0 +1,232 @@
+# Agentic Factory — CRM Adapter Merge Configuration
+# Orchestrates merging HubSpot + SFDC codebases into a unified CRM adapter architecture.
+# Context from previous steps is automatically injected into each agent's prompt.
+
+name: lead-routing
+version: "1.0"
+
+defaults:
+  model: claude-sonnet-4-20250514
+  maxTurns: 25
+
+agents:
+  architect:
+    prompt: |
+      You are the CTO / Technical Architect for the Lead Routing project.
+      This is a self-hosted Salesforce lead routing engine being extended to support HubSpot via a CRM adapter pattern.
+
+      Project root: /Users/aruntyagi/Claude Code Projects/Lead Routing CLI
+      HubSpot project (reference): /Users/aruntyagi/Claude Code Projects/HubSpot Lead Routing - CLI
+      Merge plan: plans/CRM-Adapter-Merge.md
+
+      Rules:
+      - Read both codebases before making architectural decisions
+      - Stress-test designs: Scale (300K records), Failure (service restart), Multi-CRM (simultaneous SFDC + HubSpot orgs)
+      - Never break existing SFDC functionality
+      - Prisma schema uses camelCase columns (no @map)
+      - DB columns in raw SQL must use double-quoted camelCase
+    tools: [Read, Glob, Grep, WebSearch]
+    model: claude-sonnet-4-20250514
+
+  planner:
+    prompt: |
+      You are the Technical Planner for the CRM adapter merge.
+      Take the architect's design and break it into ordered, atomic implementation tasks.
+      Each task should be completable in a single development session and independently testable.
+
+      Key references:
+      - Merge plan: plans/CRM-Adapter-Merge.md
+      - SFDC schema: packages/db/prisma/schema.prisma
+      - HubSpot schema: /Users/aruntyagi/Claude Code Projects/HubSpot Lead Routing - CLI/packages/db/prisma/schema.prisma
+    tools: [Read, Glob, Grep]
+
+  developer:
+    prompt: |
+      You are a Senior Developer implementing the CRM adapter merge.
+      You will receive a plan from the previous step. Implement it precisely.
+
+      Critical rules:
+      - SFDC project is at /Users/aruntyagi/Claude Code Projects/Lead Routing CLI
+      - HubSpot project is at /Users/aruntyagi/Claude Code Projects/HubSpot Lead Routing - CLI (reference only, copy files FROM here)
+      - All changes go INTO the SFDC project
+      - Never break existing SFDC functionality — all changes are additive
+      - Prisma schema uses camelCase columns, no @map directives
+      - Raw SQL must use double-quoted camelCase ("orgId", "crmType", etc.)
+      - pnpm workspace, Turborepo build system
+      - Engine uses tsup with format: ['cjs'], noExternal for workspace packages
+      - Run `pnpm test` after changes to verify nothing is broken
+    tools: [Read, Write, Edit, Bash, Glob, Grep]
+    maxTurns: 40
+
+  qa:
+    prompt: |
+      You are a QA Engineer verifying the CRM adapter merge.
+      Your job is to ensure:
+      1. All existing tests pass (pnpm test — should be 1324+ tests, 0 failures)
+      2. New code has appropriate test coverage
+      3. No SFDC regressions — existing Salesforce routing must work identically
+      4. Schema migration is reversible
+      5. Type safety — no `as any` casts hiding real type mismatches
+
+      Run tests, read changed files, verify correctness.
+    tools: [Read, Bash, Glob, Grep]
+
+  deployer:
+    prompt: |
+      You are the Deployment Engineer for Lead Routing.
+      Build Docker images with --no-cache, deploy to VPS, verify health.
+
+      VPS: root@187.77.194.136, password: Jennie@41470998
+      Remote dir: /root/lead-routing
+      Images: ghcr.io/atgatzby/lead-routing-{web,engine}:latest
+
+      Steps:
+      1. docker buildx build --no-cache --platform linux/amd64
+      2. docker save | gzip > /tmp/
+      3. SCP via expect script (set timeout 600)
+      4. SSH: docker rmi, docker load, docker compose up -d --force-recreate
+      5. docker system prune -af
+      6. Verify timestamps with docker inspect
+    tools: [Read, Bash, Glob]
+
+workflows:
+  # Full CRM merge — runs all 8 phases sequentially
+  crm-merge:
+    description: "Merge HubSpot into SFDC codebase with CRM adapter pattern"
+    steps:
+      - name: review-architecture
+        agent: architect
+        prompt: "Review the CRM adapter merge plan at plans/CRM-Adapter-Merge.md. Validate the approach, identify risks, and confirm the implementation order."
+      - name: plan-phase
+        agent: planner
+        prompt: "Create detailed implementation tasks for the current phase of the CRM merge."
+        approval: true
+      - name: implement
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify
+        agent: qa
+        gate: quality
+
+  # Individual phases can be run separately
+  schema:
+    description: "Phase 1: Database schema unification"
+    steps:
+      - name: plan-schema
+        agent: planner
+        prompt: "Plan Phase 1 from plans/CRM-Adapter-Merge.md: Database Schema Unification. Read both Prisma schemas and create atomic implementation tasks."
+      - name: implement-schema
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-schema
+        agent: qa
+        gate: quality
+
+  adapter:
+    description: "Phase 2: CRM adapter package"
+    steps:
+      - name: plan-adapter
+        agent: planner
+        prompt: "Plan Phase 2 from plans/CRM-Adapter-Merge.md: CRM Adapter Package. Read packages/sfdc and the HubSpot project's packages/hubspot to design the unified adapter interface."
+      - name: implement-adapter
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-adapter
+        agent: qa
+        gate: quality
+
+  engine:
+    description: "Phase 3: Engine refactoring"
+    steps:
+      - name: plan-engine
+        agent: planner
+        prompt: "Plan Phase 3 from plans/CRM-Adapter-Merge.md: Engine Refactoring. Read router.ts, routes/, bulk-router.ts in both projects."
+      - name: implement-engine
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-engine
+        agent: qa
+        gate: quality
+
+  web-api:
+    description: "Phase 4: Web API routes"
+    steps:
+      - name: plan-web-api
+        agent: planner
+        prompt: "Plan Phase 4 from plans/CRM-Adapter-Merge.md: Web App API Routes. Compare auth routes, field sync, user sync between both projects."
+      - name: implement-web-api
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-web-api
+        agent: qa
+        gate: quality
+
+  web-ui:
+    description: "Phase 5: Web UI changes"
+    steps:
+      - name: plan-web-ui
+        agent: planner
+        prompt: "Plan Phase 5 from plans/CRM-Adapter-Merge.md: Web UI Changes. Identify every hardcoded object type, QUEUE reference, CRM-specific label in the UI."
+      - name: implement-web-ui
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-web-ui
+        agent: qa
+        gate: quality
+
+  cli:
+    description: "Phase 6: CLI unification"
+    steps:
+      - name: plan-cli
+        agent: planner
+        prompt: "Plan Phase 6 from plans/CRM-Adapter-Merge.md: CLI Unification. Compare init commands, config collection, env templates between both projects."
+      - name: implement-cli
+        agent: developer
+        gate: quality
+        retry:
+          maxAttempts: 2
+          injectError: true
+      - name: verify-cli
+        agent: qa
+        gate: quality
+
+  deploy:
+    description: "Build and deploy to VPS"
+    steps:
+      - name: build-deploy
+        agent: deployer
+        prompt: "Build both web and engine Docker images with --no-cache, deploy to VPS, verify health."
+
+gates:
+  quality:
+    commands:
+      - name: "Unit tests"
+        command: "cd /Users/aruntyagi/Claude\\ Code\\ Projects/Lead\\ Routing\\ CLI && pnpm test"
+        timeout: 120000
+      - name: "CLI build"
+        command: "cd /Users/aruntyagi/Claude\\ Code\\ Projects/Lead\\ Routing\\ CLI && pnpm --filter @lead-routing/cli build"
+        timeout: 60000
+
+context:
+  sharedFiles:
+    - plans/CRM-Adapter-Merge.md
+    - packages/db/prisma/schema.prisma
+  maxSummaryTokens: 50000

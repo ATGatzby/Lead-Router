@@ -32,6 +32,7 @@ import { Filter, ChevronDown, AlertTriangle } from "lucide-react"
 import { ConditionBuilder } from "@/components/condition-builder"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { SearchTriggerConfig, ObjectType, ScheduleFrequency } from "../types"
+import { objectTypeLabel } from "../types"
 
 interface FieldsResponse {
   fields: FieldSchema[]
@@ -203,7 +204,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
             />
             {criteriaCount === 0 && (
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                No criteria — all {objectType === "LEAD" ? "Lead" : objectType === "CONTACT" ? "Contact" : "Account"} records will be searched
+                No criteria — all {objectTypeLabel(objectType)} records will be searched
               </p>
             )}
           </div>

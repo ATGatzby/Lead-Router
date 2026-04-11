@@ -81,7 +81,7 @@ describe("POST /api/routing-logs/journey/batch", () => {
     const mockLogs = [
       {
         id: "log-1",
-        sfdcRecordId: "00QgL00000BUAAAA",
+        crmRecordId: "00QgL00000BUAAAA",
         objectType: "LEAD",
         eventType: "INSERT",
         status: "SUCCESS",
@@ -97,7 +97,7 @@ describe("POST /api/routing-logs/journey/batch", () => {
       },
       {
         id: "log-2",
-        sfdcRecordId: "00QgL00000BUBBBB",
+        crmRecordId: "00QgL00000BUBBBB",
         objectType: "LEAD",
         eventType: "INSERT",
         status: "SUCCESS",
@@ -153,7 +153,7 @@ describe("POST /api/routing-logs/journey/batch", () => {
   it("respects the limit parameter", async () => {
     const logs = Array.from({ length: 5 }, (_, i) => ({
       id: `log-${i}`,
-      sfdcRecordId: "00QgL00000BUAAAA",
+      crmRecordId: "00QgL00000BUAAAA",
       objectType: "LEAD",
       eventType: "INSERT",
       status: "SUCCESS",

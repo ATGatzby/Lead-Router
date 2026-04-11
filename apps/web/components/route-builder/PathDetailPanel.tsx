@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import type { EnglishSection } from "@/lib/route-to-english"
 import { OPERATOR_LABELS } from "@/lib/route-to-english"
 import type { RoutePath, MatchConfig, DefaultOwner, RouteBuilderState, SearchTriggerConfig } from "./types"
+import { objectTypeLabel } from "./types"
 import type { ConditionGroup, Condition } from "@/components/condition-builder/types"
 
 interface PathDetailPanelProps {
@@ -228,7 +229,7 @@ export function PathDetailPanel({
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Object:</span>
                   <span className="font-medium text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950 px-1.5 py-0.5 rounded">
-                    {trigger.objectType === "LEAD" ? "Lead" : trigger.objectType === "CONTACT" ? "Contact" : "Account"}
+                    {objectTypeLabel(trigger.objectType)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
@@ -289,7 +290,7 @@ export function PathDetailPanel({
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Object:</span>
                   <span className="font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950 px-1.5 py-0.5 rounded">
-                    {searchTrigger.objectType === "LEAD" ? "Lead" : searchTrigger.objectType === "CONTACT" ? "Contact" : "Account"}
+                    {objectTypeLabel(searchTrigger.objectType)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">

@@ -1,0 +1,3105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Routing — Product Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #06060b;
+  --bg-surface: #0c0c14;
+  --bg-card: rgba(14, 14, 24, 0.7);
+  --bg-glass: rgba(18, 18, 32, 0.5);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --text-primary: #e8e8f0;
+  --text-secondary: rgba(232, 232, 240, 0.55);
+  --text-tertiary: rgba(232, 232, 240, 0.35);
+  --accent-blue: #4f6ef7;
+  --accent-violet: #8b5cf6;
+  --accent-cyan: #22d3ee;
+  --accent-green: #10b981;
+  --accent-teal: #14b8a6;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+  --gradient-hero: linear-gradient(135deg, #4f7df7 0%, #8b5cf6 50%, #c084fc 100%);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-sm: 6px;
+
+  /* Product screen vars */
+  --p-sidebar-bg: #0c0e14;
+  --p-sidebar-text: #8b8fa3;
+  --p-sidebar-active: #e2e4ed;
+  --p-content-bg: #f8f8fb;
+  --p-card-bg: #ffffff;
+  --p-card-border: #e4e5ec;
+  --p-text-primary: #111827;
+  --p-text-secondary: #6b7280;
+  --p-text-tertiary: #9ca3af;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  height: 100vh;
+  overflow-y: hidden;
+}
+
+/* Noise overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ─── Aurora Orbs ─── */
+.aurora {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.aurora-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  will-change: transform;
+}
+
+.aurora-orb:nth-child(1) {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(79,125,247,0.08) 0%, transparent 70%);
+  top: -15%; left: 25%;
+  animation: drift1 25s ease-in-out infinite alternate;
+}
+.aurora-orb:nth-child(2) {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%);
+  bottom: -10%; right: 10%;
+  animation: drift2 30s ease-in-out infinite alternate;
+}
+.aurora-orb:nth-child(3) {
+  width: 450px; height: 450px;
+  background: radial-gradient(circle, rgba(20,184,166,0.05) 0%, transparent 70%);
+  top: 40%; left: -5%;
+  animation: drift3 35s ease-in-out infinite alternate;
+}
+
+@keyframes drift1 {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(80px, -50px) rotate(20deg); }
+}
+@keyframes drift2 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-60px, 40px) scale(1.2); }
+}
+@keyframes drift3 {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(50px, -60px); }
+}
+
+/* ─── Top Nav ─── */
+.topnav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(6, 6, 11, 0.8);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+}
+
+.topnav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.topnav-logo-icon {
+  width: 28px; height: 28px;
+  background: var(--gradient-hero);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topnav-logo-icon svg { width: 16px; height: 16px; }
+
+.topnav-logo span {
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.topnav-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.progress-step {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1.5px solid rgba(255,255,255,0.08);
+  color: var(--text-tertiary);
+  background: transparent;
+  position: relative;
+}
+
+.progress-step:hover {
+  border-color: rgba(255,255,255,0.2);
+  color: var(--text-secondary);
+  transform: scale(1.1);
+}
+
+.progress-step.active {
+  background: var(--gradient-hero);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 0 20px rgba(79,125,247,0.3);
+}
+
+.progress-step.completed {
+  background: rgba(16,185,129,0.15);
+  border-color: rgba(16,185,129,0.3);
+  color: var(--accent-green);
+}
+
+.progress-line {
+  width: 16px;
+  height: 1.5px;
+  background: rgba(255,255,255,0.08);
+  transition: background 0.3s;
+}
+
+.progress-line.active {
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-violet));
+}
+
+.topnav-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: rgba(79, 125, 247, 0.12);
+  color: var(--accent-blue);
+  border: 1px solid rgba(79, 125, 247, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.topnav-cta:hover {
+  background: rgba(79, 125, 247, 0.2);
+  border-color: rgba(79, 125, 247, 0.35);
+  transform: translateY(-1px);
+}
+
+.topnav-cta svg { width: 14px; height: 14px; }
+
+/* ─── Main Content ─── */
+.tour-container {
+  position: relative;
+  z-index: 1;
+  height: 100vh;
+  padding-top: 57px;
+  overflow: hidden;
+}
+
+.tour-slides {
+  display: flex;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tour-slide {
+  min-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 40px 90px;
+  opacity: 0;
+  transition: opacity 0.5s ease 0.1s;
+}
+
+.tour-slide.active {
+  opacity: 1;
+}
+
+/* Step header */
+.step-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.step-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  margin-bottom: 8px;
+}
+
+.step-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 6px;
+}
+
+.step-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+/* ─── Device Frame ─── */
+.device-frame {
+  width: 100%;
+  max-width: 960px;
+  background: var(--p-card-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+  position: relative;
+}
+
+.device-frame.terminal-frame {
+  background: #1a1b26;
+  max-width: 780px;
+}
+
+.browser-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.06);
+  border-bottom: 1px solid var(--p-card-border);
+}
+
+.terminal-frame .browser-chrome {
+  background: #13141f;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.browser-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+.browser-dot:nth-child(1) { background: #ef4444; }
+.browser-dot:nth-child(2) { background: #f59e0b; }
+.browser-dot:nth-child(3) { background: #10b981; }
+
+.browser-url {
+  flex: 1;
+  margin-left: 12px;
+  padding: 4px 12px;
+  background: rgba(0,0,0,0.04);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--p-text-tertiary);
+}
+
+.terminal-frame .browser-url {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.35);
+}
+
+/* ─── Product Screen Layout ─── */
+.product-screen {
+  display: flex;
+  height: 420px;
+}
+
+.product-screen.tall { height: 460px; }
+
+.p-sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--p-sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.p-sidebar-header {
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p-sidebar-logo {
+  width: 24px; height: 24px;
+  background: var(--accent-blue);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.p-sidebar-logo svg { width: 12px; height: 12px; }
+
+.p-sidebar-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-sidebar-active);
+}
+
+.p-nav { padding: 10px 6px; flex: 1; }
+
+.p-nav-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(139,143,163,0.5);
+  padding: 8px 8px 4px;
+}
+
+.p-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--p-sidebar-text);
+  margin-bottom: 1px;
+  position: relative;
+}
+
+.p-nav-item.active {
+  color: var(--p-sidebar-active);
+  background: rgba(79,110,247,0.08);
+  font-weight: 500;
+}
+
+.p-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-blue);
+}
+
+.p-nav-item svg {
+  width: 14px; height: 14px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.p-nav-item.active svg { opacity: 1; }
+
+.p-nav-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.p-content {
+  flex: 1;
+  background: var(--p-content-bg);
+  overflow: hidden;
+  padding: 20px;
+}
+
+.p-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.p-content-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--p-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.p-btn {
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.p-btn-primary {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.p-btn-outline {
+  background: white;
+  color: var(--p-text-primary);
+  border: 1px solid var(--p-card-border);
+}
+
+.p-card {
+  background: var(--p-card-bg);
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* ─── Terminal Styles ─── */
+.terminal-body {
+  padding: 16px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: #a9b1d6;
+  min-height: 380px;
+  overflow: hidden;
+}
+
+.term-prompt { color: #7aa2f7; }
+.term-cmd { color: #c0caf5; }
+.term-success { color: #9ece6a; }
+.term-info { color: #7dcfff; }
+.term-dim { color: #565f89; }
+.term-warn { color: #e0af68; }
+.term-accent { color: #bb9af7; }
+
+.term-line {
+  opacity: 0;
+  transform: translateY(4px);
+  animation: termFadeIn 0.15s ease forwards;
+}
+
+.term-line.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes termFadeIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.term-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: #7aa2f7;
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ─── Onboarding Wizard ─── */
+.onboard-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+}
+
+.onboard-steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.onboard-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--p-text-tertiary);
+}
+
+.onboard-step.active { color: var(--accent-blue); font-weight: 600; }
+.onboard-step.done { color: var(--accent-green); }
+
+.onboard-step-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1.5px solid var(--p-card-border);
+  color: var(--p-text-tertiary);
+}
+
+.onboard-step.active .onboard-step-dot {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+}
+
+.onboard-step.done .onboard-step-dot {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: white;
+}
+
+.onboard-step-line {
+  width: 30px;
+  height: 1.5px;
+  background: var(--p-card-border);
+}
+
+.onboard-step-line.done { background: var(--accent-green); }
+
+.onboard-card {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  text-align: center;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+
+.onboard-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.onboard-icon.sf { background: #e8f0fe; }
+.onboard-icon.sf svg { color: #1798c1; }
+
+.onboard-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--p-text-primary);
+  margin-bottom: 6px;
+}
+
+.onboard-desc {
+  font-size: 13px;
+  color: var(--p-text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.onboard-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.2s;
+}
+
+.onboard-btn:hover { background: #3d5bd9; transform: translateY(-1px); }
+
+.connected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ecfdf5;
+  color: #059669;
+  border-radius: 100px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 14px;
+  border: 1px solid #a7f3d0;
+}
+
+.connected-info {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--p-text-secondary);
+}
+
+.connected-info strong {
+  color: var(--p-text-primary);
+}
+
+/* ─── License Users ─── */
+.license-methods {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.license-method {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.license-method:hover { border-color: var(--accent-blue); }
+.license-method.active { border-color: var(--accent-blue); background: #f0f4ff; }
+
+.license-method-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 6px;
+  font-size: 14px;
+}
+
+.license-method-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+}
+
+.license-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.user-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--p-text-tertiary);
+  border-bottom: 1px solid var(--p-card-border);
+  background: #fafbfc;
+}
+
+.user-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--p-text-primary);
+}
+
+.user-table tr:last-child td { border-bottom: none; }
+
+.user-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.toggle-track {
+  width: 34px; height: 18px;
+  border-radius: 100px;
+  background: #d1d5db;
+  position: relative;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.toggle-track.on { background: var(--accent-green); }
+
+.toggle-knob {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px; left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.toggle-track.on .toggle-knob { transform: translateX(16px); }
+
+/* ─── Teams ─── */
+.teams-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.team-card {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.team-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.team-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+}
+
+.team-type-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.team-type-badge.rr { background: #eff6ff; color: #2563eb; }
+.team-type-badge.weighted { background: #f5f3ff; color: #7c3aed; }
+
+.team-members {
+  display: flex;
+  gap: -4px;
+  margin-bottom: 8px;
+}
+
+.team-member-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  border: 2px solid white;
+  margin-left: -6px;
+}
+
+.team-member-avatar:first-child { margin-left: 0; }
+
+.team-stat {
+  font-size: 11.5px;
+  color: var(--p-text-secondary);
+}
+
+.team-stat strong { color: var(--p-text-primary); }
+
+/* Weights panel */
+.weights-panel {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.weights-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  margin-bottom: 10px;
+}
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.weight-row:last-child { margin-bottom: 0; }
+
+.weight-name {
+  font-size: 12.5px;
+  color: var(--p-text-primary);
+  width: 90px;
+}
+
+.weight-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.weight-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.weight-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  width: 35px;
+  text-align: right;
+}
+
+/* ─── Route Builder Flow ─── */
+.flow-canvas {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.flow-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-node {
+  position: absolute;
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  font-size: 12px;
+  z-index: 2;
+  min-width: 160px;
+}
+
+.flow-node-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.flow-node-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--p-text-primary);
+}
+
+.flow-node-sub {
+  font-size: 10.5px;
+  color: var(--p-text-secondary);
+  margin-top: 2px;
+}
+
+.flow-node.start {
+  border-color: var(--accent-blue);
+  border-left: 3px solid var(--accent-blue);
+}
+.flow-node.start .flow-node-label { color: var(--accent-blue); }
+
+.flow-node.condition {
+  border-color: var(--accent-violet);
+  border-left: 3px solid var(--accent-violet);
+}
+.flow-node.condition .flow-node-label { color: var(--accent-violet); }
+
+.flow-node.action {
+  border-color: var(--accent-green);
+  border-left: 3px solid var(--accent-green);
+}
+.flow-node.action .flow-node-label { color: var(--accent-green); }
+
+.flow-node.fallback {
+  border-color: var(--accent-amber);
+  border-left: 3px solid var(--accent-amber);
+}
+.flow-node.fallback .flow-node-label { color: var(--accent-amber); }
+
+/* SVG flow lines */
+.flow-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-svg path {
+  fill: none;
+  stroke: var(--p-card-border);
+  stroke-width: 1.5;
+}
+
+.flow-svg path.active-path {
+  stroke: var(--accent-blue);
+  stroke-dasharray: 6 3;
+  animation: flowDash 1.5s linear infinite;
+}
+
+@keyframes flowDash {
+  to { stroke-dashoffset: -18; }
+}
+
+/* ─── Analytics ─── */
+.analytics-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kpi-card {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--p-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--p-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.kpi-trend {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.kpi-trend.up { color: var(--accent-green); }
+.kpi-trend.down { color: var(--accent-red); }
+
+.analytics-charts {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+}
+
+.chart-card {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.chart-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  margin-bottom: 12px;
+}
+
+/* SVG chart */
+.line-chart-svg {
+  width: 100%;
+  height: 120px;
+}
+
+.donut-chart {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.donut-svg { width: 90px; height: 90px; }
+
+.donut-legend {
+  font-size: 11px;
+}
+
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.donut-legend-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.donut-legend-label { color: var(--p-text-secondary); }
+.donut-legend-value { font-weight: 600; color: var(--p-text-primary); margin-left: auto; }
+
+/* ─── AI Chat ─── */
+.ai-layout {
+  display: flex;
+  height: 100%;
+}
+
+.ai-main {
+  flex: 1;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.ai-chat-panel {
+  width: 280px;
+  border-left: 1px solid var(--p-card-border);
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-chat-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--p-card-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+}
+
+.ai-sparkle {
+  width: 16px; height: 16px;
+  background: var(--gradient-hero);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-chat-messages {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.ai-msg {
+  margin-bottom: 10px;
+  max-width: 95%;
+}
+
+.ai-msg.user {
+  margin-left: auto;
+}
+
+.ai-msg-bubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-msg.user .ai-msg-bubble {
+  background: var(--accent-blue);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.ai-msg.assistant .ai-msg-bubble {
+  background: #f1f5f9;
+  color: var(--p-text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.ai-rule-preview {
+  background: #fafbfc;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.ai-rule-preview-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: var(--p-text-secondary);
+}
+
+.ai-rule-preview-row strong {
+  color: var(--p-text-primary);
+}
+
+.ai-chat-input {
+  padding: 10px 12px;
+  border-top: 1px solid var(--p-card-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-input-field {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--p-text-primary);
+  outline: none;
+}
+
+.ai-send-btn {
+  width: 28px; height: 28px;
+  background: var(--accent-blue);
+  border: none;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+}
+
+/* ─── MCP / Agent Step ─── */
+.mcp-split {
+  display: flex;
+  gap: 0;
+  height: 100%;
+}
+
+.mcp-terminal {
+  flex: 1;
+  background: #1a1b26;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  padding: 16px;
+  color: #a9b1d6;
+  overflow-y: auto;
+}
+
+.mcp-result {
+  flex: 1;
+  background: var(--p-content-bg);
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--p-card-border);
+}
+
+.mcp-result-card {
+  background: white;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.mcp-result-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mcp-result-json {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--p-text-secondary);
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.mcp-result-json .json-key { color: var(--accent-blue); }
+.mcp-result-json .json-str { color: var(--accent-green); }
+.mcp-result-json .json-num { color: var(--accent-violet); }
+.mcp-result-json .json-bool { color: var(--accent-amber); }
+
+.mcp-tagline {
+  background: linear-gradient(135deg, rgba(79,125,247,0.08), rgba(139,92,246,0.08));
+  border: 1px solid rgba(79,125,247,0.15);
+  border-radius: var(--radius);
+  padding: 14px;
+  text-align: center;
+}
+
+.mcp-tagline-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--p-text-primary);
+  line-height: 1.5;
+}
+
+.mcp-tagline-sub {
+  font-size: 11.5px;
+  color: var(--p-text-secondary);
+  margin-top: 4px;
+}
+
+/* ─── Create Team Dialog ─── */
+.create-team-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-box {
+  position: relative;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+  width: 380px;
+  overflow: hidden;
+  animation: dialogIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dialogIn {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.dialog-header {
+  padding: 20px 20px 0;
+}
+
+.dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--p-text-primary);
+  margin-bottom: 4px;
+}
+
+.dialog-desc {
+  font-size: 12.5px;
+  color: var(--p-text-secondary);
+}
+
+.dialog-body {
+  padding: 16px 20px;
+}
+
+.dialog-field {
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.dialog-field:last-child { margin-bottom: 0; }
+
+.dialog-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  margin-bottom: 5px;
+}
+
+.dialog-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--p-text-primary);
+  background: white;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.dialog-input:focus-within {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(79,110,247,0.1);
+}
+
+.dialog-input-text {
+  font-size: 13px;
+  color: var(--p-text-primary);
+}
+
+.dialog-input-cursor {
+  display: inline-block;
+  width: 1.5px;
+  height: 16px;
+  background: var(--accent-blue);
+  animation: blink 1s step-end infinite;
+  margin-left: 1px;
+  vertical-align: middle;
+}
+
+.dialog-input-placeholder {
+  position: absolute;
+  top: 27px;
+  left: 11px;
+  font-size: 13px;
+  color: var(--p-text-tertiary);
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.dialog-footer {
+  padding: 12px 20px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ─── Step Registry ─── */
+.step-registry {
+  width: 180px;
+  min-width: 180px;
+  border-right: 1px solid var(--p-card-border);
+  background: white;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+
+.step-reg-section {
+  margin-bottom: 12px;
+}
+
+.step-reg-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--p-text-tertiary);
+  padding: 4px 6px;
+  margin-bottom: 4px;
+}
+
+.step-reg-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.step-reg-item:hover { background: #f8f9fc; }
+.step-reg-item.added { opacity: 0.55; }
+
+.step-reg-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-reg-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  line-height: 1.2;
+}
+
+.step-reg-desc {
+  font-size: 10px;
+  color: var(--p-text-tertiary);
+  line-height: 1.3;
+}
+
+.step-reg-added {
+  position: absolute;
+  right: 4px;
+  top: 6px;
+  font-size: 9px;
+  color: var(--p-text-tertiary);
+  font-style: italic;
+}
+
+/* ─── Route Canvas ─── */
+.route-canvas {
+  flex: 1;
+  background: var(--p-content-bg);
+  position: relative;
+  overflow: hidden;
+  background-image:
+    radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.route-canvas .flow-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.route-canvas .flow-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.route-canvas .flow-node {
+  z-index: 2;
+}
+
+/* ─── Config Sheet ─── */
+.config-sheet {
+  width: 240px;
+  min-width: 240px;
+  background: white;
+  border-left: 1px solid var(--p-card-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.config-sheet-header {
+  padding: 14px 14px 0;
+  border-bottom: 1px solid var(--p-card-border);
+  padding-bottom: 10px;
+}
+
+.config-sheet-body {
+  padding: 12px 14px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.config-sheet-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--p-card-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.config-input-filled {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--p-text-primary);
+  background: white;
+}
+
+.config-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--p-card-border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--p-text-primary);
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.config-select svg { color: var(--p-text-tertiary); }
+
+.config-condition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #f8f9fc;
+  border: 1px solid #e9ecf1;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.config-condition-field {
+  font-weight: 600;
+  color: var(--p-text-primary);
+}
+
+.config-condition-op {
+  color: var(--p-text-tertiary);
+  font-weight: 500;
+}
+
+.config-condition-val {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* ─── Bottom Nav ─── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(6, 6, 11, 0.85);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-top: 1px solid var(--border);
+}
+
+.nav-arrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.nav-arrow:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-arrow:disabled:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+}
+
+.nav-arrow svg { width: 14px; height: 14px; }
+
+.bottom-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottom-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.bottom-dot:hover { background: rgba(255,255,255,0.25); }
+
+.bottom-dot.active {
+  background: var(--gradient-hero);
+  width: 24px;
+  border-radius: 100px;
+  box-shadow: 0 0 12px rgba(79,125,247,0.3);
+}
+
+.nav-step-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 42px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ─── Animations ─── */
+.fade-up {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fade-up.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-1 { transition-delay: 0.1s; }
+.stagger-2 { transition-delay: 0.2s; }
+.stagger-3 { transition-delay: 0.3s; }
+.stagger-4 { transition-delay: 0.4s; }
+.stagger-5 { transition-delay: 0.5s; }
+
+/* ─── Responsive ─── */
+@media (max-width: 1024px) {
+  .p-sidebar { width: 160px; min-width: 160px; }
+  .tour-slide { padding: 20px 20px 90px; }
+  .device-frame { max-width: 100%; }
+  .topnav-center { display: none; }
+}
+
+@media (max-width: 768px) {
+  .p-sidebar { display: none; }
+  .product-screen { height: 350px; }
+  .analytics-kpis { grid-template-columns: repeat(2, 1fr); }
+  .license-methods { grid-template-columns: repeat(2, 1fr); }
+  .mcp-split { flex-direction: column; }
+  .ai-chat-panel { width: 220px; }
+  .teams-grid { grid-template-columns: 1fr; }
+  .step-registry { display: none; }
+  .config-sheet { width: 200px; min-width: 200px; }
+}
+
+@media (max-width: 1024px) {
+  .step-registry { width: 150px; min-width: 150px; }
+  .config-sheet { width: 210px; min-width: 210px; }
+}
+
+/* Keyboard hint */
+.keyboard-hint {
+  position: fixed;
+  bottom: 58px;
+  right: 28px;
+  z-index: 101;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-badge {
+  padding: 2px 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+</style>
+</head>
+<body>
+
+<!-- Aurora Background -->
+<div class="aurora">
+  <div class="aurora-orb"></div>
+  <div class="aurora-orb"></div>
+  <div class="aurora-orb"></div>
+</div>
+
+<!-- Top Navigation -->
+<header class="topnav">
+  <a class="topnav-logo" href="#">
+    <div class="topnav-logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
+    <span>Lead Routing</span>
+  </a>
+
+  <div class="topnav-center" id="progressSteps">
+    <!-- Generated by JS -->
+  </div>
+
+  <a class="topnav-cta" href="#">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    Get Started
+  </a>
+</header>
+
+<!-- Tour Slides -->
+<div class="tour-container">
+  <div class="tour-slides" id="tourSlides">
+
+    <!-- STEP 1: Deploy -->
+    <div class="tour-slide" data-step="0">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 1</div>
+        <div class="step-title">Deploy with One Command</div>
+        <div class="step-subtitle">One CLI command deploys the entire stack to your server — database, routing engine, web dashboard, and HTTPS — in under 3 minutes.</div>
+      </div>
+      <div class="device-frame terminal-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">Terminal — lead-routing init</div>
+        </div>
+        <div class="terminal-body" id="terminal1">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Connect Salesforce -->
+    <div class="tour-slide" data-step="1">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 2</div>
+        <div class="step-title">Connect Salesforce</div>
+        <div class="step-subtitle">One-click OAuth connects your Salesforce org. Fields, users, and queues sync automatically.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/setup</div>
+        </div>
+        <div class="product-screen">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Getting Started</div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                Setup Wizard
+              </div>
+              <div class="p-nav-label" style="margin-top:12px">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                License Users
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Round Robins
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+            </div>
+          </div>
+          <div class="p-content">
+            <div class="onboard-container">
+              <div class="onboard-steps">
+                <div class="onboard-step active">
+                  <div class="onboard-step-dot">1</div>
+                  <span>Connect</span>
+                </div>
+                <div class="onboard-step-line"></div>
+                <div class="onboard-step">
+                  <div class="onboard-step-dot">2</div>
+                  <span>License</span>
+                </div>
+                <div class="onboard-step-line"></div>
+                <div class="onboard-step">
+                  <div class="onboard-step-dot">3</div>
+                  <span>Teams</span>
+                </div>
+                <div class="onboard-step-line"></div>
+                <div class="onboard-step">
+                  <div class="onboard-step-dot">4</div>
+                  <span>Route</span>
+                </div>
+              </div>
+              <div class="onboard-card">
+                <div class="onboard-icon sf">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1798c1" stroke-width="1.8" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+                </div>
+                <div class="onboard-title">Connect Your Salesforce Org</div>
+                <div class="onboard-desc">Authorize Lead Routing to access your Salesforce org. We'll sync your fields, users, and queues automatically.</div>
+                <button class="onboard-btn" id="sfConnectBtn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Connect Salesforce
+                </button>
+                <div class="connected-badge" id="sfConnected" style="display:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                  Connected Successfully
+                </div>
+                <div class="connected-info" id="sfInfo" style="display:none">
+                  <strong>Acme Corp</strong> — 00D8x000004EXAMPLE<br>
+                  <span style="font-size:11px;color:var(--accent-green)">42 users synced · 156 fields mapped</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: License Users -->
+    <div class="tour-slide" data-step="2">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 3</div>
+        <div class="step-title">License Your Users</div>
+        <div class="step-subtitle">Choose which reps participate in routing — individually, by role, by profile, or by queue.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/license-users</div>
+        </div>
+        <div class="product-screen">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                License Users
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Round Robins
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Analytics
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Activity
+              </div>
+              <div class="p-nav-label" style="margin-top:8px">Intelligence</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m-7-7h6m6 0h6"/></svg>
+                AI Assistant
+                <span class="p-nav-badge">Pro</span>
+              </div>
+            </div>
+          </div>
+          <div class="p-content">
+            <div class="p-content-header">
+              <div class="p-content-title">License Users</div>
+              <button class="p-btn p-btn-primary">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Sync Users
+              </button>
+            </div>
+            <div class="license-methods">
+              <div class="license-method active">
+                <div class="license-method-icon" style="background:#eff6ff;font-size:16px">👤</div>
+                <div class="license-method-name">Individual</div>
+              </div>
+              <div class="license-method">
+                <div class="license-method-icon" style="background:#f5f3ff;font-size:16px">🏷️</div>
+                <div class="license-method-name">By Role</div>
+              </div>
+              <div class="license-method">
+                <div class="license-method-icon" style="background:#f0fdfa;font-size:16px">📋</div>
+                <div class="license-method-name">By Profile</div>
+              </div>
+              <div class="license-method">
+                <div class="license-method-icon" style="background:#fff7ed;font-size:16px">📥</div>
+                <div class="license-method-name">Queues</div>
+              </div>
+            </div>
+            <div class="license-counter">
+              <span>Licensed Users</span>
+              <strong>3 of 50 seats used</strong>
+            </div>
+            <div class="p-card" style="padding:0;overflow:hidden">
+              <table class="user-table">
+                <thead>
+                  <tr><th style="width:30px"></th><th>User</th><th>Role</th><th>Profile</th><th style="width:60px">License</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="checkbox" checked disabled></td>
+                    <td><div class="user-name"><div class="user-avatar" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">SC</div>Sarah Chen</div></td>
+                    <td style="color:var(--p-text-secondary)">Sales Rep</td>
+                    <td style="color:var(--p-text-secondary)">Standard User</td>
+                    <td><div class="toggle-track on"><div class="toggle-knob"></div></div></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" checked disabled></td>
+                    <td><div class="user-name"><div class="user-avatar" style="background:linear-gradient(135deg,#10b981,#14b8a6)">MJ</div>Marcus Johnson</div></td>
+                    <td style="color:var(--p-text-secondary)">SDR</td>
+                    <td style="color:var(--p-text-secondary)">Standard User</td>
+                    <td><div class="toggle-track on"><div class="toggle-knob"></div></div></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" checked disabled></td>
+                    <td><div class="user-name"><div class="user-avatar" style="background:linear-gradient(135deg,#8b5cf6,#ec4899)">EP</div>Emily Park</div></td>
+                    <td style="color:var(--p-text-secondary)">Account Executive</td>
+                    <td style="color:var(--p-text-secondary)">Standard User</td>
+                    <td><div class="toggle-track on"><div class="toggle-knob"></div></div></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" disabled></td>
+                    <td><div class="user-name"><div class="user-avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">TW</div>Tyler Williams</div></td>
+                    <td style="color:var(--p-text-secondary)">Sales Manager</td>
+                    <td style="color:var(--p-text-secondary)">System Admin</td>
+                    <td><div class="toggle-track"><div class="toggle-knob"></div></div></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" disabled></td>
+                    <td><div class="user-name"><div class="user-avatar" style="background:linear-gradient(135deg,#14b8a6,#3b82f6)">AK</div>Aisha Kim</div></td>
+                    <td style="color:var(--p-text-secondary)">SDR</td>
+                    <td style="color:var(--p-text-secondary)">Standard User</td>
+                    <td><div class="toggle-track"><div class="toggle-knob"></div></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: Build Teams -->
+    <div class="tour-slide" data-step="3">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 4</div>
+        <div class="step-title">Build Teams</div>
+        <div class="step-subtitle">Create round-robin or weighted teams to distribute leads fairly across your sales reps.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/round-robins</div>
+        </div>
+        <div class="product-screen tall" style="position:relative">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                License Users
+              </div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Round Robins
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Analytics
+              </div>
+            </div>
+          </div>
+          <div class="p-content" style="position:relative">
+            <div class="p-content-header">
+              <div>
+                <div class="p-content-title">Teams</div>
+                <div style="font-size:12px;color:var(--p-text-secondary);margin-top:2px">Create pools of reps for fair, sequential lead distribution.</div>
+              </div>
+              <button class="p-btn p-btn-primary">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                New Team
+              </button>
+            </div>
+            <!-- Existing team cards behind dialog -->
+            <div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;opacity:0.5">
+              <div style="width:36px;height:36px;border-radius:8px;background:rgba(79,110,247,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round"><path d="M6 3v12"/><path d="M18 9a3 3 0 0 1 0 6"/><path d="M6 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3 3"/></svg>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:13.5px;font-weight:600;color:var(--p-text-primary);display:flex;align-items:center;gap:8px">
+                  Enterprise Sales
+                  <span class="team-type-badge rr">Round Robin</span>
+                </div>
+                <div style="font-size:11.5px;color:var(--p-text-secondary);display:flex;align-items:center;gap:12px;margin-top:2px">
+                  <span style="display:flex;align-items:center;gap:3px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 4 members</span>
+                  <span>127 leads assigned</span>
+                </div>
+              </div>
+            </div>
+            <div class="team-card" style="margin-bottom:8px;display:flex;align-items:center;gap:12px;opacity:0.5">
+              <div style="width:36px;height:36px;border-radius:8px;background:rgba(139,92,246,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-violet)" stroke-width="2" stroke-linecap="round"><path d="M6 3v12"/><path d="M18 9a3 3 0 0 1 0 6"/><path d="M6 21a3 3 0 0 0 3-3V9a3 3 0 0 0-3 3"/></svg>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:13.5px;font-weight:600;color:var(--p-text-primary);display:flex;align-items:center;gap:8px">
+                  SMB Team
+                  <span class="team-type-badge weighted">Weighted</span>
+                </div>
+                <div style="font-size:11.5px;color:var(--p-text-secondary);display:flex;align-items:center;gap:12px;margin-top:2px">
+                  <span style="display:flex;align-items:center;gap:3px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 3 members</span>
+                  <span>89 leads assigned</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Create Team Dialog Overlay -->
+            <div class="create-team-dialog" id="createTeamDialog">
+              <div class="dialog-backdrop"></div>
+              <div class="dialog-box">
+                <div class="dialog-header">
+                  <div class="dialog-title">New Team</div>
+                  <div class="dialog-desc">Give the team a name and an optional description.</div>
+                </div>
+                <div class="dialog-body">
+                  <div class="dialog-field">
+                    <label class="dialog-label">Team name</label>
+                    <div class="dialog-input" id="teamNameInput">
+                      <span class="dialog-input-text"></span>
+                      <span class="dialog-input-cursor"></span>
+                    </div>
+                    <div class="dialog-input-placeholder" id="teamNamePlaceholder">e.g. West Coast SDRs</div>
+                  </div>
+                  <div class="dialog-field">
+                    <label class="dialog-label">Description <span style="color:var(--p-text-tertiary);font-weight:400">(optional)</span></label>
+                    <div class="dialog-input" id="teamDescInput">
+                      <span class="dialog-input-text"></span>
+                    </div>
+                    <div class="dialog-input-placeholder" id="teamDescPlaceholder">e.g. Handles inbound leads from the Pacific time zone</div>
+                  </div>
+                </div>
+                <div class="dialog-footer">
+                  <button class="p-btn p-btn-outline" style="font-size:12.5px">Cancel</button>
+                  <button class="p-btn p-btn-primary" style="font-size:12.5px" id="createTeamBtn">Create Team</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5: Routing Rules -->
+    <div class="tour-slide" data-step="4">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 5</div>
+        <div class="step-title">Create Routing Rules</div>
+        <div class="step-subtitle">Drag steps onto the canvas to build visual routing flows — trigger, filter, match, assign.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/routing-rules/new</div>
+        </div>
+        <div class="product-screen tall">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                License Users
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Round Robins
+              </div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Analytics
+              </div>
+            </div>
+          </div>
+          <div class="p-content" style="padding:0;position:relative;display:flex;flex-direction:column">
+            <!-- Route Header Bar -->
+            <div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--p-card-border);background:white;gap:10px;flex-shrink:0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--p-text-secondary)" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <span style="font-size:13px;font-weight:600;color:var(--p-text-primary)">Enterprise Lead Router</span>
+              <span style="font-size:10.5px;color:var(--p-text-tertiary);font-style:italic">Unsaved changes</span>
+              <div style="flex:1"></div>
+              <button class="p-btn p-btn-primary" style="font-size:11.5px;padding:5px 14px">Save Route</button>
+            </div>
+            <!-- Route Builder Body -->
+            <div style="display:flex;flex:1;overflow:hidden">
+              <!-- Step Registry (Left) -->
+              <div class="step-registry">
+                <div class="step-reg-section">
+                  <div class="step-reg-label">Trigger</div>
+                  <div class="step-reg-item added">
+                    <div class="step-reg-icon" style="background:rgba(139,92,246,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Real-Time Trigger</div>
+                      <div class="step-reg-desc">Apex trigger on record change</div>
+                    </div>
+                    <span class="step-reg-added">(added)</span>
+                  </div>
+                </div>
+                <div class="step-reg-section">
+                  <div class="step-reg-label">Steps</div>
+                  <div class="step-reg-item">
+                    <div class="step-reg-icon" style="background:rgba(79,110,247,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f6ef7" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Match</div>
+                      <div class="step-reg-desc">Check existing records</div>
+                    </div>
+                  </div>
+                  <div class="step-reg-item added">
+                    <div class="step-reg-icon" style="background:rgba(99,102,241,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Filter</div>
+                      <div class="step-reg-desc">Route by conditions</div>
+                    </div>
+                    <span class="step-reg-added">(added)</span>
+                  </div>
+                  <div class="step-reg-item added">
+                    <div class="step-reg-icon" style="background:rgba(16,185,129,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Assign</div>
+                      <div class="step-reg-desc">Assign to owner</div>
+                    </div>
+                    <span class="step-reg-added">(added)</span>
+                  </div>
+                  <div class="step-reg-item">
+                    <div class="step-reg-icon" style="background:rgba(245,158,11,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Update Field</div>
+                      <div class="step-reg-desc">Set a field value</div>
+                    </div>
+                  </div>
+                  <div class="step-reg-item">
+                    <div class="step-reg-icon" style="background:rgba(56,189,248,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Create Task</div>
+                      <div class="step-reg-desc">Follow-up task</div>
+                    </div>
+                  </div>
+                  <div class="step-reg-item">
+                    <div class="step-reg-icon" style="background:rgba(100,116,139,0.1)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"><path d="M6 3v12"/><path d="M18 9a3 3 0 0 1 0 6"/><path d="M6 21a3 3 0 0 0 3-3V9"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Split</div>
+                      <div class="step-reg-desc">Branch into paths</div>
+                    </div>
+                  </div>
+                  <div class="step-reg-item">
+                    <div class="step-reg-icon" style="background:rgba(245,158,11,0.08)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                      <div class="step-reg-name">Default Owner</div>
+                      <div class="step-reg-desc">Fallback assignment</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Canvas (Center) -->
+              <div class="route-canvas">
+                <div class="flow-container">
+                  <!-- SVG connector lines -->
+                  <svg class="flow-svg" viewBox="0 0 440 380">
+                    <!-- Trigger → Filter -->
+                    <path d="M 175 62 L 175 90" stroke="#e4e5ec" stroke-width="1.5" stroke-dasharray="4 3" fill="none"/>
+                    <!-- Filter → Assign (left) -->
+                    <path d="M 120 158 L 90 158 L 90 190" stroke="#10b981" stroke-width="1.5" fill="none" class="active-path"/>
+                    <!-- Filter → Assign (right) -->
+                    <path d="M 240 158 L 290 158 L 290 190" stroke="#e4e5ec" stroke-width="1.5" stroke-dasharray="4 3" fill="none"/>
+                    <!-- Right Assign → Default -->
+                    <path d="M 290 260 L 290 290" stroke="#e4e5ec" stroke-width="1.5" stroke-dasharray="4 3" fill="none"/>
+                  </svg>
+
+                  <!-- Trigger Node -->
+                  <div class="flow-node start" style="left:85px;top:16px;min-width:180px">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                      <div style="width:20px;height:20px;border-radius:5px;background:rgba(139,92,246,0.1);display:flex;align-items:center;justify-content:center">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                      </div>
+                      <div class="flow-node-label" style="margin-bottom:0;color:#8b5cf6">Real-Time Trigger</div>
+                    </div>
+                    <div class="flow-node-text">Lead · Record Created</div>
+                  </div>
+
+                  <!-- Filter Node -->
+                  <div class="flow-node condition" style="left:65px;top:95px;min-width:220px;border-color:#6366f1;border-left-color:#6366f1">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                      <div style="width:20px;height:20px;border-radius:5px;background:rgba(99,102,241,0.1);display:flex;align-items:center;justify-content:center">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+                      </div>
+                      <div class="flow-node-label" style="margin-bottom:0;color:#6366f1">Filter</div>
+                      <span style="margin-left:auto;font-size:9px;padding:1px 6px;background:rgba(99,102,241,0.1);color:#6366f1;border-radius:100px;font-weight:600">2 conditions</span>
+                    </div>
+                    <div class="flow-node-text" style="font-size:11px">Industry = "Technology"</div>
+                    <div class="flow-node-sub">AND AnnualRevenue ≥ 1,000,000</div>
+                  </div>
+
+                  <!-- Assign Node (Match Path) -->
+                  <div class="flow-node action" style="left:10px;top:195px;min-width:170px;box-shadow:0 0 0 2px rgba(16,185,129,0.15),0 2px 8px rgba(0,0,0,0.06)">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                      <div style="width:20px;height:20px;border-radius:5px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                      </div>
+                      <div class="flow-node-label" style="margin-bottom:0;color:#10b981">Assign</div>
+                    </div>
+                    <div class="flow-node-text">Enterprise Sales</div>
+                    <div class="flow-node-sub">Round Robin · 4 members</div>
+                  </div>
+
+                  <!-- Assign Node (No Match Path) -->
+                  <div class="flow-node action" style="left:210px;top:195px;min-width:170px">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                      <div style="width:20px;height:20px;border-radius:5px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                      </div>
+                      <div class="flow-node-label" style="margin-bottom:0;color:#10b981">Assign</div>
+                    </div>
+                    <div class="flow-node-text">West Coast Team</div>
+                    <div class="flow-node-sub">Round Robin · 3 members</div>
+                  </div>
+
+                  <!-- Default Owner Node -->
+                  <div class="flow-node fallback" style="left:210px;top:295px;min-width:170px">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                      <div style="width:20px;height:20px;border-radius:5px;background:rgba(217,119,6,0.1);display:flex;align-items:center;justify-content:center">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+                      </div>
+                      <div class="flow-node-label" style="margin-bottom:0;color:#d97706">Default Owner</div>
+                    </div>
+                    <div class="flow-node-text">Default SDR Queue</div>
+                    <div class="flow-node-sub">Catch-all fallback</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Config Sheet (Right) -->
+              <div class="config-sheet" id="configSheet">
+                <div class="config-sheet-header">
+                  <div class="dialog-title" style="font-size:14px">Configure Trigger</div>
+                  <div class="dialog-desc" style="font-size:11.5px">Choose which Salesforce object and event fires this route.</div>
+                </div>
+                <div class="config-sheet-body">
+                  <div class="dialog-field">
+                    <label class="dialog-label">Name</label>
+                    <div class="config-input-filled">Inbound Web Leads</div>
+                  </div>
+                  <div class="dialog-field">
+                    <label class="dialog-label">Object</label>
+                    <div class="config-select">
+                      <span>Lead</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                  </div>
+                  <div class="dialog-field">
+                    <label class="dialog-label">When to trigger</label>
+                    <div class="config-select">
+                      <span>Record Created</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--p-text-secondary)" stroke-width="2" stroke-linecap="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+                      <span style="font-size:12px;font-weight:600;color:var(--p-text-primary)">Trigger Criteria</span>
+                      <span style="font-size:9px;padding:1px 6px;background:rgba(99,102,241,0.1);color:#6366f1;border-radius:100px;font-weight:600">2 conditions</span>
+                    </div>
+                    <div style="font-size:10.5px;color:var(--p-text-tertiary);margin-bottom:8px">Only records matching these conditions will be sent to the routing engine.</div>
+                    <!-- Condition pills -->
+                    <div class="config-condition">
+                      <span class="config-condition-field">Industry</span>
+                      <span class="config-condition-op">equals</span>
+                      <span class="config-condition-val">Technology</span>
+                    </div>
+                    <div style="font-size:10px;color:var(--p-text-tertiary);text-align:center;padding:2px 0;font-weight:500">AND</div>
+                    <div class="config-condition">
+                      <span class="config-condition-field">AnnualRevenue</span>
+                      <span class="config-condition-op">≥</span>
+                      <span class="config-condition-val">1,000,000</span>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+                    <div class="toggle-track"><div class="toggle-knob"></div></div>
+                    <div>
+                      <div style="font-size:12px;font-weight:500;color:var(--p-text-primary)">Dry run mode</div>
+                      <div style="font-size:10.5px;color:var(--p-text-tertiary)">Test without assigning in Salesforce</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="config-sheet-footer">
+                  <button class="p-btn p-btn-outline" style="font-size:12px">Cancel</button>
+                  <button class="p-btn p-btn-primary" style="font-size:12px">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 6: Analytics -->
+    <div class="tour-slide" data-step="5">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 6</div>
+        <div class="step-title">Monitor Everything</div>
+        <div class="step-subtitle">Real-time analytics on routing volume, success rates, latency, and team distribution.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/analytics</div>
+        </div>
+        <div class="product-screen">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                License Users
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Round Robins
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Analytics
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Activity
+              </div>
+            </div>
+          </div>
+          <div class="p-content">
+            <div class="p-content-header">
+              <div class="p-content-title">Analytics</div>
+              <div style="display:flex;gap:6px">
+                <button class="p-btn p-btn-outline" style="font-size:11.5px;padding:5px 10px;background:#eff6ff;border-color:#bfdbfe;color:#2563eb">30 days</button>
+                <button class="p-btn p-btn-outline" style="font-size:11.5px;padding:5px 10px">90 days</button>
+              </div>
+            </div>
+            <div class="analytics-kpis">
+              <div class="kpi-card">
+                <div class="kpi-label">Total Routed</div>
+                <div class="kpi-value" data-count="2847">0</div>
+                <div class="kpi-trend up">+12.3% vs last month</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Success Rate</div>
+                <div class="kpi-value">98.2%</div>
+                <div class="kpi-trend up">+0.8% vs last month</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Avg Latency</div>
+                <div class="kpi-value">142ms</div>
+                <div class="kpi-trend up">-23ms improvement</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Unmatched</div>
+                <div class="kpi-value">1.8%</div>
+                <div class="kpi-trend down">+0.3% vs last month</div>
+              </div>
+            </div>
+            <div class="analytics-charts">
+              <div class="chart-card">
+                <div class="chart-title">Routing Volume — Last 30 Days</div>
+                <svg class="line-chart-svg" viewBox="0 0 500 120" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#4f6ef7" stop-opacity="0.15"/>
+                      <stop offset="100%" stop-color="#4f6ef7" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <!-- Grid lines -->
+                  <line x1="0" y1="30" x2="500" y2="30" stroke="#f1f5f9" stroke-width="1"/>
+                  <line x1="0" y1="60" x2="500" y2="60" stroke="#f1f5f9" stroke-width="1"/>
+                  <line x1="0" y1="90" x2="500" y2="90" stroke="#f1f5f9" stroke-width="1"/>
+                  <!-- Area -->
+                  <path d="M 0 100 L 17 95 L 34 88 L 51 90 L 68 82 L 85 78 L 102 80 L 119 72 L 136 68 L 153 65 L 170 70 L 187 60 L 204 55 L 221 58 L 238 50 L 255 45 L 272 48 L 289 42 L 306 38 L 323 40 L 340 35 L 357 30 L 374 32 L 391 28 L 408 25 L 425 22 L 442 20 L 459 18 L 476 15 L 500 12 L 500 120 L 0 120 Z" fill="url(#chartGrad)" class="chart-area"/>
+                  <!-- Line -->
+                  <path d="M 0 100 L 17 95 L 34 88 L 51 90 L 68 82 L 85 78 L 102 80 L 119 72 L 136 68 L 153 65 L 170 70 L 187 60 L 204 55 L 221 58 L 238 50 L 255 45 L 272 48 L 289 42 L 306 38 L 323 40 L 340 35 L 357 30 L 374 32 L 391 28 L 408 25 L 425 22 L 442 20 L 459 18 L 476 15 L 500 12" fill="none" stroke="#4f6ef7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chart-line"/>
+                </svg>
+              </div>
+              <div class="chart-card">
+                <div class="chart-title">Status Breakdown</div>
+                <div class="donut-chart">
+                  <svg class="donut-svg" viewBox="0 0 42 42">
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#e2e8f0" stroke-width="4"/>
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#10b981" stroke-width="4" stroke-dasharray="89 11" stroke-dashoffset="25" class="donut-segment"/>
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#4f6ef7" stroke-width="4" stroke-dasharray="7 93" stroke-dashoffset="36" class="donut-segment"/>
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#f59e0b" stroke-width="4" stroke-dasharray="2 98" stroke-dashoffset="43" class="donut-segment"/>
+                    <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#ef4444" stroke-width="4" stroke-dasharray="2 98" stroke-dashoffset="45" class="donut-segment"/>
+                  </svg>
+                  <div class="donut-legend">
+                    <div class="donut-legend-item">
+                      <div class="donut-legend-dot" style="background:#10b981"></div>
+                      <span class="donut-legend-label">Success</span>
+                      <span class="donut-legend-value">89%</span>
+                    </div>
+                    <div class="donut-legend-item">
+                      <div class="donut-legend-dot" style="background:#4f6ef7"></div>
+                      <span class="donut-legend-label">Merged</span>
+                      <span class="donut-legend-value">7%</span>
+                    </div>
+                    <div class="donut-legend-item">
+                      <div class="donut-legend-dot" style="background:#f59e0b"></div>
+                      <span class="donut-legend-label">Unmatched</span>
+                      <span class="donut-legend-value">2%</span>
+                    </div>
+                    <div class="donut-legend-item">
+                      <div class="donut-legend-dot" style="background:#ef4444"></div>
+                      <span class="donut-legend-label">Failed</span>
+                      <span class="donut-legend-value">2%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 7: AI Assistant -->
+    <div class="tour-slide" data-step="6">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 7</div>
+        <div class="step-title">AI-Powered Automation</div>
+        <div class="step-subtitle">Describe what you want in plain English. The AI assistant creates rules, teams, and configurations for you.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">app.openedgeai.tech/routing-rules</div>
+        </div>
+        <div class="product-screen">
+          <div class="p-sidebar">
+            <div class="p-sidebar-header">
+              <div class="p-sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <div class="p-sidebar-name">Lead Routing</div>
+            </div>
+            <div class="p-nav">
+              <div class="p-nav-label">Operations</div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+                Dashboard
+              </div>
+              <div class="p-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Routing Rules
+              </div>
+              <div class="p-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Analytics
+              </div>
+              <div class="p-nav-label" style="margin-top:8px">Intelligence</div>
+              <div class="p-nav-item active" style="background:rgba(139,92,246,0.08)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m-7-7h6m6 0h6"/></svg>
+                AI Assistant
+                <span class="p-nav-badge">Pro</span>
+              </div>
+            </div>
+          </div>
+          <div class="p-content" style="padding:0">
+            <div class="ai-layout">
+              <div class="ai-main">
+                <div class="p-content-header" style="padding:0 0 12px 0">
+                  <div class="p-content-title">Routing Rules</div>
+                </div>
+                <!-- Rule cards -->
+                <div class="p-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+                  <div>
+                    <div style="font-size:13px;font-weight:600;color:var(--p-text-primary)">Enterprise Lead Router</div>
+                    <div style="font-size:11.5px;color:var(--p-text-secondary)">Lead · Real-time · 3 conditions</div>
+                  </div>
+                  <span style="font-size:10.5px;color:var(--accent-green);background:#ecfdf5;padding:2px 8px;border-radius:100px;font-weight:500;border:1px solid #a7f3d0">Active</span>
+                </div>
+                <div class="p-card" style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+                  <div>
+                    <div style="font-size:13px;font-weight:600;color:var(--p-text-primary)">APAC Territory Router</div>
+                    <div style="font-size:11.5px;color:var(--p-text-secondary)">Lead · Real-time · 2 conditions</div>
+                  </div>
+                  <span style="font-size:10.5px;color:var(--accent-green);background:#ecfdf5;padding:2px 8px;border-radius:100px;font-weight:500;border:1px solid #a7f3d0">Active</span>
+                </div>
+                <!-- New rule being created by AI -->
+                <div class="p-card" style="border-color:var(--accent-blue);border-style:dashed;background:#fafbff;display:flex;align-items:center;justify-content:space-between">
+                  <div>
+                    <div style="font-size:13px;font-weight:600;color:var(--accent-blue);display:flex;align-items:center;gap:4px">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m-7-7h6m6 0h6"/></svg>
+                      West Coast Enterprise Rule
+                    </div>
+                    <div style="font-size:11.5px;color:var(--p-text-secondary)">Lead · Real-time · AI-generated</div>
+                  </div>
+                  <span style="font-size:10.5px;color:var(--accent-blue);background:#eff6ff;padding:2px 8px;border-radius:100px;font-weight:500;border:1px solid #bfdbfe">Creating...</span>
+                </div>
+              </div>
+              <div class="ai-chat-panel">
+                <div class="ai-chat-header">
+                  <div class="ai-sparkle">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/></svg>
+                  </div>
+                  AI Assistant
+                </div>
+                <div class="ai-chat-messages">
+                  <div class="ai-msg user">
+                    <div class="ai-msg-bubble">Create a rule for Enterprise leads from the West Coast with revenue over 1M</div>
+                  </div>
+                  <div class="ai-msg assistant">
+                    <div class="ai-msg-bubble">I'll create a routing rule with these criteria:</div>
+                    <div class="ai-rule-preview">
+                      <div class="ai-rule-preview-row"><span>Name</span><strong>West Coast Enterprise Rule</strong></div>
+                      <div class="ai-rule-preview-row"><span>Object</span><strong>Lead</strong></div>
+                      <div class="ai-rule-preview-row"><span>Trigger</span><strong>Real-time (Create)</strong></div>
+                      <div style="border-top:1px solid var(--p-card-border);margin:6px 0;padding-top:6px">
+                        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--p-text-tertiary);margin-bottom:4px">Conditions</div>
+                        <div class="ai-rule-preview-row"><span>State</span><strong>CA, WA, OR</strong></div>
+                        <div class="ai-rule-preview-row"><span>Revenue</span><strong>≥ $1,000,000</strong></div>
+                        <div class="ai-rule-preview-row"><span>Assign to</span><strong>Enterprise Sales</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ai-msg assistant">
+                    <div class="ai-msg-bubble" style="color:var(--accent-green);background:#ecfdf5;font-weight:500">Rule created and deployed successfully.</div>
+                  </div>
+                </div>
+                <div class="ai-chat-input">
+                  <input class="ai-input-field" placeholder="Ask AI anything..." disabled>
+                  <button class="ai-send-btn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 8: MCP / Agent Ready -->
+    <div class="tour-slide" data-step="7">
+      <div class="step-header fade-up">
+        <div class="step-label">Step 8</div>
+        <div class="step-title">Agent-Ready Infrastructure</div>
+        <div class="step-subtitle">52 MCP tools let AI agents deploy, configure, and operate your routing engine — no UI needed.</div>
+      </div>
+      <div class="device-frame fade-up stagger-2">
+        <div class="browser-chrome">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-url">Claude Code — MCP Integration</div>
+        </div>
+        <div class="product-screen tall" style="background:#1a1b26">
+          <div class="mcp-split">
+            <div class="mcp-terminal" id="mcpTerminal">
+              <!-- Populated by JS -->
+            </div>
+            <div class="mcp-result">
+              <div class="mcp-result-card">
+                <div class="mcp-result-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                  Route Result
+                </div>
+                <div class="mcp-result-json">
+                  {<br>
+                  &nbsp;&nbsp;<span class="json-key">"status"</span>: <span class="json-str">"routed"</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"record"</span>: <span class="json-str">"john@acme.com"</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"matchedRule"</span>: <span class="json-str">"Enterprise Lead Router"</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"assignedTo"</span>: <span class="json-str">"Sarah Chen"</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"team"</span>: <span class="json-str">"Enterprise Sales"</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"latency"</span>: <span class="json-num">89</span><span class="json-key">ms</span><br>
+                  }
+                </div>
+              </div>
+              <div class="mcp-result-card">
+                <div class="mcp-result-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                  Analytics Snapshot
+                </div>
+                <div class="mcp-result-json">
+                  {<br>
+                  &nbsp;&nbsp;<span class="json-key">"today"</span>: <span class="json-num">142</span> <span class="json-key">routed</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"successRate"</span>: <span class="json-num">98.6</span><span class="json-key">%</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"avgLatency"</span>: <span class="json-num">134</span><span class="json-key">ms</span>,<br>
+                  &nbsp;&nbsp;<span class="json-key">"topRule"</span>: <span class="json-str">"Enterprise Router"</span><br>
+                  }
+                </div>
+              </div>
+              <div class="mcp-tagline">
+                <div class="mcp-tagline-text">Your routing engine is API-first.<br>Agents can deploy, configure, and operate it<br>without ever touching a UI.</div>
+                <div class="mcp-tagline-sub">52 MCP tools · REST API · Webhooks · CLI</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Bottom Navigation -->
+<div class="bottom-nav">
+  <button class="nav-arrow" id="prevBtn" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Previous
+  </button>
+  <div class="bottom-dots" id="bottomDots">
+    <!-- Generated by JS -->
+  </div>
+  <button class="nav-arrow" id="nextBtn">
+    Next
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </button>
+</div>
+
+<div class="keyboard-hint">
+  <span class="key-badge">←</span>
+  <span class="key-badge">→</span>
+  to navigate
+</div>
+
+<script>
+const TOTAL_STEPS = 8;
+let currentStep = 0;
+let terminalAnimated = false;
+let mcpAnimated = false;
+
+// Build progress indicators
+function buildProgressSteps() {
+  const container = document.getElementById('progressSteps');
+  for (let i = 0; i < TOTAL_STEPS; i++) {
+    if (i > 0) {
+      const line = document.createElement('div');
+      line.className = 'progress-line';
+      if (i <= currentStep) line.classList.add('active');
+      container.appendChild(line);
+    }
+    const step = document.createElement('div');
+    step.className = 'progress-step';
+    step.textContent = i + 1;
+    step.addEventListener('click', () => goToStep(i));
+    if (i === currentStep) step.classList.add('active');
+    else if (i < currentStep) step.classList.add('completed');
+    container.appendChild(step);
+  }
+}
+
+function buildBottomDots() {
+  const container = document.getElementById('bottomDots');
+  for (let i = 0; i < TOTAL_STEPS; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'bottom-dot';
+    if (i === currentStep) dot.classList.add('active');
+    dot.addEventListener('click', () => goToStep(i));
+    container.appendChild(dot);
+  }
+}
+
+function updateIndicators() {
+  // Progress steps
+  const steps = document.querySelectorAll('.progress-step');
+  const lines = document.querySelectorAll('.progress-line');
+  steps.forEach((s, i) => {
+    s.classList.remove('active', 'completed');
+    if (i === currentStep) s.classList.add('active');
+    else if (i < currentStep) s.classList.add('completed');
+  });
+  lines.forEach((l, i) => {
+    l.classList.toggle('active', i < currentStep);
+  });
+
+  // Bottom dots
+  const dots = document.querySelectorAll('.bottom-dot');
+  dots.forEach((d, i) => {
+    d.classList.toggle('active', i === currentStep);
+  });
+
+  // Nav buttons
+  document.getElementById('prevBtn').disabled = currentStep === 0;
+  document.getElementById('nextBtn').disabled = currentStep === TOTAL_STEPS - 1;
+}
+
+function goToStep(step) {
+  if (step < 0 || step >= TOTAL_STEPS || step === currentStep) return;
+
+  const slides = document.querySelectorAll('.tour-slide');
+  slides[currentStep].classList.remove('active');
+
+  currentStep = step;
+
+  const container = document.getElementById('tourSlides');
+  container.style.transform = `translateX(-${currentStep * 100}%)`;
+
+  setTimeout(() => {
+    slides[currentStep].classList.add('active');
+    animateStep(currentStep);
+  }, 100);
+
+  updateIndicators();
+}
+
+function animateStep(step) {
+  const slide = document.querySelectorAll('.tour-slide')[step];
+  const fadeUps = slide.querySelectorAll('.fade-up');
+  fadeUps.forEach(el => {
+    el.classList.remove('visible');
+    void el.offsetWidth; // reflow
+    el.classList.add('visible');
+  });
+
+  // Step-specific animations
+  if (step === 0 && !terminalAnimated) {
+    animateTerminal();
+    terminalAnimated = true;
+  }
+
+  if (step === 1) {
+    // Salesforce connect animation
+    setTimeout(() => {
+      const btn = document.getElementById('sfConnectBtn');
+      const badge = document.getElementById('sfConnected');
+      const info = document.getElementById('sfInfo');
+      if (btn) btn.style.display = 'none';
+      if (badge) badge.style.display = 'inline-flex';
+      if (info) info.style.display = 'block';
+    }, 1500);
+  }
+
+  if (step === 3) {
+    // Animate team name typing
+    const nameText = 'West Coast SDRs';
+    const descText = 'Handles inbound leads from the Pacific time zone';
+    const nameEl = document.querySelector('#teamNameInput .dialog-input-text');
+    const descEl = document.querySelector('#teamDescInput .dialog-input-text');
+    const namePlaceholder = document.getElementById('teamNamePlaceholder');
+    const descPlaceholder = document.getElementById('teamDescPlaceholder');
+    const createBtn = document.getElementById('createTeamBtn');
+
+    if (nameEl) {
+      nameEl.textContent = '';
+      if (descEl) descEl.textContent = '';
+      if (namePlaceholder) namePlaceholder.style.opacity = '1';
+      if (descPlaceholder) descPlaceholder.style.opacity = '1';
+      if (createBtn) createBtn.style.opacity = '0.5';
+
+      let i = 0;
+      const typeInterval = setInterval(() => {
+        if (i < nameText.length) {
+          nameEl.textContent = nameText.substring(0, i + 1);
+          if (i === 0 && namePlaceholder) namePlaceholder.style.opacity = '0';
+          i++;
+        } else {
+          clearInterval(typeInterval);
+          // Start typing description after a pause
+          setTimeout(() => {
+            let j = 0;
+            const descInterval = setInterval(() => {
+              if (j < descText.length) {
+                descEl.textContent = descText.substring(0, j + 1);
+                if (j === 0 && descPlaceholder) descPlaceholder.style.opacity = '0';
+                j++;
+              } else {
+                clearInterval(descInterval);
+                if (createBtn) createBtn.style.opacity = '1';
+              }
+            }, 30);
+          }, 400);
+        }
+      }, 50);
+    }
+  }
+
+  if (step === 5) {
+    // Animate KPI counter
+    const counter = document.querySelector('[data-count]');
+    if (counter) animateCounter(counter, 0, 2847, 1200);
+  }
+
+  if (step === 7 && !mcpAnimated) {
+    animateMcpTerminal();
+    mcpAnimated = true;
+  }
+}
+
+function animateTerminal() {
+  const lines = [
+    { text: '<span class="term-prompt">$</span> <span class="term-cmd">npx @lead-routing/cli init</span>', delay: 0 },
+    { text: '', delay: 300 },
+    { text: '<span class="term-accent">  ◆  Lead Routing — Self-Hosted Installer</span>', delay: 500 },
+    { text: '', delay: 600 },
+    { text: '<span class="term-info">  ▸  Checking prerequisites...</span>', delay: 800 },
+    { text: '<span class="term-success">  ✓  Node.js 20.11.0</span>', delay: 1200 },
+    { text: '<span class="term-success">  ✓  Docker available</span>', delay: 1500 },
+    { text: '', delay: 1600 },
+    { text: '<span class="term-info">  ▸  SSH Configuration</span>', delay: 1800 },
+    { text: '     <span class="term-dim">Host:</span> <span class="term-cmd">app.acmecorp.com</span>', delay: 2100 },
+    { text: '     <span class="term-dim">User:</span> <span class="term-cmd">deploy</span>', delay: 2300 },
+    { text: '<span class="term-success">  ✓  SSH connection verified</span>', delay: 2600 },
+    { text: '', delay: 2700 },
+    { text: '<span class="term-info">  ▸  Generating deployment files...</span>', delay: 2900 },
+    { text: '     <span class="term-dim">Created</span> docker-compose.yml', delay: 3200 },
+    { text: '     <span class="term-dim">Created</span> .env.web', delay: 3400 },
+    { text: '     <span class="term-dim">Created</span> .env.engine', delay: 3500 },
+    { text: '     <span class="term-dim">Created</span> Caddyfile', delay: 3600 },
+    { text: '', delay: 3700 },
+    { text: '<span class="term-info">  ▸  Uploading via SFTP...</span> <span class="term-success">done</span>', delay: 4000 },
+    { text: '<span class="term-info">  ▸  Starting Docker services...</span>', delay: 4400 },
+    { text: '     <span class="term-dim">Pulling</span> lead-routing-web:latest', delay: 4700 },
+    { text: '     <span class="term-dim">Pulling</span> lead-routing-engine:latest', delay: 4900 },
+    { text: '     <span class="term-dim">Starting</span> postgres, redis, caddy, web, engine', delay: 5200 },
+    { text: '', delay: 5400 },
+    { text: '<span class="term-info">  ▸  Health check...</span> <span class="term-success">All services healthy</span>', delay: 5800 },
+    { text: '', delay: 6000 },
+    { text: '<span class="term-success">  ✓  Lead Routing deployed successfully!</span>', delay: 6200 },
+    { text: '', delay: 6300 },
+    { text: '     <span class="term-dim">Dashboard:</span>  <span class="term-info">https://app.acmecorp.com</span>', delay: 6500 },
+    { text: '     <span class="term-dim">Engine:</span>     <span class="term-info">https://engine.acmecorp.com</span>', delay: 6700 },
+    { text: '     <span class="term-dim">Deploy time:</span> <span class="term-warn">2m 34s</span>', delay: 6900 },
+  ];
+
+  const terminal = document.getElementById('terminal1');
+  terminal.innerHTML = '';
+
+  lines.forEach((line, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      div.className = 'term-line';
+      div.innerHTML = line.text || '&nbsp;';
+      terminal.appendChild(div);
+      void div.offsetWidth;
+      div.classList.add('visible');
+      terminal.scrollTop = terminal.scrollHeight;
+    }, line.delay);
+  });
+}
+
+function animateMcpTerminal() {
+  const lines = [
+    { text: '<span class="term-prompt">claude</span> <span class="term-dim">></span> <span class="term-cmd">Using lead-routing MCP server</span>', delay: 0 },
+    { text: '', delay: 200 },
+    { text: '<span class="term-prompt">$</span> <span class="term-info">lead-routing list-rules</span>', delay: 400 },
+    { text: '<span class="term-success">  Found 3 active rules</span>', delay: 800 },
+    { text: '', delay: 1000 },
+    { text: '<span class="term-prompt">$</span> <span class="term-info">lead-routing route-lead</span>', delay: 1200 },
+    { text: '  <span class="term-dim">--email</span> <span class="term-cmd">"john@acme.com"</span>', delay: 1400 },
+    { text: '  <span class="term-dim">--company</span> <span class="term-cmd">"Acme Corp"</span>', delay: 1500 },
+    { text: '  <span class="term-dim">--revenue</span> <span class="term-cmd">2500000</span>', delay: 1600 },
+    { text: '', delay: 1800 },
+    { text: '<span class="term-success">  ✓ Routed to Sarah Chen</span>', delay: 2200 },
+    { text: '  <span class="term-dim">Rule: Enterprise Lead Router</span>', delay: 2400 },
+    { text: '  <span class="term-dim">Latency: 89ms</span>', delay: 2500 },
+    { text: '', delay: 2700 },
+    { text: '<span class="term-prompt">$</span> <span class="term-info">lead-routing get-analytics</span>', delay: 2900 },
+    { text: '<span class="term-success">  ✓ Analytics retrieved</span>', delay: 3300 },
+    { text: '', delay: 3500 },
+    { text: '<span class="term-accent">  Agents can orchestrate the full</span>', delay: 3700 },
+    { text: '<span class="term-accent">  routing lifecycle programmatically.</span>', delay: 3900 },
+  ];
+
+  const terminal = document.getElementById('mcpTerminal');
+  terminal.innerHTML = '';
+
+  lines.forEach((line, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      div.className = 'term-line';
+      div.innerHTML = line.text || '&nbsp;';
+      terminal.appendChild(div);
+      void div.offsetWidth;
+      div.classList.add('visible');
+      terminal.scrollTop = terminal.scrollHeight;
+    }, line.delay);
+  });
+}
+
+function animateCounter(el, start, end, duration) {
+  const startTime = performance.now();
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const current = Math.round(start + (end - start) * eased);
+    el.textContent = current.toLocaleString();
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    goToStep(currentStep + 1);
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    goToStep(currentStep - 1);
+  }
+});
+
+// Button navigation
+document.getElementById('prevBtn').addEventListener('click', () => goToStep(currentStep - 1));
+document.getElementById('nextBtn').addEventListener('click', () => goToStep(currentStep + 1));
+
+// Initialize
+buildProgressSteps();
+buildBottomDots();
+document.querySelectorAll('.tour-slide')[0].classList.add('active');
+animateStep(0);
+</script>
+</body>
+</html>

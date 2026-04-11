@@ -5,12 +5,12 @@ describe("soql-builder", () => {
   describe("buildSearchSOQL", () => {
     it("returns SELECT with LIMIT when no criteria", () => {
       const sql = buildSearchSOQL("LEAD", null);
-      expect(sql).toMatch(/^SELECT .+ FROM Lead LIMIT 50000$/);
+      expect(sql).toMatch(/^SELECT .+ FROM Lead WHERE IsConverted = false LIMIT 50000$/);
     });
 
     it("returns SELECT with LIMIT for empty criteria array", () => {
       const sql = buildSearchSOQL("LEAD", []);
-      expect(sql).toMatch(/^SELECT .+ FROM Lead LIMIT 50000$/);
+      expect(sql).toMatch(/^SELECT .+ FROM Lead WHERE IsConverted = false LIMIT 50000$/);
     });
 
     it("builds single condition", () => {
@@ -141,14 +141,14 @@ describe("soql-builder", () => {
 
   describe("buildCountSOQL", () => {
     it("returns COUNT query without criteria", () => {
-      expect(buildCountSOQL("LEAD", null)).toBe("SELECT COUNT() FROM Lead");
+      expect(buildCountSOQL("LEAD", null)).toBe("SELECT COUNT() FROM Lead WHERE IsConverted = false");
     });
 
     it("returns COUNT query with criteria", () => {
       const sql = buildCountSOQL("LEAD", [
         { id: "g1", conditions: [{ fieldApiName: "Status", operator: "equals", value: "Open" }] },
       ]);
-      expect(sql).toBe("SELECT COUNT() FROM Lead WHERE Status = 'Open'");
+      expect(sql).toBe("SELECT COUNT() FROM Lead WHERE Status = 'Open' AND IsConverted = false");
     });
   });
 

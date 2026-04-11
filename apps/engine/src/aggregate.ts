@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-interface AggregateInput {
+export interface AggregateInput {
   orgId: string;
   date: Date;
   ruleId: string | null;
@@ -16,18 +16,20 @@ interface AggregateInput {
   objectType: "LEAD" | "CONTACT" | "ACCOUNT";
   status: "SUCCESS" | "FAILED" | "UNMATCHED" | "MERGED";
   durationMs: number | null;
+  /** Number of records this entry represents. Defaults to 1. */
+  count?: number;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
-function statusIncrements(status: string) {
+function statusIncrements(status: string, count: number = 1) {
   return {
-    success: status === "SUCCESS" ? 1 : 0,
-    failed: status === "FAILED" ? 1 : 0,
-    unmatched: status === "UNMATCHED" ? 1 : 0,
-    merged: status === "MERGED" ? 1 : 0,
+    success: status === "SUCCESS" ? count : 0,
+    failed: status === "FAILED" ? count : 0,
+    unmatched: status === "UNMATCHED" ? count : 0,
+    merged: status === "MERGED" ? count : 0,
   };
 }
 
@@ -56,8 +58,9 @@ async function upsertAggregate(
   objectType: string,
   status: string,
   durationMs: number | null,
+  count: number = 1,
 ): Promise<void> {
-  const inc = statusIncrements(status);
+  const inc = statusIncrements(status, count);
   const dayDate = startOfDay(date);
 
   // Atomic upsert using the functional unique index (COALESCE handles NULLs).
@@ -72,8 +75,8 @@ async function upsertAggregate(
       "createdAt", "updatedAt"
     ) VALUES (
       $1, $2, $3, $4, $5, $6,
-      $7, $8, $9::"SfdcObjectType",
-      $10, $11, $12, $13, 1,
+      $7, $8, $9::"CrmObjectType",
+      $10, $11, $12, $13, $15,
       $14::double precision, $14::integer, $14::integer,
       NOW(), NOW()
     )
@@ -90,10 +93,10 @@ async function upsertAggregate(
       "failedCount"   = routing_daily_aggregates."failedCount"   + $11,
       "unmatchedCount" = routing_daily_aggregates."unmatchedCount" + $12,
       "mergedCount"   = routing_daily_aggregates."mergedCount"   + $13,
-      "totalCount"    = routing_daily_aggregates."totalCount"    + 1,
+      "totalCount"    = routing_daily_aggregates."totalCount"    + $15,
       "avgDurationMs" = CASE WHEN $14::integer IS NOT NULL THEN
         (COALESCE(routing_daily_aggregates."avgDurationMs", 0) * routing_daily_aggregates."totalCount" + $14::integer)
-        / (routing_daily_aggregates."totalCount" + 1)
+        / (routing_daily_aggregates."totalCount" + $15)
         ELSE routing_daily_aggregates."avgDurationMs" END,
       "minDurationMs" = CASE WHEN $14::integer IS NOT NULL THEN
         LEAST(COALESCE(routing_daily_aggregates."minDurationMs", $14::integer), $14::integer)
@@ -116,6 +119,7 @@ async function upsertAggregate(
     inc.unmatched,
     inc.merged,
     durationMs,
+    count,
   );
 }
 
@@ -138,19 +142,20 @@ export async function updateAggregates(input: AggregateInput): Promise<void> {
     objectType,
     status,
     durationMs,
+    count = 1,
   } = input;
 
   const upserts: Promise<void>[] = [];
 
   // 1. Org-level aggregate (all dimension columns null)
   upserts.push(
-    upsertAggregate(orgId, date, null, null, null, null, null, objectType, status, durationMs),
+    upsertAggregate(orgId, date, null, null, null, null, null, objectType, status, durationMs, count),
   );
 
   // 2. Per-rule aggregate
   if (ruleId) {
     upserts.push(
-      upsertAggregate(orgId, date, ruleId, null, null, null, null, objectType, status, durationMs),
+      upsertAggregate(orgId, date, ruleId, null, null, null, null, objectType, status, durationMs, count),
     );
   }
 
@@ -158,7 +163,7 @@ export async function updateAggregates(input: AggregateInput): Promise<void> {
   if (ruleId && pathLabel) {
     upserts.push(
       upsertAggregate(
-        orgId, date, ruleId, pathLabel, branchId, null, null, objectType, status, durationMs,
+        orgId, date, ruleId, pathLabel, branchId, null, null, objectType, status, durationMs, count,
       ),
     );
   }
@@ -166,7 +171,7 @@ export async function updateAggregates(input: AggregateInput): Promise<void> {
   // 4. Per-team aggregate
   if (teamId) {
     upserts.push(
-      upsertAggregate(orgId, date, null, null, null, teamId, null, objectType, status, durationMs),
+      upsertAggregate(orgId, date, null, null, null, teamId, null, objectType, status, durationMs, count),
     );
   }
 
@@ -174,13 +179,60 @@ export async function updateAggregates(input: AggregateInput): Promise<void> {
   if (assigneeId) {
     upserts.push(
       upsertAggregate(
-        orgId, date, null, null, null, teamId, assigneeId, objectType, status, durationMs,
+        orgId, date, null, null, null, teamId, assigneeId, objectType, status, durationMs, count,
       ),
     );
   }
 
   // Fire-and-forget — never block routing
   await Promise.allSettled(upserts).catch(() => {});
+}
+
+/* ------------------------------------------------------------------ */
+/*  Public: updateAggregatesBatch                                     */
+/*                                                                    */
+/*  Groups items by their unique dimension tuple, sums counts, then   */
+/*  fires one upsert per unique tuple in parallel.                    */
+/* ------------------------------------------------------------------ */
+
+export async function updateAggregatesBatch(items: AggregateInput[]): Promise<void> {
+  if (items.length === 0) return;
+
+  // Build a composite key for each unique dimension tuple
+  const grouped = new Map<string, AggregateInput & { count: number }>();
+
+  for (const item of items) {
+    const key = [
+      item.orgId,
+      startOfDay(item.date).toISOString(),
+      item.ruleId ?? "",
+      item.pathLabel ?? "",
+      item.branchId ?? "",
+      item.teamId ?? "",
+      item.assigneeId ?? "",
+      item.objectType,
+      item.status,
+    ].join("\x00");
+
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.count += item.count ?? 1;
+    } else {
+      grouped.set(key, { ...item, count: item.count ?? 1 });
+    }
+  }
+
+  // Fire all grouped upserts in parallel
+  const results = await Promise.allSettled(
+    Array.from(grouped.values()).map((entry) => updateAggregates(entry)),
+  );
+
+  // Log failures but never throw — batch aggregates must not block routing
+  for (const r of results) {
+    if (r.status === "rejected") {
+      console.error("[aggregate] Batch upsert failed:", r.reason);
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -194,7 +246,7 @@ export async function updateAggregates(input: AggregateInput): Promise<void> {
 export async function createConversionTracking(input: {
   orgId: string;
   routingLogId: string;
-  sfdcLeadId: string;
+  crmRecordId: string;
   ruleId: string | null;
   ruleName: string | null;
   pathLabel: string | null;
@@ -207,7 +259,7 @@ export async function createConversionTracking(input: {
       data: {
         orgId: input.orgId,
         routingLogId: input.routingLogId,
-        sfdcLeadId: input.sfdcLeadId,
+        crmRecordId: input.crmRecordId,
         ruleId: input.ruleId,
         ruleName: input.ruleName,
         pathLabel: input.pathLabel,

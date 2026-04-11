@@ -114,7 +114,7 @@ async function reconcileAggregates(job: Job): Promise<void> {
 
 interface ConversionTrackingRow {
   id: string;
-  sfdcLeadId: string;
+  crmRecordId: string;
 }
 
 interface SfdcLeadResult {
@@ -154,15 +154,15 @@ async function checkConversions(_job: Job): Promise<void> {
 
       // 2b. Get unconverted leads for this org
       const rows = await prisma.$queryRawUnsafe<ConversionTrackingRow[]>(
-        `SELECT id, "sfdcLeadId" FROM conversion_tracking WHERE "orgId" = $1 AND "isConverted" = false AND "createdAt" > NOW() - INTERVAL '90 days'`,
+        `SELECT id, "crmRecordId" FROM conversion_tracking WHERE "orgId" = $1 AND "isConverted" = false AND "createdAt" > NOW() - INTERVAL '90 days'`,
         orgId
       );
 
       if (rows.length === 0) continue;
 
-      const leadIdMap = new Map<string, string>(); // sfdcLeadId → conversion_tracking.id
+      const leadIdMap = new Map<string, string>(); // crmRecordId → conversion_tracking.id
       for (const row of rows) {
-        leadIdMap.set(row.sfdcLeadId, row.id);
+        leadIdMap.set(row.crmRecordId, row.id);
       }
 
       let convertedCount = 0;

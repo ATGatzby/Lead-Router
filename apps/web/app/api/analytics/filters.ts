@@ -63,7 +63,7 @@ export function buildAggregateQuery(
   }
 
   if (objectType) {
-    where += ` AND "objectType" = $${idx++}::"SfdcObjectType"`;
+    where += ` AND "objectType" = $${idx++}::"CrmObjectType"`;
     params.push(objectType);
   }
 

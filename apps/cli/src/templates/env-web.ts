@@ -13,6 +13,10 @@ export interface WebEnvConfig {
   feedbackToEmail?: string
   licenseKey?: string
   licenseTier: string
+  crmType?: 'salesforce' | 'hubspot'
+  hubspotClientId?: string
+  hubspotClientSecret?: string
+  hubspotAppId?: string
 }
 
 export function renderEnvWeb(c: WebEnvConfig): string {
@@ -53,5 +57,18 @@ export function renderEnvWeb(c: WebEnvConfig): string {
     `# Email (optional)`,
     `RESEND_API_KEY=${c.resendApiKey ?? ''}`,
     `FEEDBACK_TO_EMAIL=${c.feedbackToEmail ?? ''}`,
+    ``,
+    `# CRM`,
+    `CRM_TYPE=${c.crmType ?? 'salesforce'}`,
+    ...(c.crmType === 'hubspot'
+      ? [
+          ``,
+          `# HubSpot`,
+          `HUBSPOT_CLIENT_ID=${c.hubspotClientId ?? ''}`,
+          `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? ''}`,
+          `HUBSPOT_APP_ID=${c.hubspotAppId ?? ''}`,
+          `HUBSPOT_REDIRECT_URI=${c.appUrl}/api/auth/hubspot/callback`,
+        ]
+      : []),
   ].join('\n')
 }

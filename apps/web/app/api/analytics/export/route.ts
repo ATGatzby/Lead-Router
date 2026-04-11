@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
             SUM(a."successCount")::integer as success
           FROM routing_daily_aggregates a
           LEFT JOIN round_robin_teams t ON t.id = a."teamId"
-          LEFT JOIN users u ON u."sfdcUserId" = a."assigneeId"
+          LEFT JOIN users u ON u."crmUserId" = a."assigneeId"
           WHERE a."orgId" = $1 AND a.date >= $2 AND a.date <= $3
             AND a."teamId" IS NOT NULL AND a."assigneeId" IS NOT NULL
           GROUP BY a."teamId", t.name, a."assigneeId", u.name
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
         const rows = await prisma.$queryRawUnsafe<any[]>(
           `
           SELECT
-            "sfdcLeadId", "ruleName", "pathLabel", "assigneeName",
+            "crmRecordId", "ruleName", "pathLabel", "assigneeName",
             "isConverted", "convertedAt"::text, "opportunityId",
             "opportunityAmount", "opportunityStageName",
             "createdAt"::text
@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
         csv =
           "Lead ID,Rule,Path,Assignee,Converted,Converted At,Opportunity ID,Amount,Stage,Tracked At\n";
         for (const r of rows) {
-          csv += `${sanitizeCsvCell(String(r.sfdcLeadId))},"${sanitizeCsvCell((r.ruleName || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.pathLabel || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.assigneeName || "").replace(/"/g, '""'))}",${r.isConverted},${r.convertedAt || ""},${sanitizeCsvCell(String(r.opportunityId || ""))},${r.opportunityAmount || ""},"${sanitizeCsvCell((r.opportunityStageName || "").replace(/"/g, '""'))}",${r.createdAt}\n`;
+          csv += `${sanitizeCsvCell(String(r.crmRecordId))},"${sanitizeCsvCell((r.ruleName || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.pathLabel || "").replace(/"/g, '""'))}","${sanitizeCsvCell((r.assigneeName || "").replace(/"/g, '""'))}",${r.isConverted},${r.convertedAt || ""},${sanitizeCsvCell(String(r.opportunityId || ""))},${r.opportunityAmount || ""},"${sanitizeCsvCell((r.opportunityStageName || "").replace(/"/g, '""'))}",${r.createdAt}\n`;
         }
         filename = "analytics-conversions.csv";
         break;

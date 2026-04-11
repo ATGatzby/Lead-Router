@@ -20,7 +20,7 @@ interface HealthData {
   stampSkips: { last1h: number; last24h: number; last7d: number };
   recursiveBounces: { last1h: number; last24h: number; last7d: number };
   recentEvents: {
-    sfdcRecordId: string;
+    crmRecordId: string;
     objectType: string;
     count: number;
     firstSeen: string;
@@ -213,7 +213,7 @@ function EventsTable({ events }: { events: HealthData["recentEvents"] }) {
             const isBreached = event.status === "BREACHED";
             return (
               <tr
-                key={`${event.sfdcRecordId}-${i}`}
+                key={`${event.crmRecordId}-${i}`}
                 className={cn(
                   "border-b last:border-b-0 transition-colors",
                   isBreached
@@ -222,7 +222,7 @@ function EventsTable({ events }: { events: HealthData["recentEvents"] }) {
                 )}
               >
                 <td className="py-2.5 px-3 font-mono text-xs">
-                  {event.sfdcRecordId}
+                  {event.crmRecordId}
                 </td>
                 <td className="py-2.5 px-3">
                   <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-medium">

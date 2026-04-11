@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ─── Hoisted mocks ──────────────────────────────────────────────────────────
 
 const {
-  mockRouteRecord,
+  mockBulkRouteRecords,
   mockRedisHincrby,
   mockRedisHset,
   mockBulkUpdateOwners,
@@ -11,7 +11,12 @@ const {
   mockPrismaRoutingLogUpdateMany,
   capturedWorkerProcessor,
 } = vi.hoisted(() => {
-  const mockRouteRecord = vi.fn().mockResolvedValue("routed");
+  const mockBulkRouteRecords = vi.fn().mockResolvedValue({
+    assignments: [],
+    routed: 0,
+    failed: 0,
+    unmatched: 0,
+  });
   const mockRedisHincrby = vi.fn().mockResolvedValue(1);
   const mockRedisHset = vi.fn().mockResolvedValue(1);
   const mockBulkUpdateOwners = vi.fn().mockResolvedValue({
@@ -25,7 +30,7 @@ const {
   const capturedWorkerProcessor: { fn: ((job: any) => Promise<any>) | null } = { fn: null };
 
   return {
-    mockRouteRecord,
+    mockBulkRouteRecords,
     mockRedisHincrby,
     mockRedisHset,
     mockBulkUpdateOwners,
@@ -54,8 +59,12 @@ vi.mock("ioredis", () => ({
   })),
 }));
 
+vi.mock("./bulk-router.js", () => ({
+  bulkRouteRecords: (...args: unknown[]) => mockBulkRouteRecords(...args),
+}));
+
 vi.mock("./router.js", () => ({
-  routeRecord: mockRouteRecord,
+  routeRecord: vi.fn(),
 }));
 
 vi.mock("./sfdc.js", () => ({
@@ -123,66 +132,64 @@ beforeEach(() => {
   initBulkSearchQueue("redis://localhost:6379");
 });
 
-describe("bulk search worker — Phase A: collect routing decisions", () => {
-  it("calls routeRecord for each record with skipSfdcWrite and _assignments", async () => {
-    mockRouteRecord.mockResolvedValue("routed");
-
-    const processor = getWorkerProcessor();
-    await processor(makeJob());
-
-    expect(mockRouteRecord).toHaveBeenCalledTimes(2);
-
-    // Check skipSfdcWrite is set
-    const firstPayload = mockRouteRecord.mock.calls[0][0];
-    expect(firstPayload.skipSfdcWrite).toBe(true);
-    expect(firstPayload._assignments).toBeDefined();
-    expect(Array.isArray(firstPayload._assignments)).toBe(true);
-  });
-
-  it("passes preResolvedMatch from matchResult", async () => {
-    mockRouteRecord.mockResolvedValue("routed");
-
-    const processor = getWorkerProcessor();
-    await processor(makeJob());
-
-    // First call — has matchResult
-    const firstPayload = mockRouteRecord.mock.calls[0][0];
-    expect(firstPayload.preResolvedMatch).toEqual({
-      type: "ACCOUNT",
-      ownerId: "005XYZ",
-      recordId: "001ABC",
+describe("bulk search worker — Phase A: bulk route evaluation", () => {
+  it("calls bulkRouteRecords once with all records", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [],
+      routed: 0,
+      failed: 0,
+      unmatched: 2,
     });
 
-    // Second call — null matchResult
-    const secondPayload = mockRouteRecord.mock.calls[1][0];
-    expect(secondPayload.preResolvedMatch).toBeNull();
+    const processor = getWorkerProcessor();
+    await processor(makeJob());
+
+    expect(mockBulkRouteRecords).toHaveBeenCalledTimes(1);
+
+    const input = mockBulkRouteRecords.mock.calls[0][0];
+    expect(input.orgId).toBe("org-1");
+    expect(input.ruleId).toBe("rule-1");
+    expect(input.runId).toBe("run-123");
+    expect(input.objectType).toBe("LEAD");
+    expect(input.records).toHaveLength(2);
+    expect(input.records[0].recordId).toBe("00Q000001");
+    expect(input.records[1].recordId).toBe("00Q000002");
   });
 
-  it("sets eventType to SEARCH and includes ruleId", async () => {
-    mockRouteRecord.mockResolvedValue("routed");
+  it("passes only recordId and fields to bulkRouteRecords (no matchResult)", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [],
+      routed: 0,
+      failed: 0,
+      unmatched: 2,
+    });
 
     const processor = getWorkerProcessor();
     await processor(makeJob());
 
-    const payload = mockRouteRecord.mock.calls[0][0];
-    expect(payload.eventType).toBe("SEARCH");
-    expect(payload.ruleId).toBe("rule-1");
-    expect(payload.orgId).toBe("org-1");
-    expect(payload.objectType).toBe("LEAD");
+    const input = mockBulkRouteRecords.mock.calls[0][0];
+    // bulkRouteRecords receives records with recordId and fields only
+    expect(input.records[0]).toEqual({
+      recordId: "00Q000001",
+      fields: { Email: "a@test.com", Company: "Acme" },
+    });
+    expect(input.records[1]).toEqual({
+      recordId: "00Q000002",
+      fields: { Email: "b@test.com", Company: "Beta" },
+    });
   });
 
-  it("collects assignments via the shared _assignments array", async () => {
-    // Simulate routeRecord pushing to _assignments
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+  it("forwards assignments from bulkRouteRecords to Phase B", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER2", logId: "log-2", assigneeName: "User B", assignmentType: "USER", teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
-    // Mock bulkUpdateOwners to return all successful
     mockBulkUpdateOwners.mockResolvedValue({
       successful: ["00Q000001", "00Q000002"],
       failed: [],
@@ -192,26 +199,29 @@ describe("bulk search worker — Phase A: collect routing decisions", () => {
     const processor = getWorkerProcessor();
     await processor(makeJob());
 
-    // bulkUpdateOwners should have been called with the collected assignments
+    // bulkUpdateOwners should have been called with the assignments
     expect(mockBulkUpdateOwners).toHaveBeenCalledTimes(1);
     const [_conn, objectType, records, routingActionField] = mockBulkUpdateOwners.mock.calls[0];
     expect(objectType).toBe("Lead"); // toSfdcObjectName maps LEAD → Lead
     expect(records).toHaveLength(2);
     expect(records[0].Id).toBe("00Q000001");
     expect(records[0].OwnerId).toBe("005OWNER");
+    expect(records[1].Id).toBe("00Q000002");
+    expect(records[1].OwnerId).toBe("005OWNER2");
     expect(routingActionField).toBe("lrt__Routing_Action__c");
   });
 });
 
 describe("bulk search worker — Phase B: bulk write", () => {
   it("calls bulkUpdateOwners with collected records", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -228,13 +238,13 @@ describe("bulk search worker — Phase B: bulk write", () => {
   });
 
   it("sets phase to 'writing' in Redis before bulk write", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 1,
+      failed: 0,
+      unmatched: 1,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -249,14 +259,15 @@ describe("bulk search worker — Phase B: bulk write", () => {
     expect(mockRedisHset).toHaveBeenCalledWith("bulk-run:run-123", "phase", "writing");
   });
 
-  it("updates logs to SUCCESS for successful bulk writes", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+  it("updates logs to SUCCESS for successful bulk writes with assignee data", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -268,22 +279,31 @@ describe("bulk search worker — Phase B: bulk write", () => {
     const processor = getWorkerProcessor();
     const result = await processor(makeJob());
 
+    // Grouped by assignee — both have same assignee so one updateMany call
     expect(mockPrismaRoutingLogUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["log-00Q000001", "log-00Q000002"] } },
-      data: { status: "SUCCESS" },
+      where: { id: { in: ["log-1", "log-2"] } },
+      data: {
+        status: "SUCCESS",
+        assigneeId: "005OWNER",
+        assigneeName: "User A",
+        assignmentType: "USER",
+        teamId: null,
+        teamName: null,
+      },
     });
     expect(result.routed).toBe(2);
     expect(result.failed).toBe(0);
   });
 
   it("updates logs to FAILED for failed bulk writes", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER2", logId: "log-2", assigneeName: "User B", assignmentType: "USER", teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -297,13 +317,20 @@ describe("bulk search worker — Phase B: bulk write", () => {
 
     // SUCCESS call for 00Q000001
     expect(mockPrismaRoutingLogUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["log-00Q000001"] } },
-      data: { status: "SUCCESS" },
+      where: { id: { in: ["log-1"] } },
+      data: {
+        status: "SUCCESS",
+        assigneeId: "005OWNER",
+        assigneeName: "User A",
+        assignmentType: "USER",
+        teamId: null,
+        teamName: null,
+      },
     });
 
     // FAILED call for 00Q000002
     expect(mockPrismaRoutingLogUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["log-00Q000002"] } },
+      where: { id: { in: ["log-2"] } },
       data: { status: "FAILED", errorMessage: "Bulk API write failed" },
     });
 
@@ -312,13 +339,14 @@ describe("bulk search worker — Phase B: bulk write", () => {
   });
 
   it("marks all assignments as FAILED when bulkUpdateOwners throws", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockRejectedValue(new Error("Connection timeout"));
@@ -329,7 +357,7 @@ describe("bulk search worker — Phase B: bulk write", () => {
     const result = await processor(makeJob());
 
     expect(mockPrismaRoutingLogUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["log-00Q000001", "log-00Q000002"] } },
+      where: { id: { in: ["log-1", "log-2"] } },
       data: { status: "FAILED", errorMessage: "Bulk write error: Connection timeout" },
     });
 
@@ -340,13 +368,14 @@ describe("bulk search worker — Phase B: bulk write", () => {
   });
 
   it("counts unprocessed records as failed", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -362,26 +391,82 @@ describe("bulk search worker — Phase B: bulk write", () => {
     expect(result.failed).toBe(1);
   });
 
-  it("does not call bulkUpdateOwners when no assignments collected", async () => {
-    // routeRecord returns "routed" but doesn't push to _assignments
-    mockRouteRecord.mockResolvedValue("unmatched");
+  it("does not call bulkUpdateOwners when no assignments returned", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [],
+      routed: 0,
+      failed: 0,
+      unmatched: 2,
+    });
 
     const processor = getWorkerProcessor();
     await processor(makeJob());
 
     expect(mockBulkUpdateOwners).not.toHaveBeenCalled();
   });
+
+  it("skips SFDC write for records where owner is already correct", async () => {
+    // Record 00Q000001 has OwnerId "005OWNER" in fields, and assignment gives same owner
+    // Record 00Q000002 has OwnerId "005OTHER" in fields, and assignment gives "005OWNER" (different)
+    const job = makeJob({
+      records: [
+        {
+          recordId: "00Q000001",
+          fields: { Email: "a@test.com", OwnerId: "005OWNER" },
+          matchResult: null,
+        },
+        {
+          recordId: "00Q000002",
+          fields: { Email: "b@test.com", OwnerId: "005OTHER" },
+          matchResult: null,
+        },
+      ],
+    });
+
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: "User A", assignmentType: "USER", teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
+    });
+
+    mockBulkUpdateOwners.mockResolvedValue({
+      successful: ["00Q000002"],
+      failed: [],
+      unprocessed: 0,
+    });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const processor = getWorkerProcessor();
+    const result = await processor(job);
+
+    // Only 00Q000002 should be sent to bulkUpdateOwners (owner changed)
+    const [_conn, _objType, updateRecords] = mockBulkUpdateOwners.mock.calls[0];
+    expect(updateRecords).toHaveLength(1);
+    expect(updateRecords[0].Id).toBe("00Q000002");
+
+    // Both should count as routed (one skipped, one written)
+    expect(result.routed).toBe(2);
+    expect(result.failed).toBe(0);
+
+    logSpy.mockRestore();
+  });
 });
 
 describe("bulk search worker — Phase C: Redis counters", () => {
   it("increments routed counter based on bulk write results", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -397,13 +482,14 @@ describe("bulk search worker — Phase C: Redis counters", () => {
   });
 
   it("increments failed counter for failed bulk writes", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -426,10 +512,13 @@ describe("bulk search worker — Phase C: Redis counters", () => {
     expect(routedCall).toBeUndefined();
   });
 
-  it("increments failed counter when routeRecord throws", async () => {
-    mockRouteRecord.mockRejectedValue(new Error("DB connection lost"));
-
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("increments failed counter when bulkRouteRecords returns failures", async () => {
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [],
+      routed: 0,
+      failed: 2,
+      unmatched: 0,
+    });
 
     const processor = getWorkerProcessor();
     const result = await processor(makeJob());
@@ -437,13 +526,15 @@ describe("bulk search worker — Phase C: Redis counters", () => {
     expect(result.failed).toBe(2);
     expect(result.routed).toBe(0);
     expect(mockRedisHincrby).toHaveBeenCalledWith("bulk-run:run-123", "failed", 2);
-
-    errorSpy.mockRestore();
   });
 
   it("skips hincrby when count is zero", async () => {
-    mockRouteRecord.mockResolvedValue("routed");
-    // No assignments pushed, so no bulk write, routed stays 0
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [],
+      routed: 0,
+      failed: 0,
+      unmatched: 2,
+    });
 
     const processor = getWorkerProcessor();
     await processor(makeJob());
@@ -460,13 +551,14 @@ describe("bulk search worker — Phase C: Redis counters", () => {
   });
 
   it("reflects mixed bulk write results in Redis counters", async () => {
-    mockRouteRecord.mockImplementation(async (payload: any) => {
-      payload._assignments?.push({
-        recordId: payload.recordId,
-        ownerId: "005OWNER",
-        logId: `log-${payload.recordId}`,
-      });
-      return "routed";
+    mockBulkRouteRecords.mockResolvedValue({
+      assignments: [
+        { recordId: "00Q000001", ownerId: "005OWNER", logId: "log-1", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+        { recordId: "00Q000002", ownerId: "005OWNER2", logId: "log-2", assigneeName: null, assignmentType: null, teamId: null, teamName: null },
+      ],
+      routed: 2,
+      failed: 0,
+      unmatched: 0,
     });
 
     mockBulkUpdateOwners.mockResolvedValue({
@@ -482,5 +574,18 @@ describe("bulk search worker — Phase C: Redis counters", () => {
     expect(result.failed).toBe(1);
     expect(mockRedisHincrby).toHaveBeenCalledWith("bulk-run:run-123", "routed", 1);
     expect(mockRedisHincrby).toHaveBeenCalledWith("bulk-run:run-123", "failed", 1);
+  });
+});
+
+describe("bulk search worker — simulation mode", () => {
+  it("skips routing and SFDC, just counts records", async () => {
+    const processor = getWorkerProcessor();
+    const result = await processor(makeJob({ simulate: true }));
+
+    expect(result.routed).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(mockBulkRouteRecords).not.toHaveBeenCalled();
+    expect(mockBulkUpdateOwners).not.toHaveBeenCalled();
+    expect(mockRedisHincrby).toHaveBeenCalledWith("bulk-run:run-123", "routed", 2);
   });
 });

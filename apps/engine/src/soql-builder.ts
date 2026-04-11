@@ -40,7 +40,9 @@ export function buildSearchSOQL(
   const suffix = omitLimit ? " ORDER BY Id ASC" : ` LIMIT ${limit}`;
 
   if (!criteria || criteria.length === 0) {
-    return `SELECT ${fields} FROM ${obj}${suffix}`;
+    // Exclude converted leads — SFDC rejects owner updates on converted records
+    const convertedFilter = obj === "Lead" ? " WHERE IsConverted = false" : "";
+    return `SELECT ${fields} FROM ${obj}${convertedFilter}${suffix}`;
   }
 
   const groupClauses = criteria.map((group) => {
@@ -50,7 +52,10 @@ export function buildSearchSOQL(
 
   const where = groupClauses.length === 1 ? groupClauses[0] : groupClauses.join(" OR ");
 
-  return `SELECT ${fields} FROM ${obj} WHERE ${where}${suffix}`;
+  // Exclude converted leads — SFDC rejects owner updates on converted records
+  const convertedFilter = obj === "Lead" ? " AND IsConverted = false" : "";
+
+  return `SELECT ${fields} FROM ${obj} WHERE ${where}${convertedFilter}${suffix}`;
 }
 
 /**
@@ -63,7 +68,8 @@ export function buildCountSOQL(
   const obj = objectName(objectType);
 
   if (!criteria || criteria.length === 0) {
-    return `SELECT COUNT() FROM ${obj}`;
+    const convertedFilter = obj === "Lead" ? " WHERE IsConverted = false" : "";
+    return `SELECT COUNT() FROM ${obj}${convertedFilter}`;
   }
 
   const groupClauses = criteria.map((group) => {
@@ -73,7 +79,9 @@ export function buildCountSOQL(
 
   const where = groupClauses.length === 1 ? groupClauses[0] : groupClauses.join(" OR ");
 
-  return `SELECT COUNT() FROM ${obj} WHERE ${where}`;
+  const convertedFilter = obj === "Lead" ? " AND IsConverted = false" : "";
+
+  return `SELECT COUNT() FROM ${obj} WHERE ${where}${convertedFilter}`;
 }
 
 // ─── Condition → SOQL clause ──────────────────────────────────────────────

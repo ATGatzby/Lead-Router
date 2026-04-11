@@ -9,10 +9,13 @@ export default async function IntegrationsPage() {
   const session = await requireSession();
   const org = await prisma.organization.findUnique({
     where: { id: session.orgId },
-    select: { sfdcOrgId: true },
+    select: { sfdcOrgId: true, hubspotPortalId: true },
   });
 
   const sfConnected = !!org?.sfdcOrgId;
+  const hsConnected = !!org?.hubspotPortalId;
+  // Only one CRM can be connected per org
+  const otherCrmConnected = sfConnected || hsConnected;
 
   return (
     <div className="space-y-6">
@@ -67,6 +70,10 @@ export default async function IntegrationsPage() {
                     <ArrowRight className="ml-1 h-3.5 w-3.5" />
                   </Link>
                 </Button>
+              ) : hsConnected ? (
+                <Button size="sm" variant="outline" disabled className="opacity-50 cursor-not-allowed">
+                  HubSpot connected
+                </Button>
               ) : (
                 <Button size="sm" asChild>
                   <a href="/api/auth/sfdc/login">Connect</a>
@@ -76,29 +83,58 @@ export default async function IntegrationsPage() {
           </div>
         </div>
 
-        {/* HubSpot — Coming Soon */}
-        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm opacity-60">
+        {/* HubSpot */}
+        <div className="rounded-xl border border-border bg-white dark:bg-card shadow-sm hover:shadow-md transition-shadow">
           <div className="p-6 space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-950">
-                <div className="h-7 w-7 rounded-full bg-orange-400 dark:bg-orange-500" />
+                <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none">
+                  <path
+                    d="M17.83 9.17V6.59c.7-.33 1.17-1.04 1.17-1.84v-.06c0-1.13-.92-2.04-2.05-2.04h-.06c-1.13 0-2.04.92-2.04 2.04v.06c0 .8.47 1.51 1.17 1.84v2.58a5.24 5.24 0 0 0-2.29 1.18l-6.07-4.73a2.34 2.34 0 0 0 .07-.54c0-1.3-1.05-2.35-2.35-2.35S3.03 3.98 3.03 5.28s1.05 2.35 2.35 2.35c.46 0 .88-.14 1.24-.37l5.97 4.65a5.26 5.26 0 0 0-.63 2.49c0 2.91 2.36 5.27 5.27 5.27s5.27-2.36 5.27-5.27-2.36-5.27-5.27-5.27c-.76 0-1.48.16-2.13.45zm-.6 7.87a2.64 2.64 0 1 1 0-5.27 2.64 2.64 0 0 1 0 5.27z"
+                    fill="#FF7A59"
+                  />
+                </svg>
               </div>
-              <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-                Coming Soon
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+                  CRM
+                </Badge>
+                {hsConnected ? (
+                  <Badge className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900">
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-muted-foreground">
+                    Not Connected
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div>
               <h3 className="font-semibold text-base">HubSpot</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Import and route contacts from HubSpot CRM.
+                Route contacts, companies, and deals from HubSpot.
               </p>
             </div>
 
             <div>
-              <Button size="sm" variant="outline" disabled>
-                Connect
-              </Button>
+              {hsConnected ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/integrations">
+                    Configure
+                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              ) : sfConnected ? (
+                <Button size="sm" variant="outline" disabled className="opacity-50 cursor-not-allowed">
+                  Salesforce connected
+                </Button>
+              ) : (
+                <Button size="sm" asChild>
+                  <a href="/api/auth/hubspot/login">Connect</a>
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const where: Record<string, unknown> = {
     orgId,
-    sfdcRecordId: { in: validIds },
+    crmRecordId: { in: validIds },
   };
   if (since) {
     const sinceDate = new Date(since);
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
-      sfdcRecordId: true,
+      crmRecordId: true,
       objectType: true,
       eventType: true,
       status: true,
@@ -84,14 +84,14 @@ export async function POST(req: NextRequest) {
   }
 
   for (const log of logs) {
-    const rid = log.sfdcRecordId;
+    const rid = log.crmRecordId;
     if (!rid || !grouped[rid]) continue;
     grouped[rid].totalEvents++;
     if (!grouped[rid].objectType && log.objectType) {
       grouped[rid].objectType = log.objectType;
     }
     if (grouped[rid].entries.length < clampedLimit) {
-      const { sfdcRecordId, objectType, ...entry } = log;
+      const { crmRecordId, objectType, ...entry } = log;
       grouped[rid].entries.push(entry);
     }
   }

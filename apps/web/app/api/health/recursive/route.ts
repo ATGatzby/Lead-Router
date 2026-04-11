@@ -41,7 +41,7 @@ export async function GET() {
   >`
     SELECT w.win, COUNT(*)::bigint AS cnt
     FROM (
-      SELECT "sfdcRecordId",
+      SELECT "crmRecordId",
              MIN("createdAt") AS "firstSeen",
              MAX("createdAt") AS "lastSeen",
              COUNT(*) AS c
@@ -49,7 +49,7 @@ export async function GET() {
       WHERE "orgId" = ${orgId}
         AND "status" = 'SUCCESS'
         AND "createdAt" >= ${sevenDaysAgo}
-      GROUP BY "sfdcRecordId"
+      GROUP BY "crmRecordId"
       HAVING COUNT(*) >= 2
          AND MAX("createdAt") - MIN("createdAt") < INTERVAL '60 seconds'
     ) dupes
@@ -75,7 +75,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     take: 20,
     select: {
-      sfdcRecordId: true,
+      crmRecordId: true,
       objectType: true,
       ruleName: true,
       status: true,
@@ -86,7 +86,7 @@ export async function GET() {
   // Recent breached records (SUCCESS 2+ times within 60s, last 24h)
   const recentBreached = await prisma.$queryRaw<
     {
-      sfdcRecordId: string;
+      crmRecordId: string;
       objectType: string;
       cnt: bigint;
       firstSeen: Date;
@@ -95,7 +95,7 @@ export async function GET() {
     }[]
   >`
     SELECT
-      "sfdcRecordId",
+      "crmRecordId",
       MIN("objectType") AS "objectType",
       COUNT(*) AS cnt,
       MIN("createdAt") AS "firstSeen",
@@ -105,7 +105,7 @@ export async function GET() {
     WHERE "orgId" = ${orgId}
       AND "status" = 'SUCCESS'
       AND "createdAt" >= ${oneDayAgo}
-    GROUP BY "sfdcRecordId"
+    GROUP BY "crmRecordId"
     HAVING COUNT(*) >= 2
        AND MAX("createdAt") - MIN("createdAt") < INTERVAL '60 seconds'
     ORDER BY MAX("createdAt") DESC
@@ -114,7 +114,7 @@ export async function GET() {
 
   const recentEvents = [
     ...recentSkips.map((r) => ({
-      sfdcRecordId: r.sfdcRecordId,
+      crmRecordId: r.crmRecordId,
       objectType: r.objectType,
       count: 1,
       firstSeen: r.createdAt.toISOString(),
@@ -123,7 +123,7 @@ export async function GET() {
       status: r.status,
     })),
     ...recentBreached.map((r) => ({
-      sfdcRecordId: r.sfdcRecordId,
+      crmRecordId: r.crmRecordId,
       objectType: r.objectType,
       count: Number(r.cnt),
       firstSeen: r.firstSeen.toISOString(),

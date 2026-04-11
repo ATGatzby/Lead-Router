@@ -132,9 +132,9 @@ export const TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        sfdcRecordId: { type: "string", description: "The Salesforce record ID (e.g. 00Q...)" },
+        crmRecordId: { type: "string", description: "The Salesforce record ID (e.g. 00Q...)" },
       },
-      required: ["sfdcRecordId"],
+      required: ["crmRecordId"],
     },
   },
   {
@@ -321,7 +321,7 @@ export async function executeTool(
     case "explain_rule":
       return explainRule(orgId, args.ruleId as string);
     case "get_routing_timeline":
-      return getRoutingTimeline(orgId, args.sfdcRecordId as string);
+      return getRoutingTimeline(orgId, args.crmRecordId as string);
     case "list_teams":
       return listTeams(orgId, args as any);
     case "list_users":

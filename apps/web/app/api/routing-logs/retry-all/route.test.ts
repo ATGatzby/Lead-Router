@@ -59,8 +59,8 @@ describe("POST /api/routing-logs/retry-all", () => {
 
   it("marks all failed logs as RETRY and enqueues to BullMQ", async () => {
     const logs = [
-      { id: "log-1", sfdcRecordId: "00Q001", objectType: "LEAD", assigneeId: "005001" },
-      { id: "log-2", sfdcRecordId: "00Q002", objectType: "CONTACT", assigneeId: "005002" },
+      { id: "log-1", crmRecordId: "00Q001", objectType: "LEAD", assigneeId: "005001" },
+      { id: "log-2", crmRecordId: "00Q002", objectType: "CONTACT", assigneeId: "005002" },
     ];
     mockPrisma.routingLog.findMany.mockResolvedValue(logs);
     mockPrisma.routingLog.updateMany.mockResolvedValue({ count: 2 });
@@ -105,7 +105,7 @@ describe("POST /api/routing-logs/retry-all", () => {
       },
       select: {
         id: true,
-        sfdcRecordId: true,
+        crmRecordId: true,
         objectType: true,
         assigneeId: true,
       },
@@ -124,7 +124,7 @@ describe("POST /api/routing-logs/retry-all", () => {
 
   it("converts object types to Pascal case via toPascalObjectType", async () => {
     const logs = [
-      { id: "log-1", sfdcRecordId: "00Q001", objectType: "ACCOUNT", assigneeId: "005001" },
+      { id: "log-1", crmRecordId: "00Q001", objectType: "ACCOUNT", assigneeId: "005001" },
     ];
     mockPrisma.routingLog.findMany.mockResolvedValue(logs);
     mockPrisma.routingLog.updateMany.mockResolvedValue({ count: 1 });
