@@ -23,6 +23,7 @@ import type {
   AccountMatchAction,
   AssignmentType,
 } from "../types"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 
 interface Props {
   open: boolean
@@ -130,6 +131,7 @@ function CheckField({
 }
 
 export function MatchConfigSheet({ open, onOpenChange, matchConfig, onSave }: Props) {
+  const { crmLabel, supportsMerge: canMerge } = useCrmType()
   const [cfg, setCfg] = useState<MatchConfig>(matchConfig)
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -150,7 +152,7 @@ export function MatchConfigSheet({ open, onOpenChange, matchConfig, onSave }: Pr
         <SheetHeader>
           <SheetTitle>Configure Match Action</SheetTitle>
           <SheetDescription>
-            Check for existing Salesforce records before routing and decide what to do when a match is found.
+            {`Check for existing ${crmLabel} records before routing and decide what to do when a match is found.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -260,16 +262,18 @@ export function MatchConfigSheet({ open, onOpenChange, matchConfig, onSave }: Pr
                 When a Lead is matched
               </h3>
               <div className="space-y-2">
-                <RadioOption
-                  id="leadMatch-merge"
-                  name="leadMatch"
-                  value="SFDC_MERGE"
-                  checked={cfg.onLeadMatch === "SFDC_MERGE"}
-                  onChange={() => patch({ onLeadMatch: "SFDC_MERGE", leadCustomAssignment: null })}
-                  label="Salesforce Lead Merge"
-                  description="Merge this lead into the existing lead"
-                  recommended
-                />
+                {canMerge && (
+                  <RadioOption
+                    id="leadMatch-merge"
+                    name="leadMatch"
+                    value="SFDC_MERGE"
+                    checked={cfg.onLeadMatch === "SFDC_MERGE"}
+                    onChange={() => patch({ onLeadMatch: "SFDC_MERGE", leadCustomAssignment: null })}
+                    label={`${crmLabel} Lead Merge`}
+                    description="Merge this lead into the existing lead"
+                    recommended
+                  />
+                )}
                 <RadioOption
                   id="leadMatch-owner"
                   name="leadMatch"

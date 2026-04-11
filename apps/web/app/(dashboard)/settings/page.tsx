@@ -3,8 +3,10 @@
 import { useMutation } from "@tanstack/react-query";
 import { RefreshCw, Link2, AlertTriangle } from "lucide-react";
 import { useState } from "react";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 
 export default function SettingsGeneralPage() {
+  const { crmLabel } = useCrmType();
   const [syncStatus, setSyncStatus] = useState<"idle" | "ok" | "error">("idle");
 
   const syncMutation = useMutation({
@@ -18,12 +20,12 @@ export default function SettingsGeneralPage() {
 
   return (
     <div className="max-w-2xl space-y-8">
-      {/* Salesforce Connection */}
+      {/* CRM Connection */}
       <section className="rounded-lg border p-6 space-y-4">
         <div>
-          <h2 className="font-semibold">Salesforce Connection</h2>
+          <h2 className="font-semibold">{crmLabel} Connection</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage your Salesforce OAuth connection and webhook settings.
+            Manage your {crmLabel} OAuth connection and webhook settings.
           </p>
         </div>
 
@@ -36,7 +38,7 @@ export default function SettingsGeneralPage() {
                 Seeing &ldquo;Retry&rdquo; or &ldquo;Failed&rdquo; on all records?
               </p>
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">
-                Your Salesforce access token may have expired. Re-authenticate to get a fresh token.
+                Your {crmLabel} access token may have expired. Re-authenticate to get a fresh token.
                 This won&apos;t affect your rules, teams, or users.
               </p>
             </div>
@@ -46,7 +48,7 @@ export default function SettingsGeneralPage() {
             className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 dark:bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 dark:hover:bg-amber-600 transition-colors"
           >
             <Link2 className="h-3.5 w-3.5" />
-            Reconnect Salesforce
+            Reconnect {crmLabel}
           </a>
         </div>
 
@@ -61,10 +63,10 @@ export default function SettingsGeneralPage() {
             {syncMutation.isPending ? "Syncing…" : "Sync Webhook Secret"}
           </button>
           {syncStatus === "ok" && (
-            <span className="text-sm text-green-600 dark:text-green-400">Synced to Salesforce</span>
+            <span className="text-sm text-green-600 dark:text-green-400">Synced to {crmLabel}</span>
           )}
           {syncStatus === "error" && (
-            <span className="text-sm text-destructive">Sync failed — check Salesforce connection</span>
+            <span className="text-sm text-destructive">Sync failed — check {crmLabel} connection</span>
           )}
         </div>
       </section>

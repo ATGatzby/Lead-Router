@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Play, X, Loader2, Check, Search, Users, Filter, UserCheck, RotateCcw, CheckCircle2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,9 +56,9 @@ interface RunPanelProps {
 
 // ─── Build workflow steps from route config ───────────────────────────────────
 
-function buildSteps(config?: RouteStepsConfig): WorkflowStep[] {
+function buildSteps(config?: RouteStepsConfig, crmLabel = "Salesforce"): WorkflowStep[] {
   const steps: WorkflowStep[] = [
-    { id: "query", name: "Query Salesforce", detail: "Search for matching records", status: "pending", duration: null, icon: Search, mapToStep: "trigger" },
+    { id: "query", name: `Query ${crmLabel}`, detail: "Search for matching records", status: "pending", duration: null, icon: Search, mapToStep: "trigger" },
   ]
   if (config?.hasMatch) {
     steps.push({ id: "match", name: "Match & Deduplicate", detail: "Check for existing leads & contacts", status: "pending", duration: null, icon: Users, mapToStep: "match" })
@@ -65,7 +66,7 @@ function buildSteps(config?: RouteStepsConfig): WorkflowStep[] {
   if (config?.hasPaths) {
     steps.push({ id: "filter", name: "Filter & Route", detail: "Apply routing rules to records", status: "pending", duration: null, icon: Filter, mapToStep: "filter" })
   }
-  steps.push({ id: "assign", name: "Assign Owners", detail: "Update record ownership in Salesforce", status: "pending", duration: null, icon: UserCheck, mapToStep: "assign" })
+  steps.push({ id: "assign", name: "Assign Owners", detail: `Update record ownership in ${crmLabel}`, status: "pending", duration: null, icon: UserCheck, mapToStep: "assign" })
   return steps
 }
 
@@ -89,7 +90,8 @@ export function RunPanel({
   onRunStateChange,
   routeSteps,
 }: RunPanelProps) {
-  const [steps, setSteps] = useState<WorkflowStep[]>(() => buildSteps(routeSteps))
+  const { crmLabel } = useCrmType()
+  const [steps, setSteps] = useState<WorkflowStep[]>(() => buildSteps(routeSteps, crmLabel))
   const [progress, setProgress] = useState(0)
   const [elapsed, setElapsed] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
@@ -141,7 +143,7 @@ export function RunPanel({
     setRunResult(null)
     setProgress(0)
     setElapsed(0)
-    setSteps(buildSteps(routeSteps))
+    setSteps(buildSteps(routeSteps, crmLabel))
 
     // Start elapsed timer
     elapsedRef.current = setInterval(() => {
@@ -149,7 +151,7 @@ export function RunPanel({
     }, 1000)
 
     // ── Phase 1: Query Salesforce — animate while API call runs ──
-    updateStep("query", { status: "active", detail: "Connecting to Salesforce..." })
+    updateStep("query", { status: "active", detail: `Connecting to ${crmLabel}...` })
     setRunningStep("trigger")
 
     // Fire API call and animate in parallel
@@ -177,7 +179,7 @@ export function RunPanel({
       // API failed — show error and stop
       updateStep("query", {
         status: "error",
-        detail: result.error ?? "Failed to query Salesforce",
+        detail: result.error ?? `Failed to query ${crmLabel}`,
         duration: result.durationMs ? formatDurationMs(result.durationMs) : null,
       })
       setRunningStep(null)
@@ -203,7 +205,7 @@ export function RunPanel({
 
     if (recordsFound === 0) {
       // No records — mark remaining steps as done/skipped
-      const currentSteps = buildSteps(routeSteps)
+      const currentSteps = buildSteps(routeSteps, crmLabel)
       for (const s of currentSteps) {
         if (s.id !== "query") {
           updateStep(s.id, { status: "done", detail: "No records to process", duration: "—" })
@@ -278,7 +280,7 @@ export function RunPanel({
     }
 
     // ── Final Phase: Assign Owners (→ 100%) ──
-    updateStep("assign", { status: "active", detail: "Writing ownership to Salesforce..." })
+    updateStep("assign", { status: "active", detail: `Writing ownership to ${crmLabel}...` })
     setRunningStep("assign")
     await animateProgress(progressCursor, 100, 500)
     updateStep("assign", {
@@ -308,7 +310,7 @@ export function RunPanel({
       },
       ...prev.slice(0, 4),
     ])
-  }, [isRunning, ruleId, animateProgress, updateStep, setRunningStep])
+  }, [isRunning, ruleId, animateProgress, updateStep, setRunningStep, crmLabel, routeSteps])
 
   // Auto-start on open
   useEffect(() => {

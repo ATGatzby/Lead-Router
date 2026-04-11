@@ -3,6 +3,7 @@
 import { AlertTriangle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 import type { DefaultOwner } from "../types"
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onEdit: () => void
 }
 
-function ownerSummary(owner: DefaultOwner | null): string {
+function ownerSummary(owner: DefaultOwner | null, crmLabel: string): string {
   if (!owner) return "Not configured — leads may go unassigned"
   if (owner.assigneeName) return owner.assigneeName
   switch (owner.assignmentType) {
@@ -19,7 +20,7 @@ function ownerSummary(owner: DefaultOwner | null): string {
     case "ROUND_ROBIN":
       return "Round-robin team"
     case "QUEUE":
-      return "Salesforce queue"
+      return `${crmLabel} queue`
   }
 }
 
@@ -36,6 +37,7 @@ function ownerTypeLabel(owner: DefaultOwner | null): string | null {
 }
 
 export function DefaultOwnerCard({ defaultOwner, onEdit }: Props) {
+  const { crmLabel } = useCrmType()
   const isConfigured = !!defaultOwner
   const typeLabel = ownerTypeLabel(defaultOwner)
 
@@ -77,7 +79,7 @@ export function DefaultOwnerCard({ defaultOwner, onEdit }: Props) {
                 isConfigured ? "text-amber-700 dark:text-amber-300" : "text-amber-500 dark:text-amber-400 italic"
               )}
             >
-              {ownerSummary(defaultOwner)}
+              {ownerSummary(defaultOwner, crmLabel)}
             </span>
           </div>
         </div>

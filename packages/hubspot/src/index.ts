@@ -20,6 +20,9 @@ export { WebhooksApi } from './webhooks';
 export { MergeApi } from './merge';
 export { ExportApi } from './export';
 
+// Field sync
+export { syncHubSpotFields } from './sync-fields';
+
 // Errors
 export { HubSpotError, HubSpotRateLimitError, HubSpotAuthError } from './errors';
 

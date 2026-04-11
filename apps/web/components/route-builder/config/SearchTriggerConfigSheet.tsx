@@ -33,6 +33,8 @@ import { ConditionBuilder } from "@/components/condition-builder"
 import type { ConditionGroup, FieldSchema } from "@/components/condition-builder/types"
 import type { SearchTriggerConfig, ObjectType, ScheduleFrequency } from "../types"
 import { objectTypeLabel } from "../types"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
+import { getObjectTypeLabel } from "@/lib/crm-helpers"
 
 interface FieldsResponse {
   fields: FieldSchema[]
@@ -74,6 +76,8 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
   const [skipRecentlyRouted, setSkipRecentlyRouted] = useState(searchTrigger.skipRecentlyRouted)
   const [isDryRun, setIsDryRun] = useState(searchTrigger.isDryRun)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+
+  const { crmLabel, objectTypes } = useCrmType()
 
   // Fetch license tier to gate Contact/Account behind Pro
   const licenseQuery = useQuery({
@@ -138,9 +142,9 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>Search Salesforce Trigger</SheetTitle>
+          <SheetTitle>{`Search ${crmLabel} Trigger`}</SheetTitle>
           <SheetDescription>
-            Query Salesforce for records matching criteria and route them on a schedule.
+            {`Query ${crmLabel} for records matching criteria and route them on a schedule.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -167,13 +171,14 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="LEAD">Lead</SelectItem>
-                <SelectItem value="CONTACT" disabled={isFreeTier}>
-                  Contact {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
-                </SelectItem>
-                <SelectItem value="ACCOUNT" disabled={isFreeTier}>
-                  Account {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
-                </SelectItem>
+                {objectTypes.map((ot, idx) => {
+                  const isGated = isFreeTier && idx > 0
+                  return (
+                    <SelectItem key={ot} value={ot} disabled={isGated}>
+                      {getObjectTypeLabel(ot)} {isGated && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -194,7 +199,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Records matching ALL of these conditions will be queried from Salesforce.
+              {`Records matching ALL of these conditions will be queried from ${crmLabel}.`}
               Leave empty to query all records (up to 50,000).
             </p>
             <ConditionBuilder
@@ -392,7 +397,7 @@ export function SearchTriggerConfigSheet({ open, onOpenChange, searchTrigger, on
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground ml-7">
-                  Evaluate and log results without making assignments in Salesforce.
+                  {`Evaluate and log results without making assignments in ${crmLabel}.`}
                 </p>
               </div>
             </CollapsibleContent>

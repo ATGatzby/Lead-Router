@@ -28,6 +28,7 @@ import { defaultBuilderState, defaultTriggerConfig, triggerEventLabel, objectTyp
 import type { RuleConditions } from "@/components/condition-builder"
 import type { ConditionGroup } from "@/components/condition-builder/types"
 import { EnglishView } from "./EnglishView"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 import { routeToEnglish } from "@/lib/route-to-english"
 import { RunPanel, type RunningStep } from "./RunPanel"
 import { AIRouteGenerator } from "./AIRouteGenerator"
@@ -106,7 +107,7 @@ const NODE_META: Record<
   },
   searchTrigger: {
     icon: Search,
-    label: "Search Salesforce",
+    label: "Search CRM",  // overridden dynamically via getNodeLabel()
     borderClass: "border-l-4 border-l-teal-500",
     iconBg: "bg-teal-100 dark:bg-teal-900",
     iconColor: "text-teal-600 dark:text-teal-400",
@@ -695,6 +696,7 @@ export function RouteBuilder({
 }: RouteBuilderProps) {
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
+  const { crmLabel } = useCrmType()
 
   // ── Builder state (the source of truth for the route data) ─────────────────
   const base = defaultBuilderState()
@@ -1176,7 +1178,7 @@ export function RouteBuilder({
         return
       }
 
-      // ── Search Salesforce Trigger: place beside real-time trigger ────────────
+      // ── Search CRM Trigger: place beside real-time trigger ────────────
       if (stepType === "searchTrigger") {
         const triggerNode = nodes.find((n) => n.type === "trigger")
         const existing = nodes.find((n) => n.type === "searchTrigger")
@@ -1550,9 +1552,9 @@ export function RouteBuilder({
 
   // ── English view helpers ────────────────────────────────────────────────────
   const englishErrorCount = useMemo(() => {
-    const review = routeToEnglish(state)
+    const review = routeToEnglish(state, crmLabel)
     return (review?.warnings ?? []).filter((w) => w.severity === "error").length
-  }, [state])
+  }, [state, crmLabel])
 
   const handleFocusPath = useCallback((pathId?: string) => {
     setActiveTab("canvas")
@@ -1778,6 +1780,8 @@ export function RouteBuilder({
               // Show path label on filter nodes (e.g., "Enterprise", "With Email")
               const pathLabel = (node.type === "filter" && node.pathId)
                 ? (findPathById(state.paths, node.pathId)?.label ?? undefined)
+                : node.type === "searchTrigger"
+                ? `Search ${crmLabel}`
                 : undefined
 
               return (

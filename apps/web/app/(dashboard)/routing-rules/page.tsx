@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
 
@@ -206,6 +207,7 @@ function NewRouteDropdown({ atLimit = false, onAIGenerate }: { atLimit?: boolean
 export default function RoutingRulesPage() {
   const router = useRouter();
   const qc = useQueryClient();
+  const { crmLabel } = useCrmType();
 
   // Filter & search state
   const [filterType, setFilterType] = useState<FilterType>("ALL");
@@ -255,7 +257,7 @@ export default function RoutingRulesPage() {
     (ruleId: string, ruleName: string) => {
       cleanupProgress();
       setRunningRuleId(ruleId);
-      setRunProgress({ phase: "Querying Salesforce...", pct: 0 });
+      setRunProgress({ phase: `Querying ${crmLabel}...`, pct: 0 });
       progressStartRef.current = Date.now();
 
       // Fire the actual API call concurrently
@@ -301,7 +303,7 @@ export default function RoutingRulesPage() {
 
         if (elapsed < 800) {
           const pct = Math.round((elapsed / 800) * 15);
-          setRunProgress({ phase: "Querying Salesforce...", pct });
+          setRunProgress({ phase: `Querying ${crmLabel}...`, pct });
         } else if (elapsed < 1300) {
           const pct = Math.round(15 + ((elapsed - 800) / 500) * 20);
           setRunProgress({ phase: "Matching records...", pct });
@@ -318,7 +320,7 @@ export default function RoutingRulesPage() {
         }
       }, 50);
     },
-    [cleanupProgress, qc]
+    [cleanupProgress, qc, crmLabel]
   );
 
   const cancelBulkRun = useCallback(async () => {
@@ -818,7 +820,7 @@ export default function RoutingRulesPage() {
                     const bulkPhase = bs?.phase || "routing";
                     const phase = isBulk && bs
                       ? bulkPhase === "writing"
-                        ? `Writing to Salesforce... ${routed.toLocaleString()} routed${bs.writePending ? `, ${bs.writePending.toLocaleString()} pending` : ""}${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""}`
+                        ? `Writing to ${crmLabel}... ${routed.toLocaleString()} routed${bs.writePending ? `, ${bs.writePending.toLocaleString()} pending` : ""}${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""}`
                         : `Processing ${processed.toLocaleString()} of ${found.toLocaleString()} records (${routed.toLocaleString()} routed${failed > 0 ? `, ${failed.toLocaleString()} failed` : ""})`
                       : runProgress.phase;
 

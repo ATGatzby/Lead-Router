@@ -1,6 +1,7 @@
 "use client"
 
 import { Zap, Search, Filter, UserCheck, AlertTriangle, SearchIcon, Pencil, ClipboardList, GitBranch } from "lucide-react"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ interface StepRegistryProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function StepRegistry({ activeTypes, onAddStep }: StepRegistryProps) {
+  const { crmLabel } = useCrmType()
   return (
     <div className="w-[220px] flex-shrink-0 border-l bg-white dark:bg-gray-950 flex flex-col">
       {/* Panel header */}
@@ -134,7 +136,7 @@ export function StepRegistry({ activeTypes, onAddStep }: StepRegistryProps) {
           )
         })()}
 
-        {/* Search Salesforce Trigger — singleton */}
+        {/* Search CRM Trigger — singleton */}
         {(() => {
           const isAdded = activeTypes.includes("searchTrigger")
           return (
@@ -159,7 +161,7 @@ export function StepRegistry({ activeTypes, onAddStep }: StepRegistryProps) {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium leading-tight">
-                    Search Salesforce
+                    {`Search ${crmLabel}`}
                     {isAdded && (
                       <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
                         (added)

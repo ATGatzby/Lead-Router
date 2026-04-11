@@ -5,18 +5,21 @@ import Link from "next/link";
 
 async function getOnboardingProgress(orgId: string) {
   const [org, licensedUsers, teams, activeRules] = await Promise.all([
-    prisma.organization.findUnique({ where: { id: orgId }, select: { onboardingDone: true, sfdcOrgId: true } }),
+    prisma.organization.findUnique({ where: { id: orgId }, select: { onboardingDone: true, sfdcOrgId: true, hubspotPortalId: true, crmType: true } }),
     prisma.user.count({ where: { orgId, isLicensed: true } }),
     prisma.roundRobinTeam.count({ where: { orgId } }),
     prisma.routingRule.count({ where: { orgId, status: "ACTIVE" } }),
   ]);
 
+  const isHubSpot = org?.crmType === "HUBSPOT";
   return {
-    connected: org?.sfdcOrgId != null,
+    connected: isHubSpot ? org.hubspotPortalId != null : org?.sfdcOrgId != null,
     hasLicensedUsers: licensedUsers > 0,
     hasTeams: teams > 0,
     hasRules: activeRules > 0,
     onboardingDone: org?.onboardingDone ?? false,
+    crmLabel: isHubSpot ? "HubSpot" : "Salesforce",
+    connectHref: isHubSpot ? "/api/auth/hubspot/login" : "/api/auth/sfdc/login",
   };
 }
 
@@ -26,9 +29,9 @@ export default async function DashboardPage() {
 
   const steps = [
     {
-      label: "Connect Salesforce org",
+      label: `Connect ${progress.crmLabel}`,
       done: progress.connected,
-      href: "/api/auth/sfdc/login",
+      href: progress.connectHref,
     },
     {
       label: "License your first user",

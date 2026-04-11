@@ -7,6 +7,7 @@ import type { EnglishSection, RouteWarning } from "@/lib/route-to-english"
 import type { RouteBuilderState } from "./types"
 import { EnglishSectionCard } from "./EnglishSectionCard"
 import { PathDetailPanel } from "./PathDetailPanel"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 
 interface EnglishViewProps {
   state: RouteBuilderState
@@ -14,7 +15,8 @@ interface EnglishViewProps {
 }
 
 export function EnglishView({ state, onEditInCanvas }: EnglishViewProps) {
-  const review = useMemo(() => routeToEnglish(state), [state])
+  const { crmLabel } = useCrmType()
+  const review = useMemo(() => routeToEnglish(state, crmLabel), [state, crmLabel])
 
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)

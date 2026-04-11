@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,6 +174,7 @@ function formatRelativeTime(dateStr: string | null): string {
 
 export default function LicenseUsersPage() {
   const queryClient = useQueryClient();
+  const { crmLabel, isHubSpot, supportsQueues } = useCrmType();
 
   // ── Tab state ──
   const [activeTab, setActiveTab] = useState<ActiveTab>("users");
@@ -289,9 +291,9 @@ export default function LicenseUsersPage() {
     },
     onSuccess: () => {
       invalidateAll();
-      toast.success("Users synced from Salesforce");
+      toast.success(`Users synced from ${crmLabel}`);
     },
-    onError: () => toast.error("Failed to sync users from Salesforce"),
+    onError: () => toast.error(`Failed to sync users from ${crmLabel}`),
   });
 
   const syncQueuesM = useMutation({
@@ -302,9 +304,9 @@ export default function LicenseUsersPage() {
     },
     onSuccess: () => {
       invalidateAll();
-      toast.success("Queues synced from Salesforce");
+      toast.success(`Queues synced from ${crmLabel}`);
     },
-    onError: () => toast.error("Failed to sync queues from Salesforce"),
+    onError: () => toast.error(`Failed to sync queues from ${crmLabel}`),
   });
 
   const syncUserFields = useMutation({
@@ -316,7 +318,7 @@ export default function LicenseUsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-custom-fields"] });
     },
-    onError: () => toast.error("Failed to sync User fields from Salesforce"),
+    onError: () => toast.error(`Failed to sync User fields from ${crmLabel}`),
   });
 
 
@@ -883,7 +885,7 @@ export default function LicenseUsersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight font-display">License Users</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose how to license Salesforce users for routing.
+            Choose how to license {crmLabel} users for routing.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -891,12 +893,12 @@ export default function LicenseUsersPage() {
             variant="outline"
             size="sm"
             disabled={syncUsers.isPending || syncQueuesM.isPending || syncUserFields.isPending}
-            onMouseDown={() => { syncUsers.mutate(); syncQueuesM.mutate(); syncUserFields.mutate(); }}
+            onMouseDown={() => { syncUsers.mutate(); if (supportsQueues) syncQueuesM.mutate(); syncUserFields.mutate(); }}
           >
             {syncUsers.isPending ? (
               <><Plug className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Syncing...</>
             ) : (
-              <><Plug className="h-3.5 w-3.5 mr-1.5" /> Sync from Salesforce</>
+              <><Plug className="h-3.5 w-3.5 mr-1.5" /> Sync from {crmLabel}</>
             )}
           </Button>
           <Button
@@ -911,7 +913,7 @@ export default function LicenseUsersPage() {
           </Button>
           <Badge variant="outline" className="gap-1.5 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-800">
             <Zap className="h-3 w-3" />
-            Salesforce Connected
+            {crmLabel} Connected
           </Badge>
           <div
             className={cn(
@@ -1584,7 +1586,7 @@ export default function LicenseUsersPage() {
 
               {[
                 { color: "border-blue-500 dark:border-blue-400 after:bg-blue-500 dark:after:bg-blue-400", text: "Licensing rules updated", time: "Recently" },
-                { color: "border-green-500 dark:border-green-400 after:bg-green-500 dark:after:bg-green-400", text: "Users synced from Salesforce", time: "Earlier today" },
+                { color: "border-green-500 dark:border-green-400 after:bg-green-500 dark:after:bg-green-400", text: `Users synced from ${crmLabel}`, time: "Earlier today" },
                 { color: "border-amber-500 dark:border-amber-400 after:bg-amber-500 dark:after:bg-amber-400", text: "Seat allocation reviewed", time: "This week" },
               ].map((item, i) => (
                 <div key={i} className="relative pb-5 last:pb-0">

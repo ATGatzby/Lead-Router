@@ -129,41 +129,10 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   const engineWebhookSecret = generateSecret(32)
   const internalApiKey = generateSecret(32)
 
-  // ── HubSpot credentials (only when crmType is 'hubspot') ──────────────────
-  let hubspotAppId: string | undefined
-  let hubspotClientId: string | undefined
-  let hubspotClientSecret: string | undefined
-
-  if (crmType === 'hubspot') {
-    note(
-      'Create a HubSpot app at https://developers.hubspot.com/\n' +
-        'You will need the App ID, Client ID, and Client Secret.',
-      'HubSpot Credentials'
-    )
-
-    const rawAppId = await text({
-      message: 'HubSpot App ID',
-      placeholder: '123456',
-      validate: (v) => (!v?.trim() ? 'Required' : undefined),
-    })
-    if (isCancel(rawAppId)) bail(rawAppId)
-    hubspotAppId = (rawAppId as string).trim()
-
-    const rawClientId = await text({
-      message: 'HubSpot Client ID',
-      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-      validate: (v) => (!v?.trim() ? 'Required' : undefined),
-    })
-    if (isCancel(rawClientId)) bail(rawClientId)
-    hubspotClientId = (rawClientId as string).trim()
-
-    const rawClientSecret = await password({
-      message: 'HubSpot Client Secret',
-      validate: (v) => (!v?.trim() ? 'Required' : undefined),
-    })
-    if (isCancel(rawClientSecret)) bail(rawClientSecret)
-    hubspotClientSecret = (rawClientSecret as string).trim()
-  }
+  // HubSpot credentials are configured post-install via web app Integrations page
+  const hubspotAppId: string | undefined = undefined
+  const hubspotClientId: string | undefined = undefined
+  const hubspotClientSecret: string | undefined = undefined
 
   return {
     appUrl: (appUrl as string).trim().replace(/\/+$/, ''),

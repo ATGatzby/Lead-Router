@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -41,6 +42,7 @@ export function AssigneeSelect({
   onTypeChange,
   onAssigneeChange,
 }: Props) {
+  const { crmLabel, supportsQueues } = useCrmType();
   const usersQuery = useQuery<{ users: User[] }>({
     queryKey: ["users-licensed"],
     queryFn: async () => {
@@ -82,7 +84,9 @@ export function AssigneeSelect({
           <SelectContent>
             <SelectItem value="USER">Individual user</SelectItem>
             <SelectItem value="ROUND_ROBIN">Round robin team</SelectItem>
-            <SelectItem value="QUEUE">Salesforce queue</SelectItem>
+            {supportsQueues && (
+              <SelectItem value="QUEUE">{crmLabel} queue</SelectItem>
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -135,7 +139,7 @@ export function AssigneeSelect({
 
       {assignmentType === "QUEUE" && (
         <div className="space-y-1.5">
-          <Label>Salesforce queue</Label>
+          <Label>{crmLabel} queue</Label>
           <Select value={assigneeId} onValueChange={onAssigneeChange}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a queue…" />

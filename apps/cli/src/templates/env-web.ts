@@ -64,9 +64,9 @@ export function renderEnvWeb(c: WebEnvConfig): string {
       ? [
           ``,
           `# HubSpot`,
-          `HUBSPOT_CLIENT_ID=${c.hubspotClientId ?? ''}`,
-          `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? ''}`,
-          `HUBSPOT_APP_ID=${c.hubspotAppId ?? ''}`,
+          `HUBSPOT_CLIENT_ID=${c.hubspotClientId ?? 'c53f3d1c-ff03-4db7-875a-1ebe7b0f98cc'}`,
+          `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? 'f95949ac-6464-40d3-bdaa-893c48749951'}`,
+          `HUBSPOT_APP_ID=${c.hubspotAppId ?? '35016223'}`,
           `HUBSPOT_REDIRECT_URI=${c.appUrl}/api/auth/hubspot/callback`,
         ]
       : []),
