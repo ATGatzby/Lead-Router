@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest) {
       prisma.user.count({ where: { orgId, isLicensed: true } }),
       prisma.organization.findUnique({
         where: { id: orgId },
-        select: { licenseKey: true, licenseTier: true, licenseValidUntil: true, licenseActivatedAt: true, aiProvider: true, aiApiKey: true },
+        select: { licenseKey: true, licenseTier: true, licenseValidUntil: true, licenseActivatedAt: true, aiProvider: true, aiApiKey: true, crmType: true },
       }),
     ]);
 
@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest) {
       validUntil: org?.licenseValidUntil?.toISOString() ?? null,
       hasAiKey: !!org?.aiApiKey,
       aiProvider: org?.aiProvider ?? null,
+      crmType: org?.crmType ?? null,
     });
   } catch (err) {
     console.error("GET /api/license error:", err);

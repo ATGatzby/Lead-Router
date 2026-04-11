@@ -222,7 +222,7 @@ function frequencyLabel(freq: ScheduleFrequency | null): string {
   }
 }
 
-function buildSearchTriggerSection(config: SearchTriggerConfig): EnglishSection {
+function buildSearchTriggerSection(config: SearchTriggerConfig, crmLabel = "Salesforce"): EnglishSection {
   const obj = objectLabel(config.objectType);
   const lines: string[] = [];
 
@@ -230,10 +230,10 @@ function buildSearchTriggerSection(config: SearchTriggerConfig): EnglishSection 
   const freq = frequencyLabel(config.frequency);
   if (config.frequency) {
     lines.push(
-      `Search Salesforce for ${obj}s ${freq} at ${config.scheduleTime} ${config.scheduleTimezone}`
+      `Search ${crmLabel} for ${obj}s ${freq} at ${config.scheduleTime} ${config.scheduleTimezone}`
     );
   } else {
-    lines.push(`Search Salesforce for ${obj}s (one-time / manual run)`);
+    lines.push(`Search ${crmLabel} for ${obj}s (one-time / manual run)`);
   }
 
   // Search criteria
@@ -632,7 +632,7 @@ function detectWarnings(
 // Main export
 // ---------------------------------------------------------------------------
 
-export function routeToEnglish(state: RouteBuilderState): EnglishReview {
+export function routeToEnglish(state: RouteBuilderState, crmLabel = "Salesforce"): EnglishReview {
   const sections: EnglishSection[] = [];
 
   // Trigger section — real-time or search trigger
@@ -640,7 +640,7 @@ export function routeToEnglish(state: RouteBuilderState): EnglishReview {
     sections.push(buildTriggerSection(state));
   }
   if (state.searchTrigger) {
-    sections.push(buildSearchTriggerSection(state.searchTrigger));
+    sections.push(buildSearchTriggerSection(state.searchTrigger, crmLabel));
   }
 
   // Match section — only if configured

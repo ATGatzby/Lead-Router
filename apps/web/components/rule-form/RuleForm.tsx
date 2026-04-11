@@ -17,6 +17,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ConditionBuilder, type RuleConditions, type FieldSchema } from "@/components/condition-builder";
 import { AssigneeSelect } from "./AssigneeSelect";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 import { cn } from "@/lib/utils";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ interface TestRuleResult {
 }
 
 function TestRulePanel({ ruleId }: { ruleId: string }) {
+  const { crmLabel } = useCrmType();
   const [jsonInput, setJsonInput] = useState(
     '{\n  "LeadSource": "Web",\n  "AnnualRevenue": 150000\n}'
   );
@@ -119,7 +121,7 @@ function TestRulePanel({ ruleId }: { ruleId: string }) {
         <FlaskConical className="h-4 w-4 text-muted-foreground" />
         <h3 className="font-medium text-sm">Test Rule</h3>
         <span className="text-xs text-muted-foreground ml-1">
-          Paste a sample record to see if this rule would match. No changes are made to Salesforce.
+          Paste a sample record to see if this rule would match. No changes are made to {crmLabel}.
         </span>
       </div>
 
@@ -222,6 +224,7 @@ export function RuleForm({
   ruleId,
 }: Props) {
   const router = useRouter();
+  const { crmLabel } = useCrmType();
 
   const [name, setName] = useState(defaultValues.name);
   const [objectType, setObjectType] = useState<ObjectType>(defaultValues.objectType);
@@ -353,7 +356,7 @@ export function RuleForm({
                 Dry run mode
               </Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Evaluate rule and log result without making assignments in Salesforce.
+                Evaluate rule and log result without making assignments in {crmLabel}.
               </p>
             </div>
           </div>

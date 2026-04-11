@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 import {
   Sheet,
   SheetContent,
@@ -43,6 +44,7 @@ export function CreateTaskConfigSheet({
   config,
   onSave,
 }: Props) {
+  const { crmLabel } = useCrmType()
   const [localConfig, setLocalConfig] = useState<TaskConfig>(config)
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -67,7 +69,7 @@ export function CreateTaskConfigSheet({
         <SheetHeader>
           <SheetTitle>Create Task</SheetTitle>
           <SheetDescription>
-            Create a follow-up task in Salesforce when a record is routed to this
+            Create a follow-up task in {crmLabel} when a record is routed to this
             path.
           </SheetDescription>
         </SheetHeader>

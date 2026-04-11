@@ -9,17 +9,21 @@ WORKDIR /app
 # Copy monorepo manifests first (layer-cache friendly)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
 COPY apps/engine/package.json ./apps/engine/
-COPY packages/db/package.json     ./packages/db/
-COPY packages/sfdc/package.json   ./packages/sfdc/
+COPY packages/db/package.json         ./packages/db/
+COPY packages/sfdc/package.json       ./packages/sfdc/
+COPY packages/hubspot/package.json    ./packages/hubspot/
+COPY packages/crm-adapter/package.json ./packages/crm-adapter/
 
 # Install all deps (including devDeps — needed for tsc, tsup, prisma)
 # --shamefully-hoist flattens node_modules so files can be COPY'd cleanly
 RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Copy full source after deps are cached
-COPY apps/engine/   ./apps/engine/
-COPY packages/db/   ./packages/db/
-COPY packages/sfdc/ ./packages/sfdc/
+COPY apps/engine/       ./apps/engine/
+COPY packages/db/       ./packages/db/
+COPY packages/sfdc/     ./packages/sfdc/
+COPY packages/hubspot/  ./packages/hubspot/
+COPY packages/crm-adapter/ ./packages/crm-adapter/
 
 # Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
 # Run from /app so the output lands in /app/node_modules, not packages/db/node_modules
@@ -40,9 +44,11 @@ ENV NODE_ENV=production
 
 # Copy manifests to install production deps (fastify, bullmq, ioredis, etc.)
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
-COPY apps/engine/package.json  ./apps/engine/
-COPY packages/db/package.json  ./packages/db/
-COPY packages/sfdc/package.json ./packages/sfdc/
+COPY apps/engine/package.json      ./apps/engine/
+COPY packages/db/package.json      ./packages/db/
+COPY packages/sfdc/package.json    ./packages/sfdc/
+COPY packages/hubspot/package.json ./packages/hubspot/
+COPY packages/crm-adapter/package.json ./packages/crm-adapter/
 RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 
 # Bundled engine (workspace packages inlined by tsup)

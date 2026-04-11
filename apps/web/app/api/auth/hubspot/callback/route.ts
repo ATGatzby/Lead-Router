@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   exchangeCodeForTokens,
   getTokenInfo,
+  syncHubSpotFields,
 } from "@lead-routing/hubspot";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
@@ -74,6 +75,13 @@ export async function GET(req: NextRequest) {
         oauthRefreshToken: tokens.refresh_token,
       },
     });
+
+    // Auto-sync HubSpot fields so the user can immediately create conditions
+    try {
+      await syncHubSpotFields(tokens.access_token, session.orgId, prisma);
+    } catch (syncErr) {
+      console.error("HubSpot field sync failed (non-blocking):", syncErr);
+    }
 
     const successRedirect = NextResponse.redirect(
       new URL("/integrations?connected=hubspot", appUrl)

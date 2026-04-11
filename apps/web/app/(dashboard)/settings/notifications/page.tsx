@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Webhook } from "lucide-react";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 
 const WA_TEMPLATE = `*Lead Assigned* 🎯
 Hello {{rep_name}},
@@ -15,7 +16,7 @@ A new *{{object_type}}* has been assigned to you.
 *Rule:* {{rule_name}}
 *Time:* {{timestamp}}
 
-Open in Salesforce: {{record_url}}`;
+Open in CRM: {{record_url}}`;
 
 async function fetchNotifications() {
   const res = await fetch("/api/settings/notifications");
@@ -37,6 +38,7 @@ async function saveNotifications(data: { webhookUrl: string }) {
 }
 
 export default function NotificationsSettingsPage() {
+  const { crmLabel } = useCrmType();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["settings-notifications"],
@@ -147,10 +149,10 @@ export default function NotificationsSettingsPage() {
           {[
             ["{{rep_name}}", "Assigned rep's full name"],
             ["{{object_type}}", "LEAD / CONTACT / ACCOUNT"],
-            ["{{record_id}}", "Salesforce record ID"],
+            ["{{record_id}}", `${crmLabel} record ID`],
             ["{{rule_name}}", "Matched routing rule name"],
             ["{{timestamp}}", "ISO 8601 event time"],
-            ["{{record_url}}", "Deep link to Salesforce record"],
+            ["{{record_url}}", `Deep link to ${crmLabel} record`],
           ].map(([v, desc]) => (
             <div key={v} className="flex gap-2 text-xs">
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono shrink-0">{v}</code>

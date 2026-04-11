@@ -6,7 +6,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Lead Router",
-  description: "Real-time lead routing for Salesforce",
+  description: "Real-time lead routing",
 };
 
 export default function RootLayout({

@@ -3,6 +3,7 @@
 import { UserCheck, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
 import type { PathAction } from "../types"
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onEdit: () => void
 }
 
-function assignmentLabel(action: PathAction): string {
+function assignmentLabel(action: PathAction, crmLabel: string): string {
   if (!action.assignmentType || !action.assigneeId) return "No assignee set"
   if (action.assigneeName) return action.assigneeName
   switch (action.assignmentType) {
@@ -19,7 +20,7 @@ function assignmentLabel(action: PathAction): string {
     case "ROUND_ROBIN":
       return "Round-robin team"
     case "QUEUE":
-      return "Salesforce queue"
+      return `${crmLabel} queue`
   }
 }
 
@@ -36,6 +37,7 @@ function assignmentTypeLabel(type: PathAction["assignmentType"]): string | null 
 }
 
 export function ActionStepCard({ action, onEdit }: Props) {
+  const { crmLabel } = useCrmType()
   const isConfigured = !!(action.assignmentType && action.assigneeId)
   const typeLabel = assignmentTypeLabel(action.assignmentType)
 
@@ -74,7 +76,7 @@ export function ActionStepCard({ action, onEdit }: Props) {
                 isConfigured ? "text-green-700 dark:text-green-300" : "text-green-400 dark:text-green-500 italic"
               )}
             >
-              {assignmentLabel(action)}
+              {assignmentLabel(action, crmLabel)}
             </span>
           </div>
         </div>

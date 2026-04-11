@@ -29,6 +29,8 @@ import type { ConditionGroup, FieldSchema } from "@/components/condition-builder
 import type { TriggerConfig, ObjectType, TriggerEvent } from "../types"
 import { objectTypeLabel } from "../types"
 import { AITriggerGenerator } from "./AITriggerGenerator"
+import { useCrmType } from "@/lib/hooks/use-crm-type"
+import { getObjectTypeLabel } from "@/lib/crm-helpers"
 
 interface FieldsResponse {
   fields: FieldSchema[]
@@ -51,6 +53,8 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
   const [triggerConditions, setTriggerConditions] = useState<ConditionGroup[]>(
     trigger.triggerConditions
   )
+
+  const { crmLabel, objectTypes } = useCrmType()
 
   // Fetch license tier to gate Contact/Account behind Pro
   const licenseQuery = useQuery({
@@ -112,7 +116,7 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
         <SheetHeader>
           <SheetTitle>Configure Trigger</SheetTitle>
           <SheetDescription>
-            Choose which Salesforce object and event fires this route.
+            {`Choose which ${crmLabel} object and event fires this route.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -150,13 +154,14 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="LEAD">Lead</SelectItem>
-                <SelectItem value="CONTACT" disabled={isFreeTier}>
-                  Contact {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
-                </SelectItem>
-                <SelectItem value="ACCOUNT" disabled={isFreeTier}>
-                  Account {isFreeTier && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
-                </SelectItem>
+                {objectTypes.map((ot, idx) => {
+                  const isGated = isFreeTier && idx > 0
+                  return (
+                    <SelectItem key={ot} value={ot} disabled={isGated}>
+                      {getObjectTypeLabel(ot)} {isGated && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -225,7 +230,7 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
               </Label>
             </div>
             <p className="text-xs text-muted-foreground ml-7">
-              Evaluate and log results without making assignments in Salesforce. Useful for testing.
+              {`Evaluate and log results without making assignments in ${crmLabel}. Useful for testing.`}
             </p>
           </div>
         </SheetBody>

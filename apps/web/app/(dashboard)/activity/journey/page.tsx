@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, ExternalLink, Copy, Check } from "lucide-react";
 import { JourneyTimeline } from "@/components/record-journey/JourneyTimeline";
+import { useCrmType } from "@/lib/hooks/use-crm-type";
 
 interface JourneyEntry {
   id: string;
@@ -23,6 +24,7 @@ interface JourneyEntry {
 }
 
 export default function RecordJourneyPage() {
+  const { crmLabel } = useCrmType();
   const [inputValue, setInputValue] = useState("");
   const [recordId, setRecordId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -62,7 +64,7 @@ export default function RecordJourneyPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Enter Salesforce Record ID (e.g. 00Q...)"
+            placeholder={`Enter ${crmLabel} Record ID (e.g. 00Q...)`}
             className="pl-9"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
@@ -116,7 +118,7 @@ export default function RecordJourneyPage() {
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
-                Open in Salesforce
+                Open in {crmLabel}
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>
@@ -145,7 +147,7 @@ export default function RecordJourneyPage() {
           <Search className="h-12 w-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium">Record Journey</p>
           <p className="text-sm mt-1">
-            Enter a Salesforce Record ID to see the complete routing decision
+            Enter a {crmLabel} Record ID to see the complete routing decision
             trail.
           </p>
         </div>

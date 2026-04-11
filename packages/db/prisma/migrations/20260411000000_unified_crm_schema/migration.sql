@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX "organizations_hubspotPortalId_key" ON "organizations"("hubs
 ALTER TABLE "users" RENAME COLUMN "sfdcUserId" TO "crmUserId";
 
 -- Update unique constraint on users
-DROP INDEX "users_orgId_sfdcUserId_key";
+DROP INDEX IF EXISTS "users_orgId_sfdcUserId_key";
 CREATE UNIQUE INDEX "users_orgId_crmUserId_key" ON "users"("orgId", "crmUserId");
 
 -- AlterTable routing_logs - Rename sfdcRecordId to crmRecordId and update objectType
@@ -41,14 +41,14 @@ ALTER TABLE "routing_logs" RENAME COLUMN "objectType_new" TO "objectType";
 ALTER TABLE "routing_logs" ALTER COLUMN "objectType" SET NOT NULL;
 
 -- Update routing_logs index
-DROP INDEX "routing_logs_orgId_sfdcRecordId_createdAt_idx";
+DROP INDEX IF EXISTS "routing_logs_orgId_sfdcRecordId_createdAt_idx";
 CREATE INDEX "routing_logs_orgId_crmRecordId_createdAt_idx" ON "routing_logs"("orgId", "crmRecordId", "createdAt");
 
 -- AlterTable conversion_tracking - Rename sfdcLeadId to crmRecordId
 ALTER TABLE "conversion_tracking" RENAME COLUMN "sfdcLeadId" TO "crmRecordId";
 
 -- Update conversion_tracking index
-DROP INDEX "conversion_tracking_orgId_sfdcLeadId_idx";
+DROP INDEX IF EXISTS "conversion_tracking_orgId_sfdcLeadId_idx";
 CREATE INDEX "conversion_tracking_orgId_crmRecordId_idx" ON "conversion_tracking"("orgId", "crmRecordId");
 
 -- AlterTable routing_rules - Migrate objectType to CrmObjectType
@@ -70,7 +70,7 @@ ALTER TABLE "field_schemas" RENAME COLUMN "objectType_new" TO "objectType";
 ALTER TABLE "field_schemas" ALTER COLUMN "objectType" SET NOT NULL;
 
 -- Update field_schemas unique constraint
-DROP INDEX "field_schemas_orgId_objectType_fieldApiName_key";
+DROP INDEX IF EXISTS "field_schemas_orgId_objectType_fieldApiName_key";
 CREATE UNIQUE INDEX "field_schemas_orgId_objectType_fieldApiName_key" ON "field_schemas"("orgId", "objectType", "fieldApiName");
 
 -- AlterTable routing_daily_aggregates - Migrate objectType to CrmObjectType
@@ -82,7 +82,7 @@ ALTER TABLE "routing_daily_aggregates" DROP COLUMN "objectType";
 ALTER TABLE "routing_daily_aggregates" RENAME COLUMN "objectType_new" TO "objectType";
 
 -- Update routing_daily_aggregates unique constraint
-DROP INDEX "routing_daily_aggregates_orgId_date_ruleId_pathLabel_branchId_key";
+DROP INDEX IF EXISTS "routing_daily_aggregates_orgId_date_ruleId_pathLabel_branchId_key";
 CREATE UNIQUE INDEX "routing_daily_aggregates_orgId_date_ruleId_pathLabel_branchId_key" ON "routing_daily_aggregates"("orgId", "date", "ruleId", "pathLabel", "branchId", "teamId", "assigneeId", "objectType");
 
 -- AlterTable routing_flows - Migrate objectType to CrmObjectType
@@ -95,8 +95,12 @@ ALTER TABLE "routing_flows" RENAME COLUMN "objectType_new" TO "objectType";
 ALTER TABLE "routing_flows" ALTER COLUMN "objectType" SET NOT NULL;
 
 -- Update routing_flows unique constraint
-DROP INDEX "routing_flows_orgId_objectType_key";
+DROP INDEX IF EXISTS "routing_flows_orgId_objectType_key";
 CREATE UNIQUE INDEX "routing_flows_orgId_objectType_key" ON "routing_flows"("orgId", "objectType");
+
+-- Drop the function that depends on SfdcObjectType BEFORE dropping the type
+DROP FUNCTION IF EXISTS immutable_object_type_text("SfdcObjectType");
+DROP INDEX IF EXISTS routing_daily_aggregates_unique_dimensions;
 
 -- Now we can safely drop the old SfdcObjectType enum
 DROP TYPE "SfdcObjectType";
