@@ -37,7 +37,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Setup",
     items: [
       { href: "/integrations", label: "Integrations", icon: Plug },
-      { href: "/license-users", label: "License Users", icon: Users },
+      { href: "/license-users", label: "Users", icon: Users },
       { href: "/round-robins", label: "Teams", icon: GitFork },
     ],
   },

@@ -26,15 +26,15 @@ export async function GET(_req: NextRequest) {
     const items = isHubSpot
       ? [
           { id: "connect", label: "Connect HubSpot", href: "/integrations", done: connected },
-          { id: "license", label: "License Users", href: "/license-users", done: licenseCount > 0 },
-          { id: "rule", label: "Create Routing Rule", href: "/routing-rules", done: activeRuleCount > 0 },
+          { id: "license", label: "Users", href: "/license-users", done: licenseCount > 0 },
+          { id: "rule", label: "Create Route Workflow", href: "/routing-rules", done: activeRuleCount > 0 },
         ]
       : [
           { id: "connect", label: "Connect CRM", href: "/integrations", done: connected },
           { id: "deploy", label: "Deploy Package", href: "/integrations/salesforce", done: org?.packageDeployedAt != null },
           { id: "sync", label: "Sync Fields", href: "/integrations/salesforce", done: fieldCount > 0 },
-          { id: "license", label: "License Users", href: "/license-users", done: licenseCount > 0 },
-          { id: "rule", label: "Create Routing Rule", href: "/routing-rules", done: activeRuleCount > 0 },
+          { id: "license", label: "Users", href: "/license-users", done: licenseCount > 0 },
+          { id: "rule", label: "Create Route Workflow", href: "/routing-rules", done: activeRuleCount > 0 },
         ];
 
     const completedCount = items.filter((i) => i.done).length;

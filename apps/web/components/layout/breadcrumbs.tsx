@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 const SEGMENT_LABELS: Record<string, string> = {
   "routing-rules": "Route Workflows",
   "round-robins": "Teams",
-  "license-users": "License Users",
+  "license-users": "Users",
   integrations: "Integrations",
   salesforce: "Salesforce",
   hubspot: "HubSpot",

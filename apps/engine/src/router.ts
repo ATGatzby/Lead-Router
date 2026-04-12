@@ -812,7 +812,7 @@ export async function routeRecord(payload: RoutingPayload, startMs?: number): Pr
     orgId, date: new Date(), ruleId: null, pathLabel: null, branchId: null,
     teamId: null, assigneeId: null, objectType, status: "UNMATCHED",
     durationMs: startMs ? Date.now() - startMs : null,
-  }).catch(() => {});
+  }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
   return "unmatched";
 }
 
@@ -888,7 +888,7 @@ async function routeNewStyle(
                   orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
                   teamId: null, assigneeId: null, objectType, status: "FAILED",
                   durationMs: startMs ? Date.now() - startMs : null,
-                }).catch(() => {});
+                }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
                 return "unmatched";
               }
             }
@@ -904,7 +904,7 @@ async function routeNewStyle(
               orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
               teamId: null, assigneeId: null, objectType, status: "MERGED",
               durationMs: startMs ? Date.now() - startMs : null,
-            }).catch(() => {});
+            }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             return "merged";
           }
 
@@ -934,13 +934,13 @@ async function routeNewStyle(
               orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
               teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
               durationMs: startMs ? Date.now() - startMs : null,
-            }).catch(() => {});
+            }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             if (objectType === "LEAD") {
               createConversionTracking({
                 orgId, routingLogId: leadOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Lead Owner",
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             }
             return "routed";
           }
@@ -977,13 +977,13 @@ async function routeNewStyle(
                 orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
                 teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
                 durationMs: startMs ? Date.now() - startMs : null,
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               if (objectType === "LEAD") {
                 createConversionTracking({
                   orgId, routingLogId: leadCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-                }).catch(() => {});
+                }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               }
               return "routed";
             }
@@ -1018,13 +1018,13 @@ async function routeNewStyle(
               orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
               teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
               durationMs: startMs ? Date.now() - startMs : null,
-            }).catch(() => {});
+            }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             if (objectType === "LEAD") {
               createConversionTracking({
                 orgId, routingLogId: contactOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Contact Owner",
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             }
             return "routed";
           }
@@ -1061,13 +1061,13 @@ async function routeNewStyle(
                 orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
                 teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
                 durationMs: startMs ? Date.now() - startMs : null,
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               if (objectType === "LEAD") {
                 createConversionTracking({
                   orgId, routingLogId: contactCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-                }).catch(() => {});
+                }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               }
               return "routed";
             }
@@ -1103,13 +1103,13 @@ async function routeNewStyle(
               orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
               teamId: null, assigneeId: matchResult.ownerId, objectType, status: "SUCCESS",
               durationMs: startMs ? Date.now() - startMs : null,
-            }).catch(() => {});
+            }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             if (objectType === "LEAD") {
               createConversionTracking({
                 orgId, routingLogId: accountOwnerLog.id, crmRecordId: recordId,
                 ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                 teamId: null, assigneeId: matchResult.ownerId, assigneeName: "Matched Account Owner",
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
             }
             return "routed";
           }
@@ -1146,13 +1146,13 @@ async function routeNewStyle(
                 orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
                 teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
                 durationMs: startMs ? Date.now() - startMs : null,
-              }).catch(() => {});
+              }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               if (objectType === "LEAD") {
                 createConversionTracking({
                   orgId, routingLogId: accountCustomLog.id, crmRecordId: recordId,
                   ruleId: rule.id, ruleName: rule.name, pathLabel: null,
                   teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-                }).catch(() => {});
+                }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
               }
               return "routed";
             }
@@ -1289,13 +1289,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         return "dry_run";
       }
@@ -1307,13 +1307,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         return "routed";
       }
@@ -1326,13 +1326,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: branchLabel, branchId: branch.id,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: branchLabel,
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         fireWebhook(orgId, {
           event: `${objectType}_ROUTED`,
@@ -1389,13 +1389,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         return "dry_run";
       }
@@ -1407,13 +1407,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         return "routed";
       }
@@ -1426,13 +1426,13 @@ async function routeNewStyle(
           orgId, date: new Date(), ruleId: rule.id, pathLabel: "Default Owner", branchId: null,
           teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
           durationMs: startMs ? Date.now() - startMs : null,
-        }).catch(() => {});
+        }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         if (objectType === "LEAD") {
           createConversionTracking({
             orgId, routingLogId: log.id, crmRecordId: recordId,
             ruleId: rule.id, ruleName: rule.name, pathLabel: "Default Owner",
             teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-          }).catch(() => {});
+          }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
         }
         return "routed";
       } catch (err) {
@@ -1460,7 +1460,7 @@ async function routeNewStyle(
     orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
     teamId: null, assigneeId: null, objectType, status: "UNMATCHED",
     durationMs: startMs ? Date.now() - startMs : null,
-  }).catch(() => {});
+  }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
   return "unmatched";
 }
 
@@ -1500,7 +1500,7 @@ async function routeLegacy(
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
       teamId: null, assigneeId: null, objectType, status: "FAILED",
       durationMs: startMs ? Date.now() - startMs : null,
-    }).catch(() => {});
+    }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     return "unmatched";
   }
 
@@ -1523,13 +1523,13 @@ async function routeLegacy(
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
       teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
       durationMs: startMs ? Date.now() - startMs : null,
-    }).catch(() => {});
+    }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     if (objectType === "LEAD") {
       createConversionTracking({
         orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-      }).catch(() => {});
+      }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     }
     return "dry_run";
   }
@@ -1541,13 +1541,13 @@ async function routeLegacy(
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
       teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
       durationMs: startMs ? Date.now() - startMs : null,
-    }).catch(() => {});
+    }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     if (objectType === "LEAD") {
       createConversionTracking({
         orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-      }).catch(() => {});
+      }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     }
     return "routed";
   }
@@ -1560,13 +1560,13 @@ async function routeLegacy(
       orgId, date: new Date(), ruleId: rule.id, pathLabel: null, branchId: null,
       teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, objectType, status: "SUCCESS",
       durationMs: startMs ? Date.now() - startMs : null,
-    }).catch(() => {});
+    }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     if (objectType === "LEAD") {
       createConversionTracking({
         orgId, routingLogId: log.id, crmRecordId: recordId,
         ruleId: rule.id, ruleName: rule.name, pathLabel: null,
         teamId: assignee.teamId ?? null, assigneeId: assignee.sfdcOwnerId, assigneeName: assignee.assigneeName,
-      }).catch(() => {});
+      }).catch((err) => { console.error("[router] background task failed:", err?.message ?? err); });
     }
     fireWebhook(orgId, {
       event: `${objectType}_ROUTED`,

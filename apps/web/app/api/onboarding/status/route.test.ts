@@ -49,8 +49,8 @@ describe("GET /api/onboarding/status", () => {
       { id: "connect", label: "Connect CRM", href: "/integrations", done: true },
       { id: "deploy", label: "Deploy Package", href: "/integrations/salesforce", done: true },
       { id: "sync", label: "Sync Fields", href: "/integrations/salesforce", done: true },
-      { id: "license", label: "License Users", href: "/license-users", done: true },
-      { id: "rule", label: "Create Routing Rule", href: "/routing-rules", done: true },
+      { id: "license", label: "Users", href: "/license-users", done: true },
+      { id: "rule", label: "Create Route Workflow", href: "/routing-rules", done: true },
     ]);
   });
 
