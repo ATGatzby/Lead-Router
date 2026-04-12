@@ -41,6 +41,7 @@ export function renderEnvEngine(c: EngineEnvConfig): string {
       ? [
           ``,
           `# HubSpot`,
+          `HUBSPOT_CLIENT_ID=${c.hubspotClientId ?? ''}`,
           `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? ''}`,
         ]
       : []),

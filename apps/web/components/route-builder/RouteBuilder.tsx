@@ -369,9 +369,16 @@ function nodeSubtitle(node: CanvasNode, state: RouteBuilderState): string {
     case "updateField": {
       if (node.pathId && node.stepIndex !== undefined) {
         const path = node.pathId ? findPathById(state.paths, node.pathId) : null
-        const step = path?.steps?.[node.stepIndex]
-        if (step?.type === "updateField" && step.fieldApiName) {
-          return `${step.fieldApiName} = ${step.fieldValue || "…"}`
+        const step = path?.steps?.[node.stepIndex] as any
+        if (step?.type === "updateField") {
+          // New format: fieldUpdates array
+          if (step.fieldUpdates?.length > 0) {
+            const count = step.fieldUpdates.length
+            const first = step.fieldUpdates[0].fieldLabel || step.fieldUpdates[0].fieldApiName
+            return count === 1 ? first : `${count} fields`
+          }
+          // Legacy format
+          if (step.fieldApiName) return `${step.fieldApiName} = ${step.fieldValue || "…"}`
         }
       }
       return "Not configured"
@@ -814,7 +821,7 @@ export function RouteBuilder({
       case "filter":
         return { type: "filter", conditions: [] }
       case "updateField":
-        return { type: "updateField", fieldApiName: "", fieldValue: "" }
+        return { type: "updateField", fieldUpdates: [] }
       case "createTask":
         return {
           type: "createTask",
@@ -2167,18 +2174,21 @@ export function RouteBuilder({
         key={activeSheet?.type === "updateField" ? `uf-${activeSheet.pathId}-${activeSheet.stepIndex}` : "uf-closed"}
         open={activeSheet?.type === "updateField"}
         onOpenChange={(open) => !open && closeSheet()}
-        fieldApiName={
+        objectType={resolveObjectType(state)}
+        fieldUpdates={
           activeSheet?.type === "updateField"
-            ? ((findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldApiName: string } | undefined)?.fieldApiName ?? "")
-            : ""
+            ? (() => {
+                const step = findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as any
+                if (!step || step.type !== "updateField") return []
+                // Handle new format (fieldUpdates array)
+                if (step.fieldUpdates) return step.fieldUpdates
+                // Backward compat: convert legacy single-field format
+                if (step.fieldApiName) return [{ fieldApiName: step.fieldApiName, fieldLabel: step.fieldApiName, fieldType: "TEXT", fieldValue: step.fieldValue ?? "" }]
+                return []
+              })()
+            : []
         }
-        fieldValue={
-          activeSheet?.type === "updateField"
-            ? ((findPathById(state.paths, activeSheet.pathId)?.steps?.[activeSheet.stepIndex] as { type: "updateField"; fieldValue: string } | undefined)?.fieldValue ?? "")
-            : ""
-        }
-        fields={[]}
-        onSave={(fieldApiName: string, fieldValue: string) => {
+        onSave={(fieldUpdates) => {
           if (activeSheet?.type !== "updateField") return
           const { pathId, stepIndex } = activeSheet
           setState((s) => ({
@@ -2186,7 +2196,7 @@ export function RouteBuilder({
             paths: updatePathById(s.paths, pathId, (p) => {
               if (!p.steps) return p
               const newSteps = [...p.steps]
-              newSteps[stepIndex] = { type: "updateField", fieldApiName, fieldValue }
+              newSteps[stepIndex] = { type: "updateField", fieldUpdates }
               return { ...p, steps: newSteps }
             }),
           }))

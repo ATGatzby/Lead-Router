@@ -167,9 +167,10 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
   // Records are enqueued to BullMQ for parallel processing by workers.
 
   interface BatchBody {
-    sfdcOrgId: string;
-    objectType: "LEAD" | "CONTACT" | "ACCOUNT";
-    eventType: "INSERT" | "UPDATE" | "BOTH";
+    sfdcOrgId?: string;
+    hubspotPortalId?: string;
+    objectType: "LEAD" | "CONTACT" | "ACCOUNT" | "COMPANY" | "DEAL";
+    eventType: "INSERT" | "UPDATE" | "BOTH" | "SEARCH";
     timestamp: string;
     records: Array<{ recordId: string; fields: Record<string, unknown> }>;
   }
@@ -184,20 +185,20 @@ export async function routePlugin(app: FastifyInstance): Promise<void> {
     }
     const body = parsed.data;
 
-    const { sfdcOrgId, objectType, eventType, timestamp, records, ruleId } = body as typeof body & { ruleId?: string };
+    const { sfdcOrgId, hubspotPortalId, objectType, eventType, timestamp, records, ruleId } = body as typeof body & { ruleId?: string; hubspotPortalId?: string };
 
     // ── 2. Org lookup + HMAC (once for entire batch) ────────────────────
-    const org = await prisma.organization.findUnique({
-      where: { sfdcOrgId },
-      select: {
-        id: true,
-        webhookSecret: true,
-        plan: true,
-        isActive: true,
-        routingQuotaUsed: true,
-        quotaResetAt: true,
-      },
-    });
+    const org = sfdcOrgId
+      ? await prisma.organization.findUnique({
+          where: { sfdcOrgId },
+          select: { id: true, webhookSecret: true, plan: true, isActive: true, routingQuotaUsed: true, quotaResetAt: true },
+        })
+      : hubspotPortalId
+        ? await prisma.organization.findUnique({
+            where: { hubspotPortalId },
+            select: { id: true, webhookSecret: true, plan: true, isActive: true, routingQuotaUsed: true, quotaResetAt: true },
+          })
+        : null;
 
     if (!org) {
       return reply.status(401).send({ error: "Unknown org" });

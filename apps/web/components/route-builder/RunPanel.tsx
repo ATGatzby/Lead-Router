@@ -30,6 +30,7 @@ interface RunHistoryEntry {
 
 interface RunApiResponse {
   success: boolean
+  async?: boolean
   recordsFound: number
   recordsRouted: number
   recordsDuplicate?: number
@@ -194,10 +195,42 @@ export function RunPanel({
 
     const { recordsFound, recordsRouted, durationMs } = result
 
+    // Async run (HubSpot) — engine processes in background
+    if (result.async) {
+      updateStep("query", {
+        status: "done",
+        detail: "Route delegated to engine",
+        duration: formatDurationMs(durationMs),
+      })
+      setRunningStep(null)
+      await new Promise((r) => setTimeout(r, 200))
+
+      // Animate remaining steps as "processing in background"
+      const currentSteps = buildSteps(routeSteps, crmLabel)
+      for (const s of currentSteps) {
+        if (s.id !== "query") {
+          updateStep(s.id, { status: "done", detail: "Processing in background", duration: "—" })
+        }
+      }
+      setProgress(100)
+      setRunResult({
+        ...result,
+        recordsFound: 0,
+        message: result.message ?? "Route started — records are being processed in the background",
+      })
+      if (elapsedRef.current) {
+        clearInterval(elapsedRef.current)
+        elapsedRef.current = null
+      }
+      setIsRunning(false)
+      setIsComplete(true)
+      return
+    }
+
     // Query done
     updateStep("query", {
       status: "done",
-      detail: `${recordsFound} records found via SOQL query`,
+      detail: `${recordsFound} records found`,
       duration: formatDurationMs(Math.min(durationMs, 2000)),
     })
     setRunningStep(null)
@@ -497,18 +530,29 @@ export function RunPanel({
                 "text-sm font-bold",
                 runResult.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
               ].join(" ")}>
-                {runResult.success ? "Run Complete" : "Run Failed"}
+                {runResult.success
+                  ? (runResult.async ? "Run Started" : "Run Complete")
+                  : "Run Failed"}
               </span>
             </div>
             <div className="space-y-0.5">
-              <div className="flex justify-between text-xs py-0.5">
-                <span className="text-muted-foreground">Records found</span>
-                <span className="font-semibold">{runResult.recordsFound}</span>
-              </div>
-              <div className="flex justify-between text-xs py-0.5">
-                <span className="text-muted-foreground">Records routed</span>
-                <span className="font-semibold">{runResult.recordsRouted}</span>
-              </div>
+              {runResult.async && runResult.message && (
+                <p className="text-xs text-muted-foreground py-1">
+                  {runResult.message}
+                </p>
+              )}
+              {!runResult.async && (
+                <>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-muted-foreground">Records found</span>
+                    <span className="font-semibold">{runResult.recordsFound}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-muted-foreground">Records routed</span>
+                    <span className="font-semibold">{runResult.recordsRouted}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between text-xs py-0.5">
                 <span className="text-muted-foreground">Duration</span>
                 <span className="font-semibold">{formatDurationMs(runResult.durationMs)}</span>

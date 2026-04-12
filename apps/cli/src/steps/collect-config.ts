@@ -47,7 +47,7 @@ function bail(value: unknown): never {
   throw new Error('Unexpected cancel')
 }
 
-export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<CollectedConfig> {
+export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?: string): Promise<CollectedConfig> {
   const crmType = opts.crmType ?? 'salesforce'
 
   note(
@@ -103,17 +103,23 @@ export async function collectConfig(opts: ConfigCollectOptions = {}): Promise<Co
   const redisUrl = opts.externalRedis ?? `redis://:${redisPassword}@redis:6379`
 
   // ── Admin Account ──────────────────────────────────────────────────────────
-  note('This creates the first admin user for the web app.', 'Admin Account')
+  let adminEmail: string | symbol
+  if (authEmail) {
+    note(`Using ${authEmail} as admin email`, 'Admin Account')
+    adminEmail = authEmail
+  } else {
+    note('This creates the first admin user for the web app.', 'Admin Account')
 
-  const adminEmail = await text({
-    message: 'Admin email address',
-    placeholder: 'admin@acme.com',
-    validate: (v) => {
-      if (!v) return 'Required'
-      if (!v.includes('@')) return 'Must be a valid email'
-    },
-  })
-  if (isCancel(adminEmail)) bail(adminEmail)
+    adminEmail = await text({
+      message: 'Admin email address',
+      placeholder: 'admin@acme.com',
+      validate: (v) => {
+        if (!v) return 'Required'
+        if (!v.includes('@')) return 'Must be a valid email'
+      },
+    })
+    if (isCancel(adminEmail)) bail(adminEmail)
+  }
 
   const adminPassword = await password({
     message: 'Admin password (min 8 characters)',

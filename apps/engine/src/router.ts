@@ -250,22 +250,37 @@ export async function executeSteps(
         continue;
 
       case "updateField":
-        if (!ctx.isDryRun && step.fieldApiName) {
-          try {
-            const crmType = await getOrgCrmType(ctx.orgId);
-            if (crmType === "HUBSPOT") {
-              const { updateHubSpotRecordProperties } = await import("./hubspot-connection.js");
-              await updateHubSpotRecordProperties(ctx.orgId, ctx.objectType, ctx.recordId, {
-                [step.fieldApiName as string]: String(step.fieldValue ?? ""),
-              });
-            } else {
-              const conn = await getOrgConnection(ctx.orgId);
-              await conn
-                .sobject(toSfdcObjectName(ctx.objectType))
-                .update({ Id: ctx.recordId, [step.fieldApiName as string]: step.fieldValue });
+        if (!ctx.isDryRun) {
+          // Build properties map from fieldUpdates array or legacy single-field format
+          const fieldUpdates = (step as any).fieldUpdates as Array<{ fieldApiName: string; fieldValue: string }> | undefined;
+          const properties: Record<string, string> = {};
+
+          if (fieldUpdates && fieldUpdates.length > 0) {
+            for (const fu of fieldUpdates) {
+              if (fu.fieldApiName && fu.fieldValue !== undefined) {
+                properties[fu.fieldApiName] = String(fu.fieldValue);
+              }
             }
-          } catch (err) {
-            console.error(`[router] UPDATE_FIELD step failed for ${ctx.recordId}:`, err);
+          } else if (step.fieldApiName) {
+            // Legacy single-field format
+            properties[step.fieldApiName as string] = String(step.fieldValue ?? "");
+          }
+
+          if (Object.keys(properties).length > 0) {
+            try {
+              const crmType = await getOrgCrmType(ctx.orgId);
+              if (crmType === "HUBSPOT") {
+                const { updateHubSpotRecordProperties } = await import("./hubspot-connection.js");
+                await updateHubSpotRecordProperties(ctx.orgId, ctx.objectType, ctx.recordId, properties);
+              } else {
+                const conn = await getOrgConnection(ctx.orgId);
+                await conn
+                  .sobject(toSfdcObjectName(ctx.objectType))
+                  .update({ Id: ctx.recordId, ...properties });
+              }
+            } catch (err) {
+              console.error(`[router] UPDATE_FIELD step failed for ${ctx.recordId}:`, err);
+            }
           }
         }
         continue;

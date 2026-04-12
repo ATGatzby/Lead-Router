@@ -33,7 +33,7 @@ const safeWebhookSecret = ENGINE_WEBHOOK_SECRET.replace(/'/g, "''");
 // Determine plan and seats from LICENSE_TIER env var
 const licenseTier = (process.env.LICENSE_TIER || 'free').toLowerCase();
 const plan = licenseTier === 'pro' ? 'PAID' : 'FREE';
-const seatsPurchased = licenseTier === 'pro' ? 9999 : 3;
+const seatsPurchased = licenseTier === 'pro' ? 9999 : 10;
 console.log(`[seed] License tier: ${licenseTier} → plan=${plan}, seats=${seatsPurchased}`);
 
 const sql = `

@@ -140,7 +140,7 @@ model Organization {
   fieldsSyncedAt    DateTime?
   plan             Plan     @default(FREE)
   isActive         Boolean  @default(true)
-  seatsPurchased    Int      @default(5)
+  seatsPurchased    Int      @default(10)
   seatsUsed         Int      @default(0)
   routingQuotaUsed Int      @default(0)
   quotaResetAt     DateTime @default(now())
