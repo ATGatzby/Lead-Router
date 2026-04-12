@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Shield, Zap, GitBranch, UserCheck, Search, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, Zap, GitBranch, UserCheck, Search, Clock, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConditionTable } from "./ConditionTable";
 import { AssignmentCard } from "./AssignmentCard";
@@ -262,7 +262,33 @@ export function TraceDetail({ trace, entry }: { trace: any; entry: JourneyEntry 
         </CollapsibleStep>
       )}
 
-      {/* Step 5: Assignment */}
+      {/* Step: Field Updates */}
+      {trace.fieldUpdates && trace.fieldUpdates.length > 0 && (
+        <CollapsibleStep
+          icon={<Pencil className="h-4 w-4" />}
+          title="Field Updates"
+          stepNumber={
+            (trace.cooldown ? 1 : 0) +
+            (trace.rulesEvaluated?.some((r: any) => r.matchPhase) ? 1 : 0) +
+            (trace.rulesEvaluated?.length > 0 ? 1 : 0) + 2
+          }
+          status="success"
+          summary={`${trace.fieldUpdates.length} field${trace.fieldUpdates.length !== 1 ? "s" : ""} updated`}
+          defaultOpen
+        >
+          <div className="space-y-1.5">
+            {trace.fieldUpdates.map((fu: { field: string; value: string }, i: number) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="font-medium text-muted-foreground">{fu.field}</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{fu.value}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleStep>
+      )}
+
+      {/* Step: Assignment */}
       {(trace.assignment || entry.assigneeName) && (
         <CollapsibleStep
           icon={<UserCheck className="h-4 w-4" />}
