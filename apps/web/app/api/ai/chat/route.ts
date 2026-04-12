@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
     const org = await prisma.organization.findUniqueOrThrow({
       where: { id: orgId },
       select: {
-        plan: true,
         aiProvider: true,
         aiApiKey: true,
         aiModelName: true,
@@ -59,13 +58,6 @@ export async function POST(req: NextRequest) {
         aiCustomHeaders: true,
       },
     });
-
-    if (org.plan !== "PAID") {
-      return NextResponse.json(
-        { error: "AI Assistant requires a Pro plan" },
-        { status: 403 }
-      );
-    }
 
     if (!org.aiProvider || !org.aiApiKey) {
       return NextResponse.json(

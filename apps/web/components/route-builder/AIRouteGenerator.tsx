@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { useQuery } from "@tanstack/react-query"
 import {
   Sparkles,
   X,
@@ -14,7 +13,6 @@ import {
   Search,
   GitBranch,
   User,
-  BrainCircuit,
   ArrowDown,
   AlertTriangle,
 } from "lucide-react"
@@ -123,33 +121,6 @@ function buildSummary(routeState: RouteBuilderState): RoutePreview["summary"] {
 }
 
 // ---------------------------------------------------------------------------
-// Inline Paywall
-// ---------------------------------------------------------------------------
-
-function InlinePaywall() {
-  return (
-    <div className="text-center py-6">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900">
-        <BrainCircuit className="h-6 w-6 text-violet-600 dark:text-violet-400" />
-      </div>
-      <p className="text-sm font-medium mb-1.5">AI Route Generator</p>
-      <p className="text-xs text-muted-foreground mb-4 max-w-sm mx-auto">
-        Describe your entire routing workflow in plain English and let AI build the full configuration for you.
-      </p>
-      <a
-        href="https://openedgeai.tech/pricing"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 dark:from-violet-500 dark:to-purple-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-500/40"
-      >
-        <BrainCircuit className="h-4 w-4" />
-        Upgrade to Pro
-      </a>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -204,17 +175,6 @@ export function AIRouteGenerator({ onApply, onClose }: AIRouteGeneratorProps) {
     recognition.start()
     setIsListening(true)
   }, [isListening])
-
-  // License check
-  const licenseQuery = useQuery({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license")
-      if (!res.ok) return { tier: "free" }
-      return res.json()
-    },
-  })
-  const isFreeTier = (licenseQuery.data?.tier ?? "free") === "free"
 
   // Escape key to close
   useEffect(() => {
@@ -328,9 +288,6 @@ export function AIRouteGenerator({ onApply, onClose }: AIRouteGeneratorProps) {
                   Describe your routing workflow in plain English
                 </p>
               </div>
-              <Badge className="bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
-                PRO
-              </Badge>
             </div>
             <button
               type="button"
@@ -343,11 +300,7 @@ export function AIRouteGenerator({ onApply, onClose }: AIRouteGeneratorProps) {
 
           {/* Body */}
           <div className="px-6 py-5 space-y-4">
-            {/* Paywall for free tier */}
-            {isFreeTier ? (
-              <InlinePaywall />
-            ) : (
-              <>
+            <>
                 {/* Idle state */}
                 {genState === "idle" && (
                   <div className="space-y-3">
@@ -622,7 +575,6 @@ export function AIRouteGenerator({ onApply, onClose }: AIRouteGeneratorProps) {
                   </div>
                 )}
               </>
-            )}
           </div>
         </div>
       </div>

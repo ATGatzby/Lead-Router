@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
-import { useQuery } from "@tanstack/react-query"
 import {
   Sparkles,
   ChevronDown,
@@ -11,7 +10,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Loader2,
-  BrainCircuit,
   Mic,
   MicOff,
 } from "lucide-react"
@@ -151,33 +149,6 @@ const confidenceConfig = (level: "high" | "medium" | "low") => {
 }
 
 // ---------------------------------------------------------------------------
-// Inline Paywall (mini version for side panel)
-// ---------------------------------------------------------------------------
-
-function InlinePaywall() {
-  return (
-    <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-4 text-center">
-      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900">
-        <BrainCircuit className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-      </div>
-      <p className="text-sm font-medium mb-1">AI Trigger Generator</p>
-      <p className="text-xs text-muted-foreground mb-3">
-        Describe your trigger in plain English and let AI build the configuration for you.
-      </p>
-      <a
-        href="https://openedgeai.tech/pricing"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 dark:from-violet-500 dark:to-purple-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-500/40"
-      >
-        <BrainCircuit className="h-3.5 w-3.5" />
-        Upgrade to Pro
-      </a>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -232,17 +203,6 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
     recognition.start()
     setIsListening(true)
   }, [isListening])
-
-  // License check
-  const licenseQuery = useQuery({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license")
-      if (!res.ok) return { tier: "free" }
-      return res.json()
-    },
-  })
-  const isFreeTier = (licenseQuery.data?.tier ?? "free") === "free"
 
   const generateTrigger = useCallback(
     async (desc: string) => {
@@ -373,9 +333,6 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-violet-400" />
           <span className="text-sm font-medium text-violet-300">AI Generate</span>
-          <Badge className="bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
-            PRO
-          </Badge>
         </div>
         {isOpen ? (
           <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -389,11 +346,7 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
         <div className="px-3 pb-3 space-y-3">
           <Separator className="bg-violet-500/20" />
 
-          {/* Paywall for free tier */}
-          {isFreeTier ? (
-            <InlinePaywall />
-          ) : (
-            <>
+          <>
               {/* Applied banner */}
               {appliedBanner}
 
@@ -631,7 +584,6 @@ export function AITriggerGenerator({ objectType, existingConditions, onApply }: 
                 </div>
               )}
             </>
-          )}
         </div>
       )}
     </div>

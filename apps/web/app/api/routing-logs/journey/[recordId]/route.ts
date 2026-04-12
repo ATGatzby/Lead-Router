@@ -24,8 +24,14 @@ export async function GET(
     );
   }
 
+  // SFDC IDs: 15-char (case-sensitive) is a prefix of 18-char (case-insensitive)
+  // Match both exact and prefix for 15-char SFDC IDs
+  const crmFilter = recordId.length === 15
+    ? { startsWith: recordId }
+    : recordId;
+
   const logs = await prisma.routingLog.findMany({
-    where: { orgId, crmRecordId: recordId },
+    where: { orgId, crmRecordId: crmFilter },
     orderBy: { createdAt: "desc" },
     take: 50,
     select: {

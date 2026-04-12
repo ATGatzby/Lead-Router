@@ -100,19 +100,6 @@ function getProvider(id: string): ProviderConfig {
 }
 
 export default function AiSettingsPage() {
-  // Check license tier
-  const { data: licenseData } = useQuery({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license");
-      if (!res.ok) throw new Error("Failed to load license");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const isFree = licenseData?.tier === "free";
-
   // Fetch current config
   const { data: config, refetch } = useQuery({
     queryKey: ["ai-settings"],
@@ -229,83 +216,6 @@ export default function AiSettingsPage() {
 
   const editProv = editingProvider ? getProvider(editingProvider) : null;
 
-  // Paywall for free tier
-  if (isFree) {
-    return (
-      <div className="relative max-w-3xl min-h-[60vh]">
-        {/* Paywall overlay — centered on viewport */}
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto max-w-sm text-center px-8 py-8 rounded-2xl bg-white dark:bg-gray-900 border shadow-2xl shadow-violet-500/10">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900">
-              <BrainCircuit className="h-7 w-7 text-violet-600 dark:text-violet-400" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">AI Settings require Pro</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-5">
-              Configure your AI provider to unlock natural language insights on your routing data.
-            </p>
-            <a
-              href="https://openedgeai.tech/pricing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 dark:from-violet-500 dark:to-purple-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-500/40"
-            >
-              <BrainCircuit className="h-4 w-4" />
-              Upgrade to Pro
-            </a>
-          </div>
-        </div>
-        {/* Blurred background content */}
-        <div className="pointer-events-none select-none blur-[3px] opacity-40 space-y-6">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Connect an LLM provider to power the AI routing assistant. Your API key is encrypted and stored on your server.
-            </p>
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-muted-foreground mb-3">Providers</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {PROVIDERS.map((prov) => (
-                <div key={prov.id} className="rounded-xl border bg-card p-5">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", prov.color)}>
-                      <Settings2 className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">{prov.shortName}</span>
-                        {prov.tag && (
-                          <span className={cn("text-[9px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5", prov.tagColor)}>
-                            {prov.tag}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{prov.description}</p>
-                    </div>
-                  </div>
-                  <div className="w-full rounded-lg border border-dashed border-violet-300 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/50 px-3 py-2.5 text-xs font-medium text-violet-700 dark:text-violet-300 text-center">
-                    + Connect {prov.shortName}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-lg border bg-card p-5">
-            <h2 className="text-sm font-semibold mb-3">Usage</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-muted/50 p-4">
-                <div className="text-2xl font-bold tracking-tight">0</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Total conversations</div>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-4">
-                <div className="text-2xl font-bold tracking-tight">0</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Active provider</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-3xl space-y-6">

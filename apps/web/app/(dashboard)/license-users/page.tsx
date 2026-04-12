@@ -340,7 +340,7 @@ export default function LicenseUsersPage() {
         if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
           const maxSeats = licenseData?.limits?.maxSeats;
           const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 10;
-          throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
+          throw new Error(`No licenses available. You've used all ${limitLabel} seats.`);
         }
         throw new Error("Failed to license user");
       }
@@ -351,11 +351,7 @@ export default function LicenseUsersPage() {
       toast.success("User licensed");
     },
     onError: (err: Error) => {
-      if (err.message.startsWith("upgrade_required:")) {
-        toast.error(err.message.replace("upgrade_required:", ""));
-      } else {
-        toast.error("Failed to license user");
-      }
+      toast.error(err.message || "Failed to license user");
     },
   });
 
@@ -393,7 +389,7 @@ export default function LicenseUsersPage() {
         if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
           const maxSeats = licenseData?.limits?.maxSeats;
           const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 10;
-          throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
+          throw new Error(`No licenses available. You've used all ${limitLabel} seats.`);
         }
         throw new Error("Bulk operation failed");
       }
@@ -405,11 +401,7 @@ export default function LicenseUsersPage() {
       toast.success(`${vars.userIds.length} user${vars.userIds.length > 1 ? "s" : ""} ${vars.action === "license" ? "licensed" : "de-licensed"}`);
     },
     onError: (err: Error) => {
-      if (err.message.startsWith("upgrade_required:")) {
-        toast.error(err.message.replace("upgrade_required:", ""));
-      } else {
-        toast.error("Bulk operation failed");
-      }
+      toast.error(err.message || "Bulk operation failed");
     },
   });
 
@@ -826,11 +818,10 @@ export default function LicenseUsersPage() {
     }
   }, [stats]);
 
-  // ── License gating ──
-  const isFreeTier = licenseData?.tier === "free";
+  // ── Seat tracking ──
   const maxSeats = licenseData?.limits?.maxSeats ?? -1; // -1 = unlimited
   const currentSeatsUsed = licenseData?.usage?.seats ?? 0;
-  const isAtSeatLimit = isFreeTier && maxSeats > 0 && currentSeatsUsed >= maxSeats;
+  const isAtSeatLimit = maxSeats > 0 && currentSeatsUsed >= maxSeats;
 
   // Determine whether to show the user table
   const hasActiveFilters = search || roleFilter !== "all" || profileFilter !== "all" || statusFilter !== "all";
@@ -962,7 +953,7 @@ export default function LicenseUsersPage() {
       {/* ═══════════════════════════════════════════════════ */}
       {activeTab === "users" && (
         <div className="space-y-5">
-          {/* ── Upgrade banner (at or over seat limit on free tier) ── */}
+          {/* ── Seat limit warning ── */}
           {isAtSeatLimit && (
             <div className={cn(
               "flex items-center gap-3 px-4 py-3 rounded-xl border",
@@ -983,23 +974,10 @@ export default function LicenseUsersPage() {
                   : "text-amber-800 dark:text-amber-200"
               )}>
                 {currentSeatsUsed > maxSeats
-                  ? `You have ${currentSeatsUsed} licensed users but only ${maxSeats} seats on the Free plan. Please de-license ${currentSeatsUsed - maxSeats} user${currentSeatsUsed - maxSeats > 1 ? "s" : ""} or upgrade to Pro.`
-                  : `You\u2019ve used all ${maxSeats} free licenses. Upgrade to Pro for unlimited licenses.`
+                  ? `You have ${currentSeatsUsed} licensed users but only ${maxSeats} seats. Please de-license ${currentSeatsUsed - maxSeats} user${currentSeatsUsed - maxSeats > 1 ? "s" : ""}.`
+                  : `You\u2019ve used all ${maxSeats} available licenses. De-license users to free up seats.`
                 }
               </p>
-              <a
-                href="https://openedgeai.tech/pricing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  "inline-flex items-center justify-center px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0",
-                  currentSeatsUsed > maxSeats
-                    ? "bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400 text-white dark:text-red-950"
-                    : "bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-amber-950"
-                )}
-              >
-                Upgrade to Pro
-              </a>
             </div>
           )}
 

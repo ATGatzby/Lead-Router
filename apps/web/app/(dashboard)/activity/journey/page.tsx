@@ -44,7 +44,7 @@ export default function RecordJourneyPage() {
 
   function handleSearch() {
     const trimmed = inputValue.trim();
-    if (/^[a-zA-Z0-9]{15,18}$/.test(trimmed)) {
+    if (/^[a-zA-Z0-9]{1,18}$/.test(trimmed)) {
       setRecordId(trimmed);
     }
   }
