@@ -1,6 +1,5 @@
 import { prisma } from "@lead-routing/db";
 import { invalidateRulesCache } from "@/lib/invalidate-rules-cache";
-import { invalidateFlowCache } from "@/lib/invalidate-flow-cache";
 import { syncRoutingFlags } from "@/lib/sync-routing-flags";
 import { getTierLimits } from "@/lib/license";
 
@@ -1550,6 +1549,7 @@ export async function createFlow(orgId: string, args: Record<string, unknown>) {
   }
 
   // Invalidate cache
+  const { invalidateFlowCache } = await import("@/lib/invalidate-flow-cache");
   await invalidateFlowCache(orgId, objectType);
 
   const result = {
@@ -1629,6 +1629,7 @@ export async function switchRoutingMode(orgId: string, args: Record<string, unkn
   });
 
   // Invalidate both caches
+  const { invalidateFlowCache } = await import("@/lib/invalidate-flow-cache");
   await invalidateFlowCache(orgId, objectType);
   await invalidateRulesCache(orgId, objectType);
 
