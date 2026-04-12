@@ -65,8 +65,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Intelligence",
     items: [
-      { href: "/ai-assistant", label: "AI Assistant", icon: BrainCircuit, badge: "Pro" },
-      { href: "/mcp-server", label: "MCP Server", icon: Server, badge: "Pro" },
+      { href: "/ai-assistant", label: "AI Assistant", icon: BrainCircuit },
+      { href: "/mcp-server", label: "MCP Server", icon: Server },
     ],
   },
   {
