@@ -36,18 +36,82 @@ function mapSfdcType(type: string): string {
 }
 
 /**
+ * Fetch the set of field API names present on the default page layout
+ * for the given object type via the Describe Layouts REST API.
+ */
+async function getLayoutFieldNames(
+  conn: Connection,
+  objectType: SfdcObjectType
+): Promise<Set<string>> {
+  const fieldNames = new Set<string>();
+
+  try {
+    const res = await conn.request(
+      `/services/data/v62.0/sobjects/${objectType}/describe/layouts`
+    ) as {
+      layouts?: Array<{
+        detailLayoutSections?: Array<{
+          layoutRows?: Array<{
+            layoutItems?: Array<{
+              layoutComponents?: Array<{
+                value?: string;
+                type?: string;
+              }>;
+            }>;
+          }>;
+        }>;
+      }>;
+    };
+
+    // Extract field names from all layout sections of the first (default) layout
+    const layout = res.layouts?.[0];
+    if (layout?.detailLayoutSections) {
+      for (const section of layout.detailLayoutSections) {
+        for (const row of section.layoutRows ?? []) {
+          for (const item of row.layoutItems ?? []) {
+            for (const comp of item.layoutComponents ?? []) {
+              if (comp.type === "Field" && comp.value) {
+                fieldNames.add(comp.value);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`describeLayouts failed for ${objectType}, falling back to all fields:`, err);
+  }
+
+  return fieldNames;
+}
+
+/**
  * Sync the field schema for a given SFDC object type.
- * Fetches field metadata via describeSObject and upserts into field_schemas table.
+ * Fetches field metadata via describeSObject, then filters to only fields
+ * present on the user's default page layout (via Describe Layouts API).
+ * Formula fields, roll-ups, and other read-only fields are included
+ * as long as they appear on the layout.
  */
 export async function syncFieldSchema(
   conn: Connection,
   orgId: string,
   objectType: SfdcObjectType
 ): Promise<number> {
-  const describe = await conn.describe(objectType);
+  // Fetch layout fields and full describe in parallel
+  const [layoutFieldNames, describe] = await Promise.all([
+    getLayoutFieldNames(conn, objectType),
+    conn.describe(objectType),
+  ]);
+
+  const hasLayout = layoutFieldNames.size > 0;
 
   const fields = describe.fields
-    .filter((f) => f.createable || f.updateable)
+    .filter((f) => {
+      // If we got layout fields, only include fields on the layout
+      if (hasLayout) return layoutFieldNames.has(f.name);
+      // Fallback: include all accessible fields if layout fetch failed
+      return true;
+    })
     .map((f) => ({
       orgId,
       objectType: objectType.toUpperCase() as "LEAD" | "CONTACT" | "ACCOUNT" | "USER",

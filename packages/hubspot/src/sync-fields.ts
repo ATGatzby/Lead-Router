@@ -65,9 +65,10 @@ export async function syncHubSpotFields(
     const crmObjectType = OBJECT_TYPE_MAP[hsObjectType];
     const properties = await propertiesApi.listProperties(hsObjectType);
 
-    // Filter out hidden and calculated (read-only) properties
+    // Filter out hidden properties only — keep calculated (formula) fields
+    // so users can use them in routing criteria
     const fields = properties
-      .filter((prop) => !prop.hidden && !prop.calculated)
+      .filter((prop) => !prop.hidden)
       .map((prop) => ({
         orgId,
         objectType: crmObjectType,
