@@ -35,9 +35,9 @@ export async function POST(req: NextRequest) {
   }
 
   const clampedLimit = Math.min(Math.max(1, limit), 50);
-  const validIds = recordIds.filter((id) => /^[a-zA-Z0-9]{15,18}$/.test(id));
+  const validIds = recordIds.filter((id) => /^[a-zA-Z0-9]{1,18}$/.test(id));
   const invalidIds = recordIds.filter(
-    (id) => !/^[a-zA-Z0-9]{15,18}$/.test(id)
+    (id) => !/^[a-zA-Z0-9]{1,18}$/.test(id)
   );
 
   const where: Record<string, unknown> = {

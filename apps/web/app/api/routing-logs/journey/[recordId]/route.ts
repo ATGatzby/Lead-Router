@@ -16,7 +16,8 @@ export async function GET(
 
   const { recordId } = await params;
 
-  if (!/^[a-zA-Z0-9]{15,18}$/.test(recordId)) {
+  // Accept SFDC IDs (15-18 alphanumeric) and HubSpot IDs (numeric, any length)
+  if (!/^[a-zA-Z0-9]{1,18}$/.test(recordId)) {
     return NextResponse.json(
       { error: "Invalid Record ID format" },
       { status: 400 }

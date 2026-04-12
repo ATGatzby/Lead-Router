@@ -48,14 +48,13 @@ describe("GET /api/routing-logs/journey/[recordId]", () => {
     expect(body.error).toBe("Unauthorized");
   });
 
-  it("returns 400 for invalid record ID format (too short)", async () => {
+  it("accepts short alphanumeric IDs (HubSpot format)", async () => {
     const res = await GET(
-      makeRequest("abc"),
-      makeParams("abc")
+      makeRequest("12345"),
+      makeParams("12345")
     );
-    expect(res.status).toBe(400);
-    const body = await parseJson(res);
-    expect(body.error).toContain("Invalid");
+    // Should not be 400 — short numeric IDs are valid for HubSpot
+    expect(res.status).not.toBe(400);
   });
 
   it("returns 400 for record ID with special characters", async () => {

@@ -24,7 +24,7 @@ interface JourneyEntry {
 }
 
 export default function RecordJourneyPage() {
-  const { crmLabel } = useCrmType();
+  const { crmLabel, isHubSpot } = useCrmType();
   const [inputValue, setInputValue] = useState("");
   const [recordId, setRecordId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -64,7 +64,7 @@ export default function RecordJourneyPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={`Enter ${crmLabel} Record ID (e.g. 00Q...)`}
+            placeholder={isHubSpot ? `Enter ${crmLabel} Record ID (e.g. 12345)` : `Enter ${crmLabel} Record ID (e.g. 00Q...)`}
             className="pl-9"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
@@ -113,7 +113,7 @@ export default function RecordJourneyPage() {
                 )}
               </button>
               <a
-                href={`https://login.salesforce.com/${data.recordId}`}
+                href={isHubSpot ? `https://app.hubspot.com/contacts/${data.recordId}` : `https://login.salesforce.com/${data.recordId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
