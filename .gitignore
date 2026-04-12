@@ -50,7 +50,6 @@ apps/web/app/(dashboard)/flow-builder/
 apps/web/app/(dashboard)/routing-rules/*/flow/
 apps/web/app/api/flows/
 apps/web/lib/flow-*.ts
-apps/web/lib/invalidate-flow-cache.ts
 apps/mcp/src/tools/*-flow*.ts
 packages/db/prisma/migrations/*_add_routing_flows/
 packages/db/prisma/migrations/*_add_flow_edge_handles/
