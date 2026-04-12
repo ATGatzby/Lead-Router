@@ -8,6 +8,7 @@ export interface EngineEnvConfig {
   licenseKey?: string
   licenseTier: string
   crmType?: 'salesforce' | 'hubspot'
+  hubspotClientId?: string
   hubspotClientSecret?: string
 }
 
