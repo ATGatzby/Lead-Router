@@ -354,22 +354,12 @@ async function evaluateNewStyleAsync(
 
     let evalResult: { matched: boolean; groups: DetailedConditionGroup[] };
 
-    if (hasV2Steps && !hasIoSteps) {
+    if (hasV2Steps) {
       const firstFilterStep = branch.steps!.find((s: any) => s.type === "filter");
       const flatConditions = flattenConditionGroups((firstFilterStep?.conditions ?? []) as any[]);
       evalResult = flatConditions.length > 0
         ? await evaluateRuleDetailed(rec.fields, flatConditions, orgId)
         : { matched: true, groups: [] };
-    } else if (hasIoSteps) {
-      // Skip branches with I/O steps in bulk mode
-      ruleTrace.branches!.push({
-        branchId: branch.id,
-        label: branch.label ?? `Path`,
-        priority: branch.priority,
-        matched: false,
-        conditionGroups: [],
-      });
-      continue;
     } else {
       evalResult = await evaluateRuleDetailed(rec.fields, branch.conditions, orgId);
     }
