@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Update Fields — Panel Mockup</title>
+<style>
+  /* ─── Reset & Base ──────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-page: #f0f0f3;
+    --bg-panel: #ffffff;
+    --bg-row: #fafbfc;
+    --bg-row-hover: #f4f5f7;
+    --bg-input: #ffffff;
+    --border: #e2e4e9;
+    --border-focus: #8b5cf6;
+    --text-primary: #0f1117;
+    --text-secondary: #5f6577;
+    --text-muted: #9199ab;
+    --text-placeholder: #b0b7c3;
+    --accent: #7c3aed;
+    --accent-soft: #ede9fe;
+    --danger: #ef4444;
+    --danger-soft: #fef2f2;
+    --success: #10b981;
+    --pill-text: #6366f1;
+    --pill-picklist: #8b5cf6;
+    --pill-picklist-bg: #f3f0ff;
+    --pill-number: #059669;
+    --pill-number-bg: #ecfdf5;
+    --pill-boolean: #d97706;
+    --pill-boolean-bg: #fffbeb;
+    --pill-date: #0891b2;
+    --pill-date-bg: #ecfeff;
+    --pill-text-color: #3b82f6;
+    --pill-text-bg: #eff6ff;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.08);
+    --shadow-dropdown: 0 12px 40px rgba(0,0,0,0.12);
+    --radius: 8px;
+    --radius-sm: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg-page);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── Page Layout ───────────────────────────────────────────────────── */
+  .page-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .mockup-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+
+  .section-divider {
+    width: 100%;
+    max-width: 520px;
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 48px 0 24px;
+  }
+
+  /* ─── Panel Container ───────────────────────────────────────────────── */
+  .panel {
+    width: 480px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: panelIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes panelIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── Header ────────────────────────────────────────────────────────── */
+  .panel-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ca8a04;
+  }
+
+  .panel-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.45;
+  }
+
+  .panel-close {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .panel-close:hover {
+    background: var(--bg-row);
+    color: var(--text-primary);
+  }
+
+  /* ─── Body ──────────────────────────────────────────────────────────── */
+  .panel-body {
+    padding: 16px 24px 24px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .field-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .field-count-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  /* ─── Field Rows ────────────────────────────────────────────────────── */
+  .field-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .field-row {
+    background: var(--bg-row);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .field-row:hover {
+    background: var(--bg-row-hover);
+    border-color: #d1d5db;
+  }
+
+  .field-row-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .field-row-number {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Field selector (combobox look) */
+  .field-selector {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 0;
+  }
+
+  .field-selector:hover {
+    border-color: #c4c9d4;
+  }
+
+  .field-selector:focus-within,
+  .field-selector.active {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+  }
+
+  .field-selector-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+  }
+
+  .field-selector-label {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .field-selector-label.placeholder {
+    color: var(--text-placeholder);
+    font-weight: 400;
+  }
+
+  .field-selector-chevron {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    transition: transform 0.2s;
+  }
+
+  .field-selector.active .field-selector-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* Type badge pill */
+  .type-pill {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+
+  .type-pill.picklist { color: var(--pill-picklist); background: var(--pill-picklist-bg); }
+  .type-pill.text { color: var(--pill-text-color); background: var(--pill-text-bg); }
+  .type-pill.number { color: var(--pill-number); background: var(--pill-number-bg); }
+  .type-pill.boolean { color: var(--pill-boolean); background: var(--pill-boolean-bg); }
+  .type-pill.date { color: var(--pill-date); background: var(--pill-date-bg); }
+
+  /* Delete button */
+  .field-row-delete {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    opacity: 0;
+  }
+
+  .field-row:hover .field-row-delete {
+    opacity: 1;
+  }
+
+  .field-row-delete:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  /* Value row */
+  .field-row-bottom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 26px; /* align with field label past the number */
+  }
+
+  .value-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    width: 30px;
+  }
+
+  .arrow-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 14px;
+  }
+
+  .value-input {
+    flex: 1;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    outline: none;
+    transition: all 0.15s;
+  }
+
+  .value-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+  }
+
+  .value-input::placeholder {
+    color: var(--text-placeholder);
+  }
+
+  select.value-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239199ab' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    cursor: pointer;
+  }
+
+  /* Boolean toggle */
+  .toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .toggle-track {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: #d1d5db;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+
+  .toggle-track.on {
+    background: var(--accent);
+  }
+
+  .toggle-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+  }
+
+  .toggle-track.on .toggle-thumb {
+    transform: translateX(16px);
+  }
+
+  .toggle-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* ─── Add Button ────────────────────────────────────────────────────── */
+  .add-field-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .add-field-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .add-field-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* ─── Empty State ───────────────────────────────────────────────────── */
+  .empty-state {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .empty-state-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 12px;
+    color: var(--border);
+  }
+
+  .empty-state-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .empty-state-text strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  /* ─── Footer ────────────────────────────────────────────────────────── */
+  .panel-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    background: var(--bg-row);
+  }
+
+  .btn {
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  .btn-ghost:hover {
+    background: var(--bg-row);
+    color: var(--text-primary);
+  }
+
+  .btn-primary {
+    background: var(--text-primary);
+    color: white;
+    border-color: var(--text-primary);
+  }
+
+  .btn-primary:hover {
+    background: #1a1d28;
+  }
+
+  /* ─── Dropdown (Combobox Popover) ───────────────────────────────────── */
+  .dropdown-container {
+    position: relative;
+    width: 480px;
+    margin-top: 40px;
+  }
+
+  .dropdown-popover {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-dropdown);
+    overflow: hidden;
+    animation: dropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes dropIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .dropdown-search {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dropdown-search svg {
+    width: 14px;
+    height: 14px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .dropdown-search input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .dropdown-search input::placeholder {
+    color: var(--text-placeholder);
+  }
+
+  .dropdown-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .dropdown-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 10px 4px;
+    user-select: none;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .dropdown-item:hover {
+    background: var(--bg-row);
+  }
+
+  .dropdown-item.selected {
+    background: var(--accent-soft);
+  }
+
+  .dropdown-item-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 450;
+  }
+
+  .dropdown-item-api {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-weight: 400;
+  }
+
+  .dropdown-item-check {
+    width: 14px;
+    height: 14px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .dropdown-hint {
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .dropdown-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: var(--bg-row);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* ─── Scrollbar ─────────────────────────────────────────────────────── */
+  .dropdown-list::-webkit-scrollbar { width: 4px; }
+  .dropdown-list::-webkit-scrollbar-track { background: transparent; }
+  .dropdown-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- STATE 1: Panel with 3 field updates configured                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<span class="mockup-label">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+  State 1 — Configured
+</span>
+
+<div class="panel">
+  <!-- Header -->
+  <div class="panel-header">
+    <div class="panel-header-row">
+      <div>
+        <div class="panel-title">
+          <span class="panel-title-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </span>
+          Update Fields
+        </div>
+        <div class="panel-subtitle">Set field values on the record before routing continues.</div>
+      </div>
+      <button class="panel-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="panel-body">
+    <div class="field-count">
+      <span>Field updates</span>
+      <span class="field-count-badge">3 / 10</span>
+    </div>
+
+    <div class="field-rows">
+
+      <!-- Row 1: Picklist field -->
+      <div class="field-row">
+        <div class="field-row-top">
+          <span class="field-row-number">1</span>
+          <div class="field-selector">
+            <svg class="field-selector-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="field-selector-label">Lead Status</span>
+            <span class="type-pill picklist">Picklist</span>
+            <svg class="field-selector-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button class="field-row-delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <div class="field-row-bottom">
+          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+          <select class="value-input">
+            <option value="Contacted" selected>Contacted</option>
+            <option value="Qualified">Qualified</option>
+            <option value="Nurture">Nurture</option>
+            <option value="Unqualified">Unqualified</option>
+            <option value="New">New</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 2: Text field -->
+      <div class="field-row">
+        <div class="field-row-top">
+          <span class="field-row-number">2</span>
+          <div class="field-selector">
+            <svg class="field-selector-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="field-selector-label">Routing Action</span>
+            <span class="type-pill text">Text</span>
+            <svg class="field-selector-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button class="field-row-delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <div class="field-row-bottom">
+          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+          <input class="value-input" type="text" value="Auto-Routed" placeholder="Enter value...">
+        </div>
+      </div>
+
+      <!-- Row 3: Number field -->
+      <div class="field-row">
+        <div class="field-row-top">
+          <span class="field-row-number">3</span>
+          <div class="field-selector">
+            <svg class="field-selector-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="field-selector-label">Score</span>
+            <span class="type-pill number">Number</span>
+            <svg class="field-selector-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button class="field-row-delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <div class="field-row-bottom">
+          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+          <input class="value-input" type="number" value="85" placeholder="Enter number...">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Add button -->
+    <button class="add-field-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14m-7-7h14"/></svg>
+      Add Field Update
+    </button>
+  </div>
+
+  <!-- Footer -->
+  <div class="panel-footer">
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-primary">Save</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- Divider                                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<hr class="section-divider">
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- STATE 2: Empty state                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<span class="mockup-label">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+  State 2 — Empty
+</span>
+
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-header-row">
+      <div>
+        <div class="panel-title">
+          <span class="panel-title-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </span>
+          Update Fields
+        </div>
+        <div class="panel-subtitle">Set field values on the record before routing continues.</div>
+      </div>
+      <button class="panel-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <div class="field-count">
+      <span>Field updates</span>
+      <span class="field-count-badge">0 / 10</span>
+    </div>
+
+    <div class="empty-state">
+      <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+      <div class="empty-state-text">
+        No field updates configured.<br>
+        Click <strong>+ Add Field Update</strong> to set values on the record.
+      </div>
+    </div>
+
+    <button class="add-field-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14m-7-7h14"/></svg>
+      Add Field Update
+    </button>
+  </div>
+
+  <div class="panel-footer">
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-primary">Save</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- Divider                                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<hr class="section-divider">
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- STATE 3: Field selector dropdown expanded                              -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<span class="mockup-label">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+  State 3 — Field Selector Dropdown
+</span>
+
+<div class="dropdown-container">
+  <div class="dropdown-popover">
+    <div class="dropdown-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Search fields..." value="lead" autofocus>
+    </div>
+
+    <div class="dropdown-list">
+      <!-- Group: Lead Info -->
+      <div class="dropdown-group-label">Lead Information</div>
+
+      <div class="dropdown-item selected">
+        <span class="dropdown-item-label">Lead Status</span>
+        <span class="dropdown-item-api">hs_lead_status</span>
+        <span class="type-pill picklist">Picklist</span>
+        <svg class="dropdown-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Lead Source</span>
+        <span class="dropdown-item-api">hs_analytics_source</span>
+        <span class="type-pill picklist">Picklist</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Lifecycle Stage</span>
+        <span class="dropdown-item-api">lifecyclestage</span>
+        <span class="type-pill picklist">Picklist</span>
+      </div>
+
+      <!-- Group: Contact Details -->
+      <div class="dropdown-group-label">Contact Details</div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">First Name</span>
+        <span class="dropdown-item-api">firstname</span>
+        <span class="type-pill text">Text</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Last Name</span>
+        <span class="dropdown-item-api">lastname</span>
+        <span class="type-pill text">Text</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Email</span>
+        <span class="dropdown-item-api">email</span>
+        <span class="type-pill text">Text</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Phone</span>
+        <span class="dropdown-item-api">phone</span>
+        <span class="type-pill text">Text</span>
+      </div>
+
+      <!-- Group: Scoring -->
+      <div class="dropdown-group-label">Scoring & Analytics</div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Score</span>
+        <span class="dropdown-item-api">hs_predictive_scoring</span>
+        <span class="type-pill number">Number</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Number of Employees</span>
+        <span class="dropdown-item-api">numberofemployees</span>
+        <span class="type-pill number">Number</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Annual Revenue</span>
+        <span class="dropdown-item-api">annualrevenue</span>
+        <span class="type-pill number">Number</span>
+      </div>
+
+      <!-- Group: Custom -->
+      <div class="dropdown-group-label">Custom Properties</div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Routing Action</span>
+        <span class="dropdown-item-api">routing_action</span>
+        <span class="type-pill text">Text</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Is Qualified</span>
+        <span class="dropdown-item-api">is_qualified</span>
+        <span class="type-pill boolean">Bool</span>
+      </div>
+
+      <div class="dropdown-item">
+        <span class="dropdown-item-label">Routed Date</span>
+        <span class="dropdown-item-api">routed_date</span>
+        <span class="type-pill date">Date</span>
+      </div>
+    </div>
+
+    <div class="dropdown-hint">
+      <kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate
+      <span style="margin: 0 4px">&middot;</span>
+      <kbd>&crarr;</kbd> select
+      <span style="margin: 0 4px">&middot;</span>
+      <kbd>esc</kbd> close
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- Divider                                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<hr class="section-divider">
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- STATE 4: Boolean field example                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<span class="mockup-label">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+  State 4 — Boolean + Date Fields
+</span>
+
+<div class="panel" style="max-height: none;">
+  <div class="panel-header">
+    <div class="panel-header-row">
+      <div>
+        <div class="panel-title">
+          <span class="panel-title-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </span>
+          Update Fields
+        </div>
+        <div class="panel-subtitle">Set field values on the record before routing continues.</div>
+      </div>
+      <button class="panel-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <div class="field-count">
+      <span>Field updates</span>
+      <span class="field-count-badge">2 / 10</span>
+    </div>
+
+    <div class="field-rows">
+      <!-- Boolean field -->
+      <div class="field-row">
+        <div class="field-row-top">
+          <span class="field-row-number">1</span>
+          <div class="field-selector">
+            <svg class="field-selector-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="field-selector-label">Is Qualified</span>
+            <span class="type-pill boolean">Bool</span>
+            <svg class="field-selector-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button class="field-row-delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <div class="field-row-bottom">
+          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+          <div class="toggle-wrapper">
+            <div class="toggle-track on">
+              <div class="toggle-thumb"></div>
+            </div>
+            <span class="toggle-label">True</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Date field -->
+      <div class="field-row">
+        <div class="field-row-top">
+          <span class="field-row-number">2</span>
+          <div class="field-selector">
+            <svg class="field-selector-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="field-selector-label">Routed Date</span>
+            <span class="type-pill date">Date</span>
+            <svg class="field-selector-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+          <button class="field-row-delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+        <div class="field-row-bottom">
+          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+          <select class="value-input">
+            <option value="TODAY" selected>Today (current date)</option>
+            <option value="NOW">Now (current datetime)</option>
+            <option value="CUSTOM">Custom value...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="add-field-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14m-7-7h14"/></svg>
+      Add Field Update
+    </button>
+  </div>
+
+  <div class="panel-footer">
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-primary">Save</button>
+  </div>
+</div>
+
+</body>
+</html>

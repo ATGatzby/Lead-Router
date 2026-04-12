@@ -96,9 +96,6 @@ function SalesforceIntegrationInner() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; counts?: Record<string, number>; total?: number; error?: string } | null>(null);
 
-  // License tier state
-  const [licenseTier, setLicenseTier] = useState<string>("free");
-
   // Disconnect state
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -124,14 +121,6 @@ function SalesforceIntegrationInner() {
   useEffect(() => {
     fetchOrg();
   }, [fetchOrg]);
-
-  // Fetch license tier
-  useEffect(() => {
-    fetch("/api/license")
-      .then((res) => (res.ok ? res.json() : { tier: "free" }))
-      .then((data) => setLicenseTier(data.tier ?? "free"))
-      .catch(() => setLicenseTier("free"));
-  }, []);
 
   // ─── Disconnect ────────────────────────────────────────────────────────────
 
@@ -432,11 +421,10 @@ function SalesforceIntegrationInner() {
 
         <div className="space-y-3">
           {SFDC_OBJECTS.map((obj) => {
-            const isProOnly = (obj.key === "Contact" || obj.key === "Account") && licenseTier !== "pro";
             return (
               <div
                 key={obj.key}
-                className={`flex items-center justify-between rounded-lg border p-4 transition-colors ${isProOnly ? "opacity-60" : "hover:bg-muted/30"}`}
+                className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/30"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -447,18 +435,14 @@ function SalesforceIntegrationInner() {
                   <div>
                     <p className="text-sm font-medium">
                       {obj.label}
-                      {isProOnly && (
-                        <span className="ml-2 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>
-                      )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {isProOnly ? "Upgrade to Pro to route this object" : obj.description}
+                      {obj.description}
                     </p>
                   </div>
                 </div>
                 <Switch
                   checked={objectConfig[obj.key]?.enabled ?? false}
-                  disabled={isProOnly}
                   onCheckedChange={(checked: boolean) =>
                     setObjectConfig((prev) => ({
                       ...prev,

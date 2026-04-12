@@ -307,7 +307,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
       crmType,
-    })
+    }, auth.customer.email)
 
     // DNS pre-flight
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
@@ -395,6 +395,13 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         log.step('Retrying health check...')
       }
     }
+
+    note(
+      `You can log in to the web app at ${chalk.cyan(cfg.appUrl)} with:\n` +
+        `  Email:    ${cfg.adminEmail}\n` +
+        `  Password: (the password you set during setup)`,
+      'Admin Login'
+    )
 
     // Remove ADMIN_PASSWORD from .env.web now that the seed has run
     try {

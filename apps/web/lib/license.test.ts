@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { getLicenseTier, getTierLimits, upgradeRequiredResponse } from './license.js'
 
 // ─── getLicenseTier ──────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ describe('getLicenseTier', () => {
     }
   })
 
-  it('returns "free" when LICENSE_TIER env is not set', () => {
+  it('returns "free" by default', () => {
     delete process.env.LICENSE_TIER
     expect(getLicenseTier()).toBe('free')
   })
@@ -43,18 +43,41 @@ describe('getLicenseTier', () => {
 // ─── getTierLimits ───────────────────────────────────────────────────────────
 
 describe('getTierLimits', () => {
-  it('returns correct free tier limits', () => {
+  it('returns FREE_LIMITS when tier is "free"', () => {
     const limits = getTierLimits('free')
     expect(limits).toEqual({
       maxRules: 2,
       maxOrgs: 1,
-      maxSeats: 3,
-      allowedTriggers: ['LEAD'],
+      maxSeats: 10,
+      allowedTriggers: ['LEAD', 'CONTACT', 'COMPANY', 'DEAL'],
       weightedDistribution: true,
       analytics: true,
-      auditLog: false,
-      aiRuleGenerator: false,
+      auditLog: true,
+      aiRuleGenerator: true,
     })
+  })
+
+  it('FREE_LIMITS has maxSeats === 10', () => {
+    const limits = getTierLimits('free')
+    expect(limits.maxSeats).toBe(10)
+  })
+
+  it('FREE_LIMITS.auditLog === true', () => {
+    const limits = getTierLimits('free')
+    expect(limits.auditLog).toBe(true)
+  })
+
+  it('FREE_LIMITS.aiRuleGenerator === true', () => {
+    const limits = getTierLimits('free')
+    expect(limits.aiRuleGenerator).toBe(true)
+  })
+
+  it('FREE_LIMITS.allowedTriggers includes all object types', () => {
+    const limits = getTierLimits('free')
+    expect(limits.allowedTriggers).toContain('LEAD')
+    expect(limits.allowedTriggers).toContain('CONTACT')
+    expect(limits.allowedTriggers).toContain('COMPANY')
+    expect(limits.allowedTriggers).toContain('DEAL')
   })
 
   it('returns correct pro tier limits', () => {
@@ -63,7 +86,7 @@ describe('getTierLimits', () => {
       maxRules: Infinity,
       maxOrgs: 1,
       maxSeats: Infinity,
-      allowedTriggers: ['LEAD', 'CONTACT', 'ACCOUNT'],
+      allowedTriggers: ['LEAD', 'CONTACT', 'ACCOUNT', 'COMPANY', 'DEAL'],
       weightedDistribution: true,
       analytics: true,
       auditLog: true,
@@ -75,19 +98,6 @@ describe('getTierLimits', () => {
     delete process.env.LICENSE_TIER
     const limits = getTierLimits()
     expect(limits.maxRules).toBe(2) // free tier
-  })
-
-  it('pro tier allows LEAD, CONTACT, and ACCOUNT triggers', () => {
-    const limits = getTierLimits('pro')
-    expect(limits.allowedTriggers).toContain('LEAD')
-    expect(limits.allowedTriggers).toContain('CONTACT')
-    expect(limits.allowedTriggers).toContain('ACCOUNT')
-  })
-
-  it('free tier only allows LEAD trigger', () => {
-    const limits = getTierLimits('free')
-    expect(limits.allowedTriggers).toHaveLength(1)
-    expect(limits.allowedTriggers).toContain('LEAD')
   })
 })
 

@@ -339,7 +339,7 @@ export default function LicenseUsersPage() {
         const body = await res.json().catch(() => ({}));
         if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
           const maxSeats = licenseData?.limits?.maxSeats;
-          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 3;
+          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 10;
           throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
         }
         throw new Error("Failed to license user");
@@ -392,7 +392,7 @@ export default function LicenseUsersPage() {
         const body = await res.json().catch(() => ({}));
         if (res.status === 402 && (body.error === "upgrade_required" || body.error === "seat_cap_exceeded")) {
           const maxSeats = licenseData?.limits?.maxSeats;
-          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 3;
+          const limitLabel = maxSeats && maxSeats > 0 ? maxSeats : 10;
           throw new Error(`upgrade_required:No licenses available. You've used all ${limitLabel} free licenses. Upgrade to Pro for unlimited.`);
         }
         throw new Error("Bulk operation failed");

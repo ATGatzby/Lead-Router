@@ -160,9 +160,6 @@ export default function RoundRobinsPage() {
               <DropdownMenuItem onClick={() => setShowAITeamGen(true)}>
                 <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
                 Use AI to Create Teams
-                <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
-                  PRO
-                </Badge>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -206,9 +203,6 @@ export default function RoundRobinsPage() {
               >
                 <Sparkles className="h-4 w-4" />
                 Use AI to Create Teams
-                <Badge className="ml-1 bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
-                  PRO
-                </Badge>
               </Button>
             )}
           </div>

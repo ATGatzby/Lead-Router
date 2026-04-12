@@ -30,7 +30,7 @@ export interface BulkRoutingInput {
   orgId: string;
   ruleId: string;
   runId: string;
-  objectType: "LEAD" | "CONTACT" | "ACCOUNT";
+  objectType: "LEAD" | "CONTACT" | "ACCOUNT" | "COMPANY" | "DEAL";
   records: Array<{
     recordId: string;
     fields: Record<string, unknown>;

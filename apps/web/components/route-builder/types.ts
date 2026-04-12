@@ -83,10 +83,20 @@ export interface PathStepFilter {
   conditions: ConditionGroup[]
 }
 
+export interface FieldUpdate {
+  fieldApiName: string
+  fieldLabel: string
+  fieldType: string
+  fieldValue: string
+  picklistValues?: string[]
+}
+
 export interface PathStepUpdateField {
   type: "updateField"
-  fieldApiName: string
-  fieldValue: string
+  fieldUpdates: FieldUpdate[]
+  // Legacy single-field format (backward compat — converted to fieldUpdates on read)
+  fieldApiName?: string
+  fieldValue?: string
 }
 
 export interface PathStepCreateTask {

@@ -14,19 +14,19 @@ export interface TierLimits {
 const FREE_LIMITS: TierLimits = {
   maxRules: 2,
   maxOrgs: 1,
-  maxSeats: 3,
-  allowedTriggers: ["LEAD"],
+  maxSeats: 10,
+  allowedTriggers: ["LEAD", "CONTACT", "COMPANY", "DEAL"],
   weightedDistribution: true,
   analytics: true,
-  auditLog: false,
-  aiRuleGenerator: false,
+  auditLog: true,
+  aiRuleGenerator: true,
 };
 
 const PRO_LIMITS: TierLimits = {
   maxRules: Infinity,
   maxOrgs: 1,
   maxSeats: Infinity,
-  allowedTriggers: ["LEAD", "CONTACT", "ACCOUNT"],
+  allowedTriggers: ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
   weightedDistribution: true,
   analytics: true,
   auditLog: true,

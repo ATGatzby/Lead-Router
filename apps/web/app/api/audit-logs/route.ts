@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, type Prisma } from "@lead-routing/db";
 import { getOrgIdFromHeaders } from "@/lib/auth";
-import { getTierLimits, upgradeRequiredResponse } from "@/lib/license";
 
 // GET /api/audit-logs?page=1&limit=50&from=&to=&actorId=&action=&entityType=
 export async function GET(req: NextRequest) {
   try {
-    const limits = getTierLimits();
-    if (!limits.auditLog) {
-      return upgradeRequiredResponse("Audit logs");
-    }
-
     const orgId = await getOrgIdFromHeaders();
     const p = req.nextUrl.searchParams;
 

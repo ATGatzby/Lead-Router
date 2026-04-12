@@ -178,10 +178,35 @@ export class HubSpotClient {
       return this.request<T>(method, path, body, query);
     }
 
-    // --- Handle 429 rate limit ---
+    // --- Handle 429 rate limit — wait and retry once ---
     if (res.status === 429) {
       const retryAfter = parseInt(res.headers.get('Retry-After') ?? '10', 10);
-      throw new HubSpotRateLimitError(retryAfter);
+      const waitMs = Math.min(retryAfter * 1000, 30_000);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      // Retry once after waiting
+      const retryRes = await fetch(url, {
+        method,
+        headers: { ...headers, Authorization: `Bearer ${this.accessToken}` },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      this.parseRateLimitHeaders(retryRes.headers);
+      if (retryRes.status === 429) {
+        const retryAfter2 = parseInt(retryRes.headers.get('Retry-After') ?? '10', 10);
+        throw new HubSpotRateLimitError(retryAfter2);
+      }
+      if (!retryRes.ok) {
+        const errorBody = await retryRes.json().catch(() => ({}));
+        throw new HubSpotError(
+          (errorBody as Record<string, string>).message ?? `HTTP ${retryRes.status}`,
+          retryRes.status,
+          (errorBody as Record<string, string>).category ?? 'UNKNOWN',
+          (errorBody as Record<string, string>).correlationId ?? '',
+        );
+      }
+      if (retryRes.status === 204 || retryRes.headers.get('content-length') === '0') {
+        return undefined as T;
+      }
+      return (await retryRes.json()) as T;
     }
 
     // --- Handle other errors ---

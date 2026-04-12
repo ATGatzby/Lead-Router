@@ -9,12 +9,12 @@ export async function GET(req: NextRequest) {
     const objectParam = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? req.nextUrl.searchParams.get("objectType")?.toUpperCase() ?? "LEAD";
     const customOnly = req.nextUrl.searchParams.get("customOnly") === "true";
 
-    if (!["LEAD", "CONTACT", "ACCOUNT", "USER"].includes(objectParam)) {
+    if (!["LEAD", "CONTACT", "ACCOUNT", "USER", "COMPANY", "DEAL"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
     const where: Record<string, unknown> = { orgId };
-    where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT" | "USER";
+    where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT" | "USER" | "COMPANY" | "DEAL";
 
     if (customOnly) {
       where.fieldApiName = { endsWith: "__c" };

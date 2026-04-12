@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Sheet,
@@ -56,17 +56,12 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
 
   const { crmLabel, objectTypes } = useCrmType()
 
-  // Fetch license tier to gate Contact/Account behind Pro
-  const licenseQuery = useQuery({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license")
-      if (!res.ok) return { tier: "free" }
-      return res.json()
-    },
-  })
-  const tier = licenseQuery.data?.tier ?? "free"
-  const isFreeTier = tier === "free"
+  // If current objectType isn't valid for this CRM, reset to first available
+  useEffect(() => {
+    if (objectTypes.length > 0 && !objectTypes.includes(objectType)) {
+      setObjectType(objectTypes[0] as ObjectType)
+    }
+  }, [objectTypes, objectType])
 
   // Fetch fields for the selected object type (for ConditionBuilder)
   const fieldsQuery = useQuery<FieldsResponse>({
@@ -154,14 +149,11 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {objectTypes.map((ot, idx) => {
-                  const isGated = isFreeTier && idx > 0
-                  return (
-                    <SelectItem key={ot} value={ot} disabled={isGated}>
-                      {getObjectTypeLabel(ot)} {isGated && <span className="ml-1 text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">PRO</span>}
+                {objectTypes.map((ot) => (
+                    <SelectItem key={ot} value={ot}>
+                      {getObjectTypeLabel(ot)}
                     </SelectItem>
-                  )
-                })}
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -203,6 +195,16 @@ export function TriggerConfigSheet({ open, onOpenChange, trigger, onSave }: Prop
               Only records matching these conditions will be sent to the routing engine.
               Leave empty to send all records.
             </p>
+            {fieldsQuery.isLoading && (
+              <div className="text-sm text-muted-foreground py-4 text-center">
+                Loading fields...
+              </div>
+            )}
+            {fieldsQuery.isSuccess && fields.length === 0 && (
+              <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-4 py-3 text-sm text-amber-700 dark:text-amber-300 mb-3">
+                No fields synced yet. Go to Integrations and use &quot;Sync Fields&quot; to import fields from your CRM.
+              </div>
+            )}
             <ConditionBuilder
               fields={fields}
               value={triggerConditions}

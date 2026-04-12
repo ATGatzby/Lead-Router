@@ -121,7 +121,7 @@ export default async function IntegrationsPage() {
               <div>
                 {hsConnected ? (
                   <Button variant="outline" size="sm" asChild>
-                    <Link href="/integrations">
+                    <Link href="/integrations/hubspot">
                       Configure
                       <ArrowRight className="ml-1 h-3.5 w-3.5" />
                     </Link>
