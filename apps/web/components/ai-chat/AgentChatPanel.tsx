@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { PaywallOverlay } from "./PaywallOverlay";
 import { SuggestionGrid } from "./SuggestionGrid";
 import { MessageBubble } from "./MessageBubble";
 import { AgentActivityTab } from "./AgentActivityTab";
@@ -95,7 +94,6 @@ export function AgentChatPanel({
     },
   });
 
-  const isFreeTier = (licenseQuery.data?.tier ?? "free") === "free";
   const hasAiKey = licenseQuery.data?.hasAiKey ?? false;
   const aiProvider: string | null = licenseQuery.data?.aiProvider ?? null;
 
@@ -128,12 +126,12 @@ export function AgentChatPanel({
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (activeTab === "chat" && hasAiKey && !isFreeTier) {
+    if (activeTab === "chat" && hasAiKey) {
       // Small delay to allow slide-in animation
       const timer = setTimeout(() => textareaRef.current?.focus(), 200);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, hasAiKey, isFreeTier]);
+  }, [activeTab, hasAiKey]);
 
   // -------------------------------------------------------------------------
   // Voice input
@@ -381,12 +379,7 @@ export function AgentChatPanel({
           </div>
         ) : (
           <>
-            {/* License paywall */}
-            {isFreeTier ? (
-              <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden">
-                <PaywallOverlay />
-              </div>
-            ) : !hasAiKey ? (
+            {!hasAiKey ? (
               /* No AI key configured */
               <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900 dark:to-purple-900">

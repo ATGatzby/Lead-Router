@@ -45,6 +45,7 @@ export interface BulkAssignment {
   assignmentType: string | null;
   teamId: string | null;
   teamName: string | null;
+  pendingFieldUpdates?: Record<string, string>;
 }
 
 export interface BulkRoutingOutput {
@@ -72,6 +73,7 @@ interface RoutingDecision {
   teamName: string | null;
   stepAssigneeUserId: string | null; // userId from nested step execution (for USER type)
   stepAssigneeQueueId: string | null; // queueId from nested step execution (for QUEUE type)
+  pendingFieldUpdates?: Record<string, string>; // field updates to batch with owner change
   // Trace
   decisionTrace: DecisionTrace;
   durationMs: number;
@@ -126,6 +128,7 @@ export async function bulkRouteRecords(input: BulkRoutingInput): Promise<BulkRou
         assignmentType: d.assignmentType,
         teamId: d.teamId,
         teamName: d.teamName,
+        ...(d.pendingFieldUpdates ? { pendingFieldUpdates: d.pendingFieldUpdates } : {}),
       });
       routed++;
     } else if (d.outcome === "failed") {
@@ -384,9 +387,10 @@ async function evaluateNewStyleAsync(
       let assigneeTeamId = branch.assigneeTeamId;
       let assigneeQueueId = branch.assigneeQueueId;
 
+      let stepPendingFieldUpdates: Record<string, string> | null = null;
       if (hasV2Steps) {
         // Use executeSteps with isDryRun=true to traverse nested splits
-        // without performing I/O (updateField, createTask are skipped)
+        // Field updates are collected (not executed) for batched CRM write
         const stepCtx: StepExecContext = {
           fields: rec.fields,
           recordId: rec.recordId,
@@ -396,6 +400,9 @@ async function evaluateNewStyleAsync(
         };
         const stepResult = await executeSteps(branch.steps!, stepCtx);
         if (stepResult) {
+          if (stepResult.pendingFieldUpdates && Object.keys(stepResult.pendingFieldUpdates).length > 0) {
+            stepPendingFieldUpdates = stepResult.pendingFieldUpdates;
+          }
           assignmentType = stepResult.assignmentType ?? assignmentType;
           if (stepResult.assignmentType === "USER" && stepResult.assigneeId) {
             assigneeUserId = stepResult.assigneeId;
@@ -422,6 +429,9 @@ async function evaluateNewStyleAsync(
         }
       }
 
+      if (stepPendingFieldUpdates) {
+        trace.fieldUpdates = Object.entries(stepPendingFieldUpdates).map(([field, value]) => ({ field, value }));
+      }
       trace.timing.totalMs = Date.now() - startMs;
       return {
         recordId: rec.recordId,
@@ -439,6 +449,7 @@ async function evaluateNewStyleAsync(
         teamName: null,        // resolved in Phase 3
         stepAssigneeUserId: assigneeUserId,
         stepAssigneeQueueId: assigneeQueueId,
+        ...(stepPendingFieldUpdates ? { pendingFieldUpdates: stepPendingFieldUpdates } : {}),
         decisionTrace: trace,
         durationMs: Date.now() - startMs,
         errorMessage: null,

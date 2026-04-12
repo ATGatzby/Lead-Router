@@ -235,7 +235,7 @@ export function initBulkSearchQueue(redisUrl: string): void {
                     const response = await crmApi.batchUpdate(hubspotObjectType, {
                       inputs: batch.map((a) => ({
                         id: a.recordId,
-                        properties: { hubspot_owner_id: a.ownerId },
+                        properties: { hubspot_owner_id: a.ownerId, ...(a.pendingFieldUpdates ?? {}) },
                         objectWriteTraceId: a.logId,
                       })),
                     });
@@ -355,6 +355,7 @@ export function initBulkSearchQueue(redisUrl: string): void {
               const updateRecords: BulkUpdateRecord[] = needsUpdateAssignments.map((a) => ({
                 Id: a.recordId,
                 OwnerId: a.ownerId,
+                ...(a.pendingFieldUpdates ?? {}),
               }));
 
               const result = await bulkUpdateOwners(

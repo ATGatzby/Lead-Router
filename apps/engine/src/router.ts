@@ -64,6 +64,7 @@ export interface DecisionTrace {
   trigger: { event: string; objectType: string; recordId: string; timestampMs: number };
   cooldown?: { checked: true; skipped: boolean };
   rulesEvaluated: TraceRuleEval[];
+  fieldUpdates?: Array<{ field: string; value: string }>;
   assignment?: {
     type: string;
     assigneeName: string;
@@ -229,6 +230,7 @@ interface StepExecResult {
   assignmentType: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
+  pendingFieldUpdates?: Record<string, string>;
 }
 
 /**
@@ -243,30 +245,34 @@ export async function executeSteps(
   ctx: StepExecContext,
   traceCtx?: StepTraceContext
 ): Promise<StepExecResult | null> {
+  const pendingFieldUpdates: Record<string, string> = {};
   for (const step of steps) {
     switch (step.type) {
       case "filter":
         // Filter conditions are evaluated by the caller before entering this path — skip
         continue;
 
-      case "updateField":
-        if (!ctx.isDryRun) {
-          // Build properties map from fieldUpdates array or legacy single-field format
-          const fieldUpdates = (step as any).fieldUpdates as Array<{ fieldApiName: string; fieldValue: string }> | undefined;
-          const properties: Record<string, string> = {};
+      case "updateField": {
+        // Build properties map from fieldUpdates array or legacy single-field format
+        const fieldUpdates = (step as any).fieldUpdates as Array<{ fieldApiName: string; fieldValue: string }> | undefined;
+        const properties: Record<string, string> = {};
 
-          if (fieldUpdates && fieldUpdates.length > 0) {
-            for (const fu of fieldUpdates) {
-              if (fu.fieldApiName && fu.fieldValue !== undefined) {
-                properties[fu.fieldApiName] = String(fu.fieldValue);
-              }
+        if (fieldUpdates && fieldUpdates.length > 0) {
+          for (const fu of fieldUpdates) {
+            if (fu.fieldApiName && fu.fieldValue !== undefined) {
+              properties[fu.fieldApiName] = String(fu.fieldValue);
             }
-          } else if (step.fieldApiName) {
-            // Legacy single-field format
-            properties[step.fieldApiName as string] = String(step.fieldValue ?? "");
           }
+        } else if (step.fieldApiName) {
+          // Legacy single-field format
+          properties[step.fieldApiName as string] = String(step.fieldValue ?? "");
+        }
 
-          if (Object.keys(properties).length > 0) {
+        if (Object.keys(properties).length > 0) {
+          if (ctx.isDryRun) {
+            // Collect for batched write later (bulk routing)
+            Object.assign(pendingFieldUpdates, properties);
+          } else {
             try {
               const crmType = await getOrgCrmType(ctx.orgId);
               if (crmType === "HUBSPOT") {
@@ -284,6 +290,7 @@ export async function executeSteps(
           }
         }
         continue;
+      }
 
       case "createTask":
         if (!ctx.isDryRun) {
@@ -320,11 +327,12 @@ export async function executeSteps(
         continue;
 
       case "assign":
-        // Return assignment info — the caller handles the actual SFDC owner update
+        // Return assignment info — the caller handles the actual CRM owner update
         return {
           assignmentType: step.assignmentType ?? null,
           assigneeId: step.assigneeId ?? null,
           assigneeName: step.assigneeName ?? null,
+          ...(Object.keys(pendingFieldUpdates).length > 0 ? { pendingFieldUpdates } : {}),
         };
 
       case "split": {
