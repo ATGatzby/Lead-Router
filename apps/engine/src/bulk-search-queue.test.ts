@@ -8,7 +8,10 @@ const {
   mockRedisHset,
   mockBulkUpdateOwners,
   mockGetOrgConnection,
+  mockGetOrgHubSpotClient,
+  mockToCrmObjectType,
   mockPrismaRoutingLogUpdateMany,
+  mockPrismaOrgFindUnique,
   capturedWorkerProcessor,
 } = vi.hoisted(() => {
   const mockBulkRouteRecords = vi.fn().mockResolvedValue({
@@ -25,7 +28,10 @@ const {
     unprocessed: 0,
   });
   const mockGetOrgConnection = vi.fn().mockResolvedValue({ /* mock jsforce conn */ });
+  const mockGetOrgHubSpotClient = vi.fn().mockResolvedValue({ client: {}, crmApi: {} });
+  const mockToCrmObjectType = vi.fn().mockReturnValue("contacts");
   const mockPrismaRoutingLogUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
+  const mockPrismaOrgFindUnique = vi.fn().mockResolvedValue({ crmType: "SALESFORCE" });
 
   const capturedWorkerProcessor: { fn: ((job: any) => Promise<any>) | null } = { fn: null };
 
@@ -35,7 +41,10 @@ const {
     mockRedisHset,
     mockBulkUpdateOwners,
     mockGetOrgConnection,
+    mockGetOrgHubSpotClient,
+    mockToCrmObjectType,
     mockPrismaRoutingLogUpdateMany,
+    mockPrismaOrgFindUnique,
     capturedWorkerProcessor,
   };
 });
@@ -80,7 +89,15 @@ vi.mock("@lead-routing/db", () => ({
     routingLog: {
       updateMany: mockPrismaRoutingLogUpdateMany,
     },
+    organization: {
+      findUnique: mockPrismaOrgFindUnique,
+    },
   },
+}));
+
+vi.mock("./hubspot-connection.js", () => ({
+  getOrgHubSpotClient: mockGetOrgHubSpotClient,
+  toCrmObjectType: mockToCrmObjectType,
 }));
 
 // ─── Import after mocks ────────────────────────────────────────────────────

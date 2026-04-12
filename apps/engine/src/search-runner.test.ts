@@ -36,6 +36,7 @@ vi.mock("@lead-routing/db", () => ({
   prisma: {
     routingRule: { findFirst: mockRuleFindFirst, update: mockRuleUpdate },
     bulkSearchRun: { findFirst: mockBulkSearchRunFindFirst, create: mockBulkSearchRunCreate },
+    organization: { findUnique: vi.fn().mockResolvedValue({ crmType: "SALESFORCE" }) },
   },
 }));
 
@@ -44,6 +45,11 @@ vi.mock("./soql-builder.js", () => ({ buildSearchSOQL: mockBuildSearchSOQL, buil
 vi.mock("./router.js", () => ({ routeRecord: mockRouteRecord }));
 vi.mock("./sfdc.js", () => ({ getOrgConnection: mockGetOrgConnection }));
 vi.mock("./bulk-search.js", () => ({ runBulkSearch: mockRunBulkSearch }));
+vi.mock("./export-runner.js", () => ({ runExportRoute: vi.fn() }));
+vi.mock("./hubspot-connection.js", () => ({ getOrgHubSpotClient: vi.fn(), toCrmObjectType: vi.fn(), evictOrgHubSpotClient: vi.fn() }));
+vi.mock("./hubspot-search-builder.js", () => ({ buildSearchRequest: vi.fn(), buildCountRequest: vi.fn() }));
+vi.mock("./bulk-search-queue.js", () => ({ getBulkSearchQueue: vi.fn() }));
+vi.mock("./redis.js", () => ({ redis: {} }));
 
 import { runScheduledRoute } from "./search-runner.js";
 
