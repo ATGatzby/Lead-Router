@@ -341,10 +341,12 @@ function stepToLine(step: PathStep): string {
       const text = conditionsToText(step.conditions);
       return text ? `If ${text}` : "No filter conditions";
     }
-    case "updateField":
-      return step.fieldApiName
-        ? `\u2192 Set ${step.fieldApiName} = "${step.fieldValue}"`
-        : "\u2192 Set field (not configured)";
+    case "updateField": {
+      const updates = step.fieldUpdates ?? [];
+      if (updates.length === 0) return "\u2192 Set field (not configured)";
+      const parts = updates.map((u) => `${u.fieldApiName} = "${u.fieldValue}"`);
+      return `\u2192 Set ${parts.join(", ")}`;
+    }
     case "createTask": {
       const subject = step.subject || "(no subject)";
       const duePart =
@@ -371,7 +373,7 @@ function hasUnconfiguredSteps(steps: PathStep[]): boolean {
   return steps.some((step) => {
     switch (step.type) {
       case "updateField":
-        return !step.fieldApiName;
+        return !step.fieldUpdates?.length;
       case "createTask":
         return !step.subject;
       case "assign":
