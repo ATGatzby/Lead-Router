@@ -467,7 +467,7 @@ describe("migrateStateToV2", () => {
       paths: [
         makePath("p1", "V2 Path", [
           makeFilter(),
-          { type: "updateField", fieldApiName: "Status", fieldValue: "Routed" },
+          { type: "updateField", fieldUpdates: [{ fieldApiName: "Status", fieldLabel: "Status", fieldType: "TEXT", fieldValue: "Routed" }] },
           makeAssign("Alice"),
         ]),
       ],

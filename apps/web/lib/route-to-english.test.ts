@@ -416,7 +416,7 @@ describe("V2 multi-step path sections", () => {
                 type: "filter",
                 conditions: [makeGroup([makeCond({ fieldApiName: "Industry", operator: "equals", value: "Tech" })])],
               },
-              { type: "updateField", fieldApiName: "Status__c", fieldValue: "Routed" },
+              { type: "updateField", fieldUpdates: [{ fieldApiName: "Status__c", fieldLabel: "Status", fieldType: "TEXT", fieldValue: "Routed" }] },
               { type: "assign", assignmentType: "USER", assigneeId: "u1", assigneeName: "Alice" },
             ],
           },
@@ -603,7 +603,7 @@ describe("V2 multi-step path sections", () => {
                     action: { assignmentType: null, assigneeId: null, assigneeName: null },
                     steps: [
                       { type: "filter", conditions: [] },
-                      { type: "updateField", fieldApiName: "Status", fieldValue: "Pending" },
+                      { type: "updateField", fieldUpdates: [{ fieldApiName: "Status", fieldLabel: "Status", fieldType: "TEXT", fieldValue: "Pending" }] },
                       // No assign step anywhere
                     ],
                   },
