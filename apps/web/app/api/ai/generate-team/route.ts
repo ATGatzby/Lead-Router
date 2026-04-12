@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrgIdFromHeaders } from "@/lib/auth";
-import { getLicenseTier, upgradeRequiredResponse } from "@/lib/license";
 import { prisma } from "@lead-routing/db";
 import { decryptField } from "@/lib/crypto";
 import {
@@ -21,12 +20,6 @@ export async function POST(req: NextRequest) {
     // ── Auth ──────────────────────────────────────────────────────────────
     const orgId = await getOrgIdFromHeaders();
 
-    // ── License check ────────────────────────────────────────────────────
-    const tier = getLicenseTier();
-    if (tier !== "pro") {
-      return upgradeRequiredResponse("AI Team Generator");
-    }
-
     // ── Fetch org AI config ──────────────────────────────────────────────
     const org = await prisma.organization.findUniqueOrThrow({
       where: { id: orgId },
@@ -39,11 +32,6 @@ export async function POST(req: NextRequest) {
         aiCustomHeaders: true,
       },
     });
-
-    // Belt + suspenders: also check DB plan
-    if (org.plan !== "PAID") {
-      return upgradeRequiredResponse("AI Team Generator");
-    }
 
     if (!org.aiProvider || !org.aiApiKey) {
       return NextResponse.json(

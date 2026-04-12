@@ -47,7 +47,7 @@ function bail(value: unknown): never {
   throw new Error('Unexpected cancel')
 }
 
-export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?: string): Promise<CollectedConfig> {
+export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?: string, authPassword?: string): Promise<CollectedConfig> {
   const crmType = opts.crmType ?? 'salesforce'
 
   note(
@@ -121,14 +121,19 @@ export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?:
     if (isCancel(adminEmail)) bail(adminEmail)
   }
 
-  const adminPassword = await password({
-    message: 'Admin password (min 8 characters)',
-    validate: (v) => {
-      if (!v) return 'Required'
-      if (v.length < 8) return 'Must be at least 8 characters'
-    },
-  })
-  if (isCancel(adminPassword)) bail(adminPassword)
+  let adminPassword: string | symbol
+  if (authPassword) {
+    adminPassword = authPassword
+  } else {
+    adminPassword = await password({
+      message: 'Admin password (min 8 characters)',
+      validate: (v) => {
+        if (!v) return 'Required'
+        if (v.length < 8) return 'Must be at least 8 characters'
+      },
+    })
+    if (isCancel(adminPassword)) bail(adminPassword)
+  }
 
   // ── Auto-generated secrets ─────────────────────────────────────────────────
   const sessionSecret = generateSecret(32)

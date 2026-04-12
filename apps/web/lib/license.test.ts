@@ -46,10 +46,10 @@ describe('getTierLimits', () => {
   it('returns FREE_LIMITS when tier is "free"', () => {
     const limits = getTierLimits('free')
     expect(limits).toEqual({
-      maxRules: 2,
+      maxRules: Infinity,
       maxOrgs: 1,
       maxSeats: 10,
-      allowedTriggers: ['LEAD', 'CONTACT', 'COMPANY', 'DEAL'],
+      allowedTriggers: ['LEAD', 'CONTACT', 'ACCOUNT', 'COMPANY', 'DEAL'],
       weightedDistribution: true,
       analytics: true,
       auditLog: true,
@@ -76,6 +76,7 @@ describe('getTierLimits', () => {
     const limits = getTierLimits('free')
     expect(limits.allowedTriggers).toContain('LEAD')
     expect(limits.allowedTriggers).toContain('CONTACT')
+    expect(limits.allowedTriggers).toContain('ACCOUNT')
     expect(limits.allowedTriggers).toContain('COMPANY')
     expect(limits.allowedTriggers).toContain('DEAL')
   })
@@ -97,7 +98,7 @@ describe('getTierLimits', () => {
   it('defaults to getLicenseTier() when no argument passed', () => {
     delete process.env.LICENSE_TIER
     const limits = getTierLimits()
-    expect(limits.maxRules).toBe(2) // free tier
+    expect(limits.maxRules).toBe(Infinity) // free tier (ungated)
   })
 })
 

@@ -190,6 +190,84 @@ async function runHubSpotScheduledRoute(
   }
 }
 
+// ─── HubSpot Search API path (<10K records) ─────────────────────────────────
+
+async function runHubSpotSearchPath(
+  hsClient: any,
+  crmObjectType: any,
+  searchRequest: any,
+  rule: any,
+  ruleId: string,
+  orgId: string,
+  startTime: number,
+): Promise<RunResult> {
+  const records = await hsClient.searchApi.searchAll(crmObjectType, searchRequest);
+  console.log(`[search-runner] Search API: found ${records.length} records for rule ${ruleId}`);
+
+  if (records.length === 0) {
+    await updateRuleStats(ruleId, 0, 0, Date.now() - startTime, "SUCCESS");
+    return { status: "SUCCESS", recordsFound: 0, recordsRouted: 0, durationMs: Date.now() - startTime };
+  }
+
+  const run = await prisma.bulkSearchRun.create({
+    data: { orgId, ruleId, status: "RUNNING" },
+  });
+
+  const queue = getBulkSearchQueue();
+  const runKey = `bulk-run:${run.id}`;
+  const batchSize = 200;
+
+  await redisClient.hset(runKey, { status: "RUNNING", phase: "routing", totalRecords: String(records.length) });
+  await redisClient.expire(runKey, 86400);
+
+  let totalEnqueued = 0;
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize);
+    const jobData: BulkSearchJobData = {
+      orgId,
+      ruleId,
+      runId: run.id,
+      objectType: rule.objectType as "CONTACT" | "COMPANY" | "DEAL",
+      records: batch.map((record: any) => ({
+        recordId: record.id,
+        fields: record.properties as Record<string, unknown>,
+        matchResult: null,
+      })),
+      simulate: false,
+    };
+    await queue.add(`search-batch-${totalEnqueued}`, jobData);
+    totalEnqueued += batch.length;
+  }
+
+  console.log(`[search-runner] Enqueued ${totalEnqueued} records to bulk pipeline`);
+
+  // Wait for bulk pipeline to complete
+  const POLL_INTERVAL = 2000;
+  const MAX_WAIT = 30 * 60 * 1000;
+  const waitStart = Date.now();
+
+  while (Date.now() - waitStart < MAX_WAIT) {
+    const data = await redisClient.hgetall(runKey);
+    const routed = parseInt(data.routed || "0");
+    const failed = parseInt(data.failed || "0");
+
+    if (routed + failed >= totalEnqueued) {
+      const durationMs = Date.now() - startTime;
+      const status = failed > 0 && routed === 0 ? "FAILED" : "SUCCESS";
+      await updateRuleStats(ruleId, routed, totalEnqueued, durationMs, status);
+      await redisClient.del(runKey);
+      return { status, recordsFound: totalEnqueued, recordsRouted: routed, recordsFailed: failed, durationMs };
+    }
+
+    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+  }
+
+  // Timeout
+  const durationMs = Date.now() - startTime;
+  await updateRuleStats(ruleId, 0, totalEnqueued, durationMs, "FAILED");
+  return { status: "FAILED", recordsFound: totalEnqueued, recordsRouted: 0, recordsFailed: 0, durationMs, error: "Timed out" };
+}
+
 // ─── Salesforce Scheduled Route (original logic) ────────────────────────────
 
 async function runSfdcScheduledRoute(

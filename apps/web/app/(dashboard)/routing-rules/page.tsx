@@ -15,8 +15,6 @@ import {
   Play,
   ChevronDown,
   Loader2,
-  Lock,
-  ExternalLink,
   Square,
   FlaskConical,
   Sparkles,
@@ -39,25 +37,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useCrmType } from "@/lib/hooks/use-crm-type";
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { AgentChatPanel } from "@/components/ai-chat/AgentChatPanel";
-
-// ─── License Types ──────────────────────────────────────────────────────────
-
-interface LicenseResponse {
-  tier: string;
-  limits: { maxRules: number; maxSeats: number };
-  usage: { rules: number; seats: number; orgs: number };
-  licenseKey: string | null;
-}
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -143,34 +126,8 @@ function formatLastRun(rule: Rule): string {
 
 // ─── New Route Dropdown ────────────────────────────────────────────────────
 
-function NewRouteDropdown({ atLimit = false, onAIGenerate }: { atLimit?: boolean; onAIGenerate?: () => void }) {
+function NewRouteDropdown({ onAIGenerate }: { atLimit?: boolean; onAIGenerate?: () => void }) {
   const router = useRouter();
-
-  if (atLimit) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0}>
-              <Button size="sm" disabled className="pointer-events-none">
-                <Lock className="h-4 w-4 mr-1" />
-                New Route
-                <Badge
-                  variant="outline"
-                  className="ml-1.5 text-[10px] border-amber-400 dark:border-amber-600 text-amber-500 dark:text-amber-400"
-                >
-                  Pro
-                </Badge>
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            Rule limit reached. Upgrade to Pro.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
 
   return (
     <DropdownMenu>
@@ -193,9 +150,6 @@ function NewRouteDropdown({ atLimit = false, onAIGenerate }: { atLimit?: boolean
         <DropdownMenuItem onClick={() => onAIGenerate?.()}>
           <Sparkles className="h-4 w-4 mr-2 text-violet-500" />
           Use AI to Create Routes
-          <Badge className="ml-auto bg-violet-600 text-[10px] px-1.5 py-0 text-white border-0">
-            PRO
-          </Badge>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -347,15 +301,6 @@ export default function RoutingRulesPage() {
     },
   });
 
-  const licenseQuery = useQuery<LicenseResponse>({
-    queryKey: ["license"],
-    queryFn: async () => {
-      const res = await fetch("/api/license");
-      if (!res.ok) throw new Error("Failed to load license");
-      return res.json();
-    },
-  });
-
   const rules = rulesQuery.data?.rules ?? [];
 
   // Auto-detect active bulk runs from rules data (e.g., on page load)
@@ -401,10 +346,6 @@ export default function RoutingRulesPage() {
     prevBulkStatusRef.current = bulkStatus.status;
   }
 
-  // License gating: maxRules of -1 means unlimited (Pro)
-  const maxRules = licenseQuery.data?.limits.maxRules ?? -1;
-  const atRuleLimit = maxRules !== -1 && rules.length >= maxRules;
-
   // ─── Derived counts & filtered list ────────────────────────────────────
 
   const counts = useMemo(() => {
@@ -431,7 +372,6 @@ export default function RoutingRulesPage() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["rules"] });
-    qc.invalidateQueries({ queryKey: ["license"] });
   };
 
   // ─── Mutations ────────────────────────────────────────────────────────────
@@ -533,28 +473,9 @@ export default function RoutingRulesPage() {
               Simulate 1M
             </Button>
           )}
-          <NewRouteDropdown atLimit={atRuleLimit} onAIGenerate={() => setShowAIRules(true)} />
+          <NewRouteDropdown onAIGenerate={() => setShowAIRules(true)} />
         </div>
       </div>
-
-      {/* Upgrade banner when at rule limit */}
-      {atRuleLimit && (
-        <div className="flex items-center justify-between rounded-xl border border-violet-200 dark:border-violet-500/30 bg-violet-50 dark:bg-violet-500/10 px-4 py-3">
-          <p className="text-sm text-violet-700 dark:text-violet-300">
-            You&apos;ve used all {maxRules} free routing rules. Upgrade to Pro for unlimited rules.
-          </p>
-          <a
-            href="https://openedgeai.tech/pricing"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button size="sm" className="bg-gradient-to-r from-violet-600 to-purple-600 dark:from-violet-500 dark:to-purple-500 text-white shadow-sm hover:shadow-md hover:from-violet-700 hover:to-purple-700 dark:hover:from-violet-600 dark:hover:to-purple-600 border-0">
-              Upgrade to Pro
-              <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-            </Button>
-          </a>
-        </div>
-      )}
 
       {/* Loading / Error */}
       {rulesQuery.isLoading && <TableSkeleton rows={4} columns={4} />}
@@ -574,7 +495,7 @@ export default function RoutingRulesPage() {
           <p className="text-xs text-muted-foreground">
             Create your first route to start automatically assigning records.
           </p>
-          <NewRouteDropdown atLimit={atRuleLimit} onAIGenerate={() => setShowAIRules(true)} />
+          <NewRouteDropdown onAIGenerate={() => setShowAIRules(true)} />
         </div>
       )}
 
@@ -761,39 +682,16 @@ export default function RoutingRulesPage() {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    {atRuleLimit ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-muted-foreground pointer-events-none"
-                                disabled
-                                aria-label="Clone rule"
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            Rule limit reached. Upgrade to Pro.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground"
-                        onClick={() => cloneMutation.mutate(rule.id)}
-                        disabled={cloneMutation.isPending}
-                        aria-label="Clone rule"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground"
+                      onClick={() => cloneMutation.mutate(rule.id)}
+                      disabled={cloneMutation.isPending}
+                      aria-label="Clone rule"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"

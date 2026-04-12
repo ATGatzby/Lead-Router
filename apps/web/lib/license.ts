@@ -12,10 +12,10 @@ export interface TierLimits {
 }
 
 const FREE_LIMITS: TierLimits = {
-  maxRules: 2,
+  maxRules: Infinity,
   maxOrgs: 1,
   maxSeats: 10,
-  allowedTriggers: ["LEAD", "CONTACT", "COMPANY", "DEAL"],
+  allowedTriggers: ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
   weightedDistribution: true,
   analytics: true,
   auditLog: true,

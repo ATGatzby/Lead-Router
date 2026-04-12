@@ -127,6 +127,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   // ── Auth check (inline signup/login if needed) ──
   let auth: StoredCredentials
+  let authPassword: string | undefined
   try {
     auth = await requireAuth()
   } catch {
@@ -183,6 +184,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         }
         saveCredentials({ token, customer, storedAt: new Date().toISOString() })
         auth = { token, customer, storedAt: new Date().toISOString() }
+        authPassword = signupPw as string
       } catch (err) {
         log.error(err instanceof Error ? err.message : 'Login failed')
         process.exit(1)
@@ -208,6 +210,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         }
         saveCredentials({ token, customer, storedAt: new Date().toISOString() })
         auth = { token, customer, storedAt: new Date().toISOString() }
+        authPassword = loginPw as string
       } catch (err) {
         log.error(err instanceof Error ? err.message : 'Login failed')
         process.exit(1)
@@ -307,7 +310,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       externalDb: options.externalDb,
       externalRedis: options.externalRedis,
       crmType,
-    }, auth.customer.email)
+    }, auth.customer.email, authPassword)
 
     // DNS pre-flight
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)

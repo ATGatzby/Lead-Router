@@ -62,15 +62,16 @@ export async function GET(req: NextRequest) {
       FROM conversion_tracking ct
       JOIN routing_logs rl ON rl.id = ct."routingLogId"
       WHERE ${ctWhere}
-      GROUP BY 1
+      GROUP BY bucket
       ORDER BY
-        CASE
-          WHEN rl."routingDurationMs" IS NULL THEN 6
-          WHEN rl."routingDurationMs" <= 1000 THEN 1
-          WHEN rl."routingDurationMs" <= 5000 THEN 2
-          WHEN rl."routingDurationMs" <= 15000 THEN 3
-          WHEN rl."routingDurationMs" <= 60000 THEN 4
-          ELSE 5
+        CASE bucket
+          WHEN '0-1s' THEN 1
+          WHEN '1-5s' THEN 2
+          WHEN '5-15s' THEN 3
+          WHEN '15-60s' THEN 4
+          WHEN '1min+' THEN 5
+          WHEN 'unknown' THEN 6
+          ELSE 7
         END
     `, ...params);
 
