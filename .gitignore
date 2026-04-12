@@ -43,8 +43,7 @@ securityplan.md
 RegressionSuite.md
 docs/
 
-# Flow Builder (not public yet)
-apps/engine/src/flow-*.ts
+# Flow Builder (not public yet — web UI only; engine flow-*.ts files are tracked)
 apps/web/components/flow-builder/
 apps/web/app/(dashboard)/flow-builder/
 apps/web/app/(dashboard)/routing-rules/*/flow/
