@@ -289,7 +289,16 @@ export function TraceDetail({ trace, entry }: { trace: any; entry: JourneyEntry 
       )}
 
       {/* Step: Assignment */}
-      {(trace.assignment || entry.assigneeName) && (
+      {(trace.assignment || entry.assigneeName) && (() => {
+        const isFailed = entry.status === "FAILED";
+        const isRetry = entry.status === "RETRY";
+        const assignStatus = isFailed ? "error" : isRetry ? "info" : "success";
+        const assignSummary = isFailed
+          ? "CRM write failed"
+          : isRetry
+            ? `→ ${entry.assigneeName ?? "Pending"} (awaiting CRM write)`
+            : entry.assigneeName ? `→ ${entry.assigneeName}` : "Assigned";
+        return (
         <CollapsibleStep
           icon={<UserCheck className="h-4 w-4" />}
           title="Assignment"
@@ -298,8 +307,8 @@ export function TraceDetail({ trace, entry }: { trace: any; entry: JourneyEntry 
             (trace.rulesEvaluated?.some((r: any) => r.matchPhase) ? 1 : 0) +
             (trace.rulesEvaluated?.length > 0 ? 1 : 0) + 2
           }
-          status="success"
-          summary={entry.assigneeName ? `→ ${entry.assigneeName}` : "Assigned"}
+          status={assignStatus}
+          summary={assignSummary}
           defaultOpen
         >
           <AssignmentCard
@@ -309,7 +318,7 @@ export function TraceDetail({ trace, entry }: { trace: any; entry: JourneyEntry 
             teamName={entry.teamName}
           />
         </CollapsibleStep>
-      )}
+        ); })()}
 
       {/* Timing */}
       {trace.timing && (
