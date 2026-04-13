@@ -279,14 +279,33 @@ async function handleGemini(
     parts: [{ text: m.content }],
   }));
 
-  let response = await ai.models.generateContent({
-    model: model ?? "gemini-2.5-flash",
-    contents,
-    config: {
-      systemInstruction: systemPrompt,
-      tools: geminiTools,
-    },
-  });
+  // Helper: call Gemini with retry on 503/429
+  async function callGemini(c: any[]) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await ai.models.generateContent({
+          model: model ?? "gemini-2.5-flash",
+          contents: c,
+          config: {
+            systemInstruction: systemPrompt,
+            tools: geminiTools,
+          },
+        });
+      } catch (err: any) {
+        const status = err?.status ?? err?.code ?? err?.httpStatusCode;
+        if ((status === 503 || status === 429) && attempt < 2) {
+          const wait = (attempt + 1) * 2000;
+          console.warn(`[ai-chat] Gemini ${status}, retrying in ${wait}ms (attempt ${attempt + 1}/3)`);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Gemini: max retries exceeded");
+  }
+
+  let response = await callGemini(contents);
 
   // Tool use loop
   let maxIterations = 10;
@@ -324,14 +343,7 @@ async function handleGemini(
       { role: "user", parts: functionResponses }
     );
 
-    response = await ai.models.generateContent({
-      model: model ?? "gemini-2.5-flash",
-      contents,
-      config: {
-        systemInstruction: systemPrompt,
-        tools: geminiTools,
-      },
-    });
+    response = await callGemini(contents);
   }
 
   // Extract text
