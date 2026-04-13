@@ -260,6 +260,10 @@ async function runHubSpotSearchPath(
       const durationMs = Date.now() - startTime;
       const status = failed > 0 && routed === 0 ? "FAILED" : "SUCCESS";
       await updateRuleStats(ruleId, routed, totalEnqueued, durationMs, status);
+      await prisma.bulkSearchRun.update({
+        where: { id: run.id },
+        data: { status: status === "SUCCESS" ? "COMPLETED" : "FAILED", recordsFound: totalEnqueued, recordsProcessed: totalEnqueued, recordsRouted: routed, recordsFailed: failed, durationMs, completedAt: new Date() },
+      }).catch((err) => console.error("[search-runner] Failed to update bulk run:", err));
       await redisClient.del(runKey);
       return { status, recordsFound: totalEnqueued, recordsRouted: routed, recordsFailed: failed, durationMs };
     }
@@ -270,6 +274,10 @@ async function runHubSpotSearchPath(
   // Timeout
   const durationMs = Date.now() - startTime;
   await updateRuleStats(ruleId, 0, totalEnqueued, durationMs, "FAILED");
+  await prisma.bulkSearchRun.update({
+    where: { id: run.id },
+    data: { status: "FAILED", recordsFound: totalEnqueued, durationMs, error: "Timed out", completedAt: new Date() },
+  }).catch((err) => console.error("[search-runner] Failed to update bulk run:", err));
   return { status: "FAILED", recordsFound: totalEnqueued, recordsRouted: 0, recordsFailed: 0, durationMs, error: "Timed out" };
 }
 

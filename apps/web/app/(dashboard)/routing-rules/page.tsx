@@ -319,7 +319,8 @@ export default function RoutingRulesPage() {
   // Bulk run completion detection (must be after rules query)
   if (bulkStatus && activeBulkRunId) {
     const isTerminal = bulkStatus.status !== "RUNNING";
-    if (isTerminal && prevBulkStatusRef.current === "RUNNING") {
+    const wasRunning = prevBulkStatusRef.current === "RUNNING" || prevBulkStatusRef.current === null;
+    if (isTerminal && wasRunning) {
       const rId = bulkRunRuleId;
       const rule = rules.find((r) => r.id === rId);
       const ruleName = rule?.name ?? "Route";
