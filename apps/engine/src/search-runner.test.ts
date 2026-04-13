@@ -7,6 +7,7 @@ const {
   mockRuleUpdate,
   mockBulkSearchRunFindFirst,
   mockBulkSearchRunCreate,
+  mockBulkSearchRunUpdate,
   mockGetOrgConnection,
   mockRouteRecord,
   mockRunBulkSearch,
@@ -14,14 +15,21 @@ const {
   mockBuildCountSOQL,
   mockQuery,
   mockQueryMore,
+  mockQueueAdd,
+  mockRedisHset,
+  mockRedisExpire,
+  mockRedisHgetall,
+  mockRedisDel,
 } = vi.hoisted(() => {
   const mockQuery = vi.fn();
   const mockQueryMore = vi.fn();
+  const mockQueueAdd = vi.fn().mockResolvedValue({});
   return {
     mockRuleFindFirst: vi.fn(),
     mockRuleUpdate: vi.fn().mockResolvedValue({}),
     mockBulkSearchRunFindFirst: vi.fn(),
     mockBulkSearchRunCreate: vi.fn(),
+    mockBulkSearchRunUpdate: vi.fn().mockResolvedValue({}),
     mockGetOrgConnection: vi.fn().mockResolvedValue({ query: mockQuery, queryMore: mockQueryMore }),
     mockRouteRecord: vi.fn().mockResolvedValue("routed"),
     mockRunBulkSearch: vi.fn(),
@@ -29,13 +37,18 @@ const {
     mockBuildCountSOQL: vi.fn().mockReturnValue("SELECT COUNT() FROM Lead WHERE Industry = 'Tech'"),
     mockQuery,
     mockQueryMore,
+    mockQueueAdd,
+    mockRedisHset: vi.fn().mockResolvedValue(0),
+    mockRedisExpire: vi.fn().mockResolvedValue(1),
+    mockRedisHgetall: vi.fn().mockResolvedValue({}),
+    mockRedisDel: vi.fn().mockResolvedValue(1),
   };
 });
 
 vi.mock("@lead-routing/db", () => ({
   prisma: {
     routingRule: { findFirst: mockRuleFindFirst, update: mockRuleUpdate },
-    bulkSearchRun: { findFirst: mockBulkSearchRunFindFirst, create: mockBulkSearchRunCreate },
+    bulkSearchRun: { findFirst: mockBulkSearchRunFindFirst, create: mockBulkSearchRunCreate, update: mockBulkSearchRunUpdate },
     organization: { findUnique: vi.fn().mockResolvedValue({ crmType: "SALESFORCE" }) },
   },
 }));
@@ -43,13 +56,13 @@ vi.mock("@lead-routing/db", () => ({
 vi.mock("./cache.js", () => ({ getActiveRules: vi.fn() }));
 vi.mock("./soql-builder.js", () => ({ buildSearchSOQL: mockBuildSearchSOQL, buildCountSOQL: mockBuildCountSOQL }));
 vi.mock("./router.js", () => ({ routeRecord: mockRouteRecord }));
-vi.mock("./sfdc.js", () => ({ getOrgConnection: mockGetOrgConnection }));
+vi.mock("./sfdc.js", () => ({ getOrgConnection: mockGetOrgConnection, evictOrgConnection: vi.fn() }));
 vi.mock("./bulk-search.js", () => ({ runBulkSearch: mockRunBulkSearch }));
 vi.mock("./export-runner.js", () => ({ runExportRoute: vi.fn() }));
 vi.mock("./hubspot-connection.js", () => ({ getOrgHubSpotClient: vi.fn(), toCrmObjectType: vi.fn(), evictOrgHubSpotClient: vi.fn() }));
 vi.mock("./hubspot-search-builder.js", () => ({ buildSearchRequest: vi.fn(), buildCountRequest: vi.fn() }));
-vi.mock("./bulk-search-queue.js", () => ({ getBulkSearchQueue: vi.fn() }));
-vi.mock("./redis.js", () => ({ redis: {} }));
+vi.mock("./bulk-search-queue.js", () => ({ getBulkSearchQueue: vi.fn(() => ({ add: mockQueueAdd })) }));
+vi.mock("./redis.js", () => ({ redis: { hset: mockRedisHset, expire: mockRedisExpire, hgetall: mockRedisHgetall, del: mockRedisDel } }));
 
 import { runScheduledRoute } from "./search-runner.js";
 
@@ -110,6 +123,8 @@ describe("runScheduledRoute", () => {
   describe("threshold branching", () => {
     it("uses REST path when COUNT < 2000", async () => {
       mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockBulkSearchRunCreate.mockResolvedValue({ id: "run-rest-1" });
+      mockRedisHgetall.mockResolvedValue({ routed: "1", failed: "0" });
       // COUNT query returns 500
       mockCountQueryResult(500);
       // REST search query
@@ -117,7 +132,7 @@ describe("runScheduledRoute", () => {
 
       await runScheduledRoute("rule-1", "org-1");
 
-      expect(mockRouteRecord).toHaveBeenCalled();
+      expect(mockQueueAdd).toHaveBeenCalled();
       expect(mockRunBulkSearch).not.toHaveBeenCalled();
     });
 
@@ -159,12 +174,14 @@ describe("runScheduledRoute", () => {
 
     it("uses REST path when COUNT is 1999 (boundary)", async () => {
       mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockBulkSearchRunCreate.mockResolvedValue({ id: "run-rest-2" });
+      mockRedisHgetall.mockResolvedValue({ routed: "1", failed: "0" });
       mockCountQueryResult(1999);
       mockQuery.mockResolvedValueOnce({ totalSize: 1999, done: true, records: [{ Id: "001" }] });
 
       await runScheduledRoute("rule-1", "org-1");
 
-      expect(mockRouteRecord).toHaveBeenCalled();
+      expect(mockQueueAdd).toHaveBeenCalled();
       expect(mockRunBulkSearch).not.toHaveBeenCalled();
     });
   });
@@ -172,18 +189,23 @@ describe("runScheduledRoute", () => {
   // ── REST path ────────────────────────────────────────────────────────────
 
   describe("REST path", () => {
+    beforeEach(() => {
+      mockBulkSearchRunCreate.mockResolvedValue({ id: "run-rest-1" });
+    });
+
     it("returns SUCCESS with correct recordsFound and recordsRouted", async () => {
       const records = [{ Id: "001" }, { Id: "002" }, { Id: "003" }];
       mockRuleFindFirst.mockResolvedValue(makeRule());
       mockCountQueryResult(3);
       mockQuery.mockResolvedValueOnce({ totalSize: 3, done: true, records });
+      mockRedisHgetall.mockResolvedValue({ routed: "3", failed: "0" });
 
       const result = await runScheduledRoute("rule-1", "org-1");
 
       expect(result.status).toBe("SUCCESS");
       expect(result.recordsFound).toBe(3);
       expect(result.recordsRouted).toBe(3);
-      expect(mockRouteRecord).toHaveBeenCalledTimes(3);
+      expect(mockQueueAdd).toHaveBeenCalled();
     });
 
     it("handles paginated results with queryMore", async () => {
@@ -198,13 +220,14 @@ describe("runScheduledRoute", () => {
         nextRecordsUrl: "/services/data/v59.0/query/01g...-2000",
       });
       mockQueryMore.mockResolvedValueOnce({ totalSize: 3, done: true, records: page2 });
+      mockRedisHgetall.mockResolvedValue({ routed: "3", failed: "0" });
 
       const result = await runScheduledRoute("rule-1", "org-1");
 
       expect(mockQueryMore).toHaveBeenCalledWith("/services/data/v59.0/query/01g...-2000");
       expect(result.recordsFound).toBe(3);
       expect(result.recordsRouted).toBe(3);
-      expect(mockRouteRecord).toHaveBeenCalledTimes(3);
+      expect(mockQueueAdd).toHaveBeenCalled();
     });
 
     it("returns SUCCESS with 0 records when query returns empty", async () => {
@@ -217,36 +240,15 @@ describe("runScheduledRoute", () => {
       expect(result.status).toBe("SUCCESS");
       expect(result.recordsFound).toBe(0);
       expect(result.recordsRouted).toBe(0);
-      expect(mockRouteRecord).not.toHaveBeenCalled();
+      expect(mockQueueAdd).not.toHaveBeenCalled();
     });
 
-    it("returns PARTIAL when some records fail routing", async () => {
-      const records = [{ Id: "001" }, { Id: "002" }, { Id: "003" }];
-      mockRuleFindFirst.mockResolvedValue(makeRule());
-      mockCountQueryResult(3);
-      mockQuery.mockResolvedValueOnce({ totalSize: 3, done: true, records });
-
-      mockRouteRecord
-        .mockResolvedValueOnce("routed")
-        .mockRejectedValueOnce(new Error("routing failed"))
-        .mockResolvedValueOnce("routed");
-
-      const result = await runScheduledRoute("rule-1", "org-1");
-
-      expect(result.status).toBe("PARTIAL");
-      expect(result.recordsRouted).toBe(2);
-      expect(result.recordsFailed).toBe(1);
-    });
-
-    it("returns FAILED when all records fail routing", async () => {
+    it("returns FAILED when all records fail routing (via Redis poll)", async () => {
       const records = [{ Id: "001" }, { Id: "002" }];
       mockRuleFindFirst.mockResolvedValue(makeRule());
       mockCountQueryResult(2);
       mockQuery.mockResolvedValueOnce({ totalSize: 2, done: true, records });
-
-      mockRouteRecord
-        .mockRejectedValueOnce(new Error("fail"))
-        .mockRejectedValueOnce(new Error("fail"));
+      mockRedisHgetall.mockResolvedValue({ routed: "0", failed: "2" });
 
       const result = await runScheduledRoute("rule-1", "org-1");
 
@@ -255,23 +257,40 @@ describe("runScheduledRoute", () => {
       expect(result.recordsFailed).toBe(2);
     });
 
-    it("passes correct params to routeRecord", async () => {
-      const record = { Id: "001", Name: "Acme", Industry: "Tech" };
-      mockRuleFindFirst.mockResolvedValue(makeRule({ objectType: "ACCOUNT" }));
-      mockCountQueryResult(1);
-      mockQuery.mockResolvedValueOnce({ totalSize: 1, done: true, records: [record] });
+    it("creates a bulkSearchRun and enqueues records to the bulk pipeline", async () => {
+      const records = [{ Id: "001" }, { Id: "002" }];
+      mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockCountQueryResult(2);
+      mockQuery.mockResolvedValueOnce({ totalSize: 2, done: true, records });
+      mockRedisHgetall.mockResolvedValue({ routed: "2", failed: "0" });
 
       await runScheduledRoute("rule-1", "org-1");
 
-      expect(mockRouteRecord).toHaveBeenCalledWith(
+      expect(mockBulkSearchRunCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ orgId: "org-1", ruleId: "rule-1", status: "RUNNING", recordsFound: 2 }),
+      });
+      expect(mockRedisHset).toHaveBeenCalled();
+      expect(mockRedisExpire).toHaveBeenCalled();
+      expect(mockQueueAdd).toHaveBeenCalled();
+      expect(mockRedisDel).toHaveBeenCalled();
+    });
+
+    it("updates bulkSearchRun on completion and cleans up Redis", async () => {
+      const records = [{ Id: "001" }];
+      mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockCountQueryResult(1);
+      mockQuery.mockResolvedValueOnce({ totalSize: 1, done: true, records });
+      mockRedisHgetall.mockResolvedValue({ routed: "1", failed: "0" });
+
+      await runScheduledRoute("rule-1", "org-1");
+
+      expect(mockBulkSearchRunUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
-          orgId: "org-1",
-          objectType: "ACCOUNT",
-          eventType: "SEARCH",
-          recordId: "001",
-          fields: record,
+          where: { id: "run-rest-1" },
+          data: expect.objectContaining({ status: "COMPLETED", recordsRouted: 1, recordsFailed: 0 }),
         })
       );
+      expect(mockRedisDel).toHaveBeenCalledWith("bulk-run:run-rest-1");
     });
   });
 
@@ -482,6 +501,8 @@ describe("runScheduledRoute", () => {
     it("correctly increments totalRuns and totalRecordsRouted on SUCCESS", async () => {
       const records = [{ Id: "001" }, { Id: "002" }];
       mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockBulkSearchRunCreate.mockResolvedValue({ id: "run-stats-1" });
+      mockRedisHgetall.mockResolvedValue({ routed: "2", failed: "0" });
       mockCountQueryResult(2);
       mockQuery.mockResolvedValueOnce({ totalSize: 2, done: true, records });
 
@@ -500,6 +521,8 @@ describe("runScheduledRoute", () => {
 
     it("does not throw when updateRuleStats fails (swallows error)", async () => {
       mockRuleFindFirst.mockResolvedValue(makeRule());
+      mockBulkSearchRunCreate.mockResolvedValue({ id: "run-stats-2" });
+      mockRedisHgetall.mockResolvedValue({ routed: "1", failed: "0" });
       mockCountQueryResult(1);
       mockQuery.mockResolvedValueOnce({ totalSize: 1, done: true, records: [{ Id: "001" }] });
       mockRuleUpdate.mockRejectedValueOnce(new Error("DB unavailable"));

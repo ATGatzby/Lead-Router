@@ -1,7 +1,6 @@
 import { prisma } from "@lead-routing/db";
 import { getActiveRules, type CachedRule } from "./cache.js";
 import { buildSearchSOQL, buildCountSOQL } from "./soql-builder.js";
-import { routeRecord } from "./router.js";
 import { getOrgConnection, evictOrgConnection } from "./sfdc.js";
 import { runBulkSearch } from "./bulk-search.js";
 import { runExportRoute } from "./export-runner.js";
@@ -398,36 +397,72 @@ async function runRestPath(
     return { status: "SUCCESS", recordsFound: 0, recordsRouted: 0, durationMs: Date.now() - startTime };
   }
 
-  const batchSize = 200;
-  let routed = 0;
-  let failed = 0;
+  // Use bulk pipeline (same as HubSpot) for consistent aggregates + field updates
+  const run = await prisma.bulkSearchRun.create({
+    data: { orgId, ruleId, status: "RUNNING", recordsFound: records.length },
+  });
 
+  const queue = getBulkSearchQueue();
+  const runKey = `bulk-run:${run.id}`;
+  const batchSize = 200;
+
+  await redisClient.hset(runKey, { status: "RUNNING", phase: "routing", totalRecords: String(records.length) });
+  await redisClient.expire(runKey, 86400);
+
+  let totalEnqueued = 0;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map((record) =>
-        routeRecord({
-          orgId,
-          objectType: rule.objectType as "LEAD" | "CONTACT" | "ACCOUNT",
-          eventType: "SEARCH",
-          recordId: record.Id,
-          fields: record,
-          timestamp: new Date().toISOString(),
-        })
-      )
-    );
-
-    for (const r of results) {
-      if (r.status === "fulfilled") routed++;
-      else failed++;
-    }
+    const jobData: BulkSearchJobData = {
+      orgId,
+      ruleId,
+      runId: run.id,
+      objectType: rule.objectType as "LEAD" | "CONTACT" | "ACCOUNT",
+      records: batch.map((record) => ({
+        recordId: record.Id,
+        fields: record as Record<string, unknown>,
+        matchResult: null,
+      })),
+      simulate: false,
+    };
+    await queue.add(`search-batch-${totalEnqueued}`, jobData);
+    totalEnqueued += batch.length;
   }
 
-  const durationMs = Date.now() - startTime;
-  const status = failed === 0 ? "SUCCESS" : routed > 0 ? "PARTIAL" : "FAILED";
-  await updateRuleStats(ruleId, routed, records.length, durationMs, status);
+  console.log(`[search-runner] Enqueued ${totalEnqueued} SFDC records to bulk pipeline`);
 
-  return { status, recordsFound: records.length, recordsRouted: routed, recordsFailed: failed, durationMs };
+  // Wait for bulk pipeline to complete
+  const POLL_INTERVAL = 2000;
+  const MAX_WAIT = 30 * 60 * 1000;
+  const waitStart = Date.now();
+
+  while (Date.now() - waitStart < MAX_WAIT) {
+    const data = await redisClient.hgetall(runKey);
+    const routed = parseInt(data.routed || "0");
+    const failed = parseInt(data.failed || "0");
+
+    if (routed + failed >= totalEnqueued) {
+      const durationMs = Date.now() - startTime;
+      const status = failed > 0 && routed === 0 ? "FAILED" : "SUCCESS";
+      await updateRuleStats(ruleId, routed, totalEnqueued, durationMs, status);
+      await prisma.bulkSearchRun.update({
+        where: { id: run.id },
+        data: { status: status === "SUCCESS" ? "COMPLETED" : "FAILED", recordsProcessed: totalEnqueued, recordsRouted: routed, recordsFailed: failed, durationMs, completedAt: new Date() },
+      }).catch((err) => console.error("[search-runner] Failed to update bulk run:", err));
+      await redisClient.del(runKey);
+      return { status, recordsFound: totalEnqueued, recordsRouted: routed, recordsFailed: failed, durationMs };
+    }
+
+    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+  }
+
+  // Timeout
+  const durationMs = Date.now() - startTime;
+  await updateRuleStats(ruleId, 0, totalEnqueued, durationMs, "FAILED");
+  await prisma.bulkSearchRun.update({
+    where: { id: run.id },
+    data: { status: "FAILED", recordsFound: totalEnqueued, durationMs, error: "Timed out", completedAt: new Date() },
+  }).catch((err) => console.error("[search-runner] Failed to update bulk run:", err));
+  return { status: "FAILED", recordsFound: totalEnqueued, recordsRouted: 0, recordsFailed: 0, durationMs, error: "Timed out" };
 }
 
 async function updateRuleStats(
