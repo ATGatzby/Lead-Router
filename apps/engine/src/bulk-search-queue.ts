@@ -161,9 +161,13 @@ export function initBulkSearchQueue(redisUrl: string): void {
         const skippedAssignments: typeof assignments = [];
         const needsUpdateAssignments: typeof assignments = [];
 
+        // Partition: skip (nothing changed) vs needs CRM write
+        // Records with field updates always go to needsUpdate even if owner unchanged
         for (const a of assignments) {
           const currentOwner = currentOwnerMap.get(a.recordId);
-          if (currentOwner && a.ownerId && currentOwner === a.ownerId) {
+          const ownerUnchanged = currentOwner && a.ownerId && currentOwner === a.ownerId;
+          const hasFieldUpdates = a.pendingFieldUpdates && Object.keys(a.pendingFieldUpdates).length > 0;
+          if (ownerUnchanged && !hasFieldUpdates) {
             skippedAssignments.push(a);
           } else {
             needsUpdateAssignments.push(a);
@@ -234,11 +238,16 @@ export function initBulkSearchQueue(redisUrl: string): void {
                     }
 
                     const response = await crmApi.batchUpdate(hubspotObjectType, {
-                      inputs: batch.map((a) => ({
-                        id: a.recordId,
-                        properties: { hubspot_owner_id: a.ownerId, ...(a.pendingFieldUpdates ?? {}) },
-                        objectWriteTraceId: a.logId,
-                      })),
+                      inputs: batch.map((a) => {
+                        const currentOwner = currentOwnerMap.get(a.recordId);
+                        const ownerChanged = !currentOwner || currentOwner !== a.ownerId;
+                        const props: Record<string, string> = {};
+                        // Only include owner if it changed
+                        if (ownerChanged) props.hubspot_owner_id = a.ownerId;
+                        // Always include field updates
+                        if (a.pendingFieldUpdates) Object.assign(props, a.pendingFieldUpdates);
+                        return { id: a.recordId, properties: props, objectWriteTraceId: a.logId };
+                      }),
                     });
 
                     const successIds = new Set(response.results.map((r) => r.id));
@@ -354,18 +363,30 @@ export function initBulkSearchQueue(redisUrl: string): void {
               const conn = await getOrgConnection(orgId);
               const sfdcObjectName = toSfdcObjectName(objectType);
 
-              // Owner change via Bulk API 2.0 (only Id + OwnerId — no extra fields)
-              const updateRecords: BulkUpdateRecord[] = needsUpdateAssignments.map((a) => ({
-                Id: a.recordId,
-                OwnerId: a.ownerId,
-              }));
+              // Split: records needing owner change vs field-update-only
+              const ownerChangeRecords = needsUpdateAssignments.filter((a) => {
+                const cur = currentOwnerMap.get(a.recordId);
+                return !cur || cur !== a.ownerId;
+              });
+              const fieldUpdateOnlyRecords = needsUpdateAssignments.filter((a) => {
+                const cur = currentOwnerMap.get(a.recordId);
+                return cur && cur === a.ownerId;
+              });
 
-              const result = await bulkUpdateOwners(
-                conn,
-                sfdcObjectName,
-                updateRecords,
-                "lrt__Routing_Action__c"
-              );
+              // Owner changes via Bulk API 2.0 (only Id + OwnerId)
+              let result = { successful: [] as string[], failed: [] as Array<{ id: string; error: string }>, unprocessed: 0 };
+              if (ownerChangeRecords.length > 0) {
+                const updateRecords: BulkUpdateRecord[] = ownerChangeRecords.map((a) => ({
+                  Id: a.recordId,
+                  OwnerId: a.ownerId,
+                }));
+                result = await bulkUpdateOwners(
+                  conn,
+                  sfdcObjectName,
+                  updateRecords,
+                  "lrt__Routing_Action__c"
+                );
+              }
 
               // Field updates via REST API (separate from owner change to avoid Bulk API type issues)
               const fieldUpdateAssignments = needsUpdateAssignments.filter((a) => a.pendingFieldUpdates && Object.keys(a.pendingFieldUpdates).length > 0);
@@ -381,10 +402,38 @@ export function initBulkSearchQueue(redisUrl: string): void {
                 }
               }
 
+              // Mark field-update-only records as SUCCESS (owner already correct, field updates applied)
+              if (fieldUpdateOnlyRecords.length > 0) {
+                const fuAssigneeMap = new Map<string, { logIds: string[]; data: Record<string, unknown> }>();
+                for (const a of fieldUpdateOnlyRecords) {
+                  const key = `${a.ownerId}|${a.assigneeName ?? ""}|${a.assignmentType ?? ""}|${a.teamId ?? ""}|${a.teamName ?? ""}`;
+                  if (!fuAssigneeMap.has(key)) {
+                    fuAssigneeMap.set(key, {
+                      logIds: [],
+                      data: {
+                        status: "SUCCESS",
+                        assigneeId: a.ownerId ?? null,
+                        assigneeName: a.assigneeName ?? null,
+                        assignmentType: a.assignmentType ?? null,
+                        teamId: a.teamId ?? null,
+                        teamName: a.teamName ?? null,
+                      },
+                    });
+                  }
+                  fuAssigneeMap.get(key)!.logIds.push(a.logId);
+                }
+                await Promise.allSettled(
+                  [...fuAssigneeMap.values()].map((group) =>
+                    prisma.routingLog.updateMany({ where: { id: { in: group.logIds } }, data: group.data })
+                  )
+                );
+                routed += fieldUpdateOnlyRecords.length;
+              }
+
               if (result.successful.length > 0) {
                 const assigneeMap = new Map<string, { logIds: string[]; data: Record<string, unknown> }>();
                 for (const successId of result.successful) {
-                  const a = needsUpdateAssignments.find((x) => x.recordId === successId);
+                  const a = ownerChangeRecords.find((x) => x.recordId === successId);
                   if (!a) continue;
                   const key = `${a.ownerId}|${a.assigneeName ?? ""}|${a.assignmentType ?? ""}|${a.teamId ?? ""}|${a.teamName ?? ""}`;
                   if (!assigneeMap.has(key)) {
