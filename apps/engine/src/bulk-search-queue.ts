@@ -6,6 +6,7 @@ import { routeRecord, type RoutingPayload } from "./router.js";
 import { bulkRouteRecords } from "./bulk-router.js";
 import { getOrgConnection } from "./sfdc.js";
 import { getOrgHubSpotClient, toCrmObjectType } from "./hubspot-connection.js";
+import { updateAggregatesBatch, type AggregateInput } from "./aggregate.js";
 
 // ─── Job type ─────────────────────────────────────────────────────────────
 
@@ -348,14 +349,15 @@ export function initBulkSearchQueue(redisUrl: string): void {
               failed += needsUpdateAssignments.length;
             }
           } else {
-            // ── Salesforce Bulk API 2.0 write path ──────────────────────
+            // ── Salesforce write path ──────────────────────────────────
             try {
               const conn = await getOrgConnection(orgId);
               const sfdcObjectName = toSfdcObjectName(objectType);
+
+              // Owner change via Bulk API 2.0 (only Id + OwnerId — no extra fields)
               const updateRecords: BulkUpdateRecord[] = needsUpdateAssignments.map((a) => ({
                 Id: a.recordId,
                 OwnerId: a.ownerId,
-                ...(a.pendingFieldUpdates ?? {}),
               }));
 
               const result = await bulkUpdateOwners(
@@ -364,6 +366,20 @@ export function initBulkSearchQueue(redisUrl: string): void {
                 updateRecords,
                 "lrt__Routing_Action__c"
               );
+
+              // Field updates via REST API (separate from owner change to avoid Bulk API type issues)
+              const fieldUpdateAssignments = needsUpdateAssignments.filter((a) => a.pendingFieldUpdates && Object.keys(a.pendingFieldUpdates).length > 0);
+              if (fieldUpdateAssignments.length > 0) {
+                const updateBatch = fieldUpdateAssignments.map((a) => ({
+                  Id: a.recordId,
+                  ...a.pendingFieldUpdates,
+                }));
+                try {
+                  await conn.sobject(sfdcObjectName).update(updateBatch as any);
+                } catch (fuErr) {
+                  console.error(`[bulk-search-queue] SFDC field updates failed:`, fuErr);
+                }
+              }
 
               if (result.successful.length > 0) {
                 const assigneeMap = new Map<string, { logIds: string[]; data: Record<string, unknown> }>();
@@ -413,6 +429,20 @@ export function initBulkSearchQueue(redisUrl: string): void {
               }
 
               if (result.unprocessed > 0) {
+                // Mark unprocessed records as FAILED in routing logs
+                const processedIds = new Set([
+                  ...result.successful,
+                  ...result.failed.map((f) => f.id),
+                ]);
+                const unprocessedLogIds = needsUpdateAssignments
+                  .filter((a) => !processedIds.has(a.recordId))
+                  .map((a) => a.logId);
+                if (unprocessedLogIds.length > 0) {
+                  await prisma.routingLog.updateMany({
+                    where: { id: { in: unprocessedLogIds } },
+                    data: { status: "FAILED", errorMessage: "CRM bulk write: record unprocessed" },
+                  });
+                }
                 failed += result.unprocessed;
               }
             } catch (err: any) {
@@ -430,7 +460,29 @@ export function initBulkSearchQueue(redisUrl: string): void {
         }
       }
 
-      // ── Phase C: Update Redis counters ────────────────────────────────
+      // ── Phase C: Correct aggregates for CRM write failures ────────────
+      // batchPersist wrote aggregates as SUCCESS for all routed records.
+      // If CRM writes failed, we need to correct: subtract SUCCESS, add FAILED.
+      if (failed > 0) {
+        const failCorrection: AggregateInput[] = [{
+          orgId,
+          date: new Date(),
+          ruleId,
+          pathLabel: null,
+          branchId: null,
+          teamId: null,
+          assigneeId: null,
+          objectType: objectType as AggregateInput["objectType"],
+          status: "FAILED",
+          durationMs: null,
+          count: failed,
+        }];
+        updateAggregatesBatch(failCorrection).catch((err) => {
+          console.error("[bulk-search-queue] Failed to write corrective aggregates:", err);
+        });
+      }
+
+      // ── Phase D: Update Redis counters ────────────────────────────────
       if (_redis) {
         const key = `bulk-run:${runId}`;
         if (routed > 0) await _redis.hincrby(key, "routed", routed);
