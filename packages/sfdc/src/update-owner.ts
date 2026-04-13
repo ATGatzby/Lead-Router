@@ -73,13 +73,12 @@ export async function bulkUpdateOwners(
 
   const result = await executeBulkUpdate(conn, objectType, records);
 
-  // If ALL records failed with INVALID_FIELD, retry without the routing action field
-  if (
-    routingActionField &&
-    result.successful.length === 0 &&
-    result.failed.length > 0 &&
-    result.failed.every((f) => f.error.includes("INVALID_FIELD"))
-  ) {
+  // If ALL records failed/unprocessed (likely INVALID_FIELD on routing action field), retry without it
+  const allFailed = result.successful.length === 0 && (result.failed.length > 0 || result.unprocessed > 0);
+  const isFieldError = result.failed.length > 0
+    ? result.failed.every((f) => f.error.includes("INVALID_FIELD"))
+    : result.unprocessed === records.length; // Bulk API 2.0 aborts entire job on invalid field
+  if (routingActionField && allFailed && isFieldError) {
     // Strip the routing action field from all records
     for (const rec of records) {
       delete rec[routingActionField];
