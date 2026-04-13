@@ -41,7 +41,7 @@ export async function runScheduledRoute(ruleId: string, orgId: string, existingR
     return runHubSpotScheduledRoute(rule, ruleId, orgId, startTime, existingRunId);
   }
 
-  return runSfdcScheduledRoute(rule, ruleId, orgId, startTime);
+  return runSfdcScheduledRoute(rule, ruleId, orgId, startTime, existingRunId);
 }
 
 // ─── HubSpot Scheduled Route ────────────────────────────────────────────────
@@ -287,6 +287,7 @@ async function runSfdcScheduledRoute(
   ruleId: string,
   orgId: string,
   startTime: number,
+  existingRunId?: string,
 ): Promise<RunResult> {
   const searchCriteria = (rule as any).searchCriteria as CachedRule["searchCriteria"];
 
@@ -340,7 +341,7 @@ async function runSfdcScheduledRoute(
     }
 
     // ── REST path (< BULK_THRESHOLD records) ───────────────────────────
-    return await runRestPath(conn, rule, ruleId, orgId, searchCriteria, startTime);
+    return await runRestPath(conn, rule, ruleId, orgId, searchCriteria, startTime, existingRunId);
   } catch (err: any) {
     // Retry once on SFDC auth failure — evict stale connection and try again
     const isAuthError = err.message?.includes("INVALID_SESSION_ID") || err.message?.includes("Session expired") || err.errorCode === "INVALID_SESSION_ID";
@@ -354,7 +355,7 @@ async function runSfdcScheduledRoute(
         const totalCount = countResult.totalSize;
         console.log(`[search-runner] Retry: COUNT = ${totalCount}`);
         if (totalCount < BULK_THRESHOLD) {
-          return await runRestPath(retryConn, rule, ruleId, orgId, searchCriteria, startTime);
+          return await runRestPath(retryConn, rule, ruleId, orgId, searchCriteria, startTime, existingRunId);
         }
         // For bulk path on retry, let it fail — too complex to restart mid-bulk
       } catch (retryErr: any) {
@@ -377,7 +378,8 @@ async function runRestPath(
   ruleId: string,
   orgId: string,
   searchCriteria: CachedRule["searchCriteria"],
-  startTime: number
+  startTime: number,
+  existingRunId?: string,
 ): Promise<RunResult> {
   const soql = buildSearchSOQL(rule.objectType, searchCriteria);
   console.log(`[search-runner] REST path — Querying SFDC: ${soql}`);
@@ -398,9 +400,9 @@ async function runRestPath(
   }
 
   // Use bulk pipeline (same as HubSpot) for consistent aggregates + field updates
-  const run = await prisma.bulkSearchRun.create({
-    data: { orgId, ruleId, status: "RUNNING", recordsFound: records.length },
-  });
+  const run = existingRunId
+    ? await prisma.bulkSearchRun.update({ where: { id: existingRunId }, data: { status: "RUNNING", recordsFound: records.length } })
+    : await prisma.bulkSearchRun.create({ data: { orgId, ruleId, status: "RUNNING", recordsFound: records.length } });
 
   const queue = getBulkSearchQueue();
   const runKey = `bulk-run:${run.id}`;
