@@ -8,6 +8,7 @@ import { validateInternalToken } from "../middleware/validate-internal.js";
 
 interface RunScheduledBody {
   ruleId: string;
+  runId?: string; // Pre-created bulk run ID from web API (for UI polling)
 }
 
 interface PreviewCountBody {
@@ -44,13 +45,13 @@ export async function scheduledPlugin(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "Missing X-Org-Id header" });
     }
 
-    const { ruleId } = request.body;
+    const { ruleId, runId } = request.body;
     if (!ruleId) {
       return reply.status(400).send({ error: "Missing ruleId" });
     }
 
     try {
-      const result: RunResult = await runScheduledRoute(ruleId, orgId);
+      const result: RunResult = await runScheduledRoute(ruleId, orgId, runId);
       return reply.send(result);
     } catch (err: any) {
       request.log.error(err, "Failed to run scheduled route");

@@ -2,14 +2,27 @@ import { prisma } from "@lead-routing/db";
 import { createConnection, type SfdcConnection } from "@lead-routing/sfdc";
 
 // Simple in-process connection cache to avoid recreating jsforce clients on every routing event
-const connCache = new Map<string, SfdcConnection>();
+const connCache = new Map<string, { conn: SfdcConnection; createdAt: number }>();
+
+// Max age before proactive refresh (1 hour — SFDC tokens last ~2 hours)
+const MAX_CONN_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Get (or create) a jsforce Connection for an org.
  * Handles token refresh automatically and persists new tokens to the DB.
+ * Proactively evicts stale connections (>1 hour) to prevent INVALID_SESSION_ID errors.
  */
 export async function getOrgConnection(orgId: string): Promise<SfdcConnection> {
-  if (connCache.has(orgId)) return connCache.get(orgId)!;
+  const cached = connCache.get(orgId);
+  if (cached && Date.now() - cached.createdAt < MAX_CONN_AGE_MS) {
+    return cached.conn;
+  }
+
+  // Evict stale connection — force fresh token from DB
+  if (cached) {
+    console.log(`[sfdc] Evicting stale connection for org ${orgId} (age: ${Math.round((Date.now() - cached.createdAt) / 60000)}m)`);
+    connCache.delete(orgId);
+  }
 
   const org = await prisma.organization.findUniqueOrThrow({
     where: { id: orgId },
@@ -34,7 +47,7 @@ export async function getOrgConnection(orgId: string): Promise<SfdcConnection> {
     }
   );
 
-  connCache.set(orgId, conn);
+  connCache.set(orgId, { conn, createdAt: Date.now() });
   return conn;
 }
 
@@ -45,6 +58,7 @@ export async function getOrgConnection(orgId: string): Promise<SfdcConnection> {
  */
 export function evictOrgConnection(orgId: string): void {
   connCache.delete(orgId);
+  console.log(`[sfdc] Evicted connection for org ${orgId}`);
 }
 
 /** Get the CRM User/Owner ID for a given internal User.id */

@@ -148,12 +148,17 @@ async function runHubSpotRoute(
     }
   }
 
+  // Create a bulk search run so the UI can poll for progress
+  const bulkRun = await prisma.bulkSearchRun.create({
+    data: { orgId, ruleId },
+  });
+
   // Fire-and-forget to engine — don't wait for routing to complete
   // The engine handles: Search vs Export API auto-scaling, bulk routing, batchUpdate
   const engineUrl = process.env.ENGINE_URL ?? "http://engine:3001";
   const internalToken = process.env.INTERNAL_API_KEY;
 
-  console.log(`[run] Delegating HubSpot rule "${rule.name}" (${ruleId}) to engine (fire-and-forget)`);
+  console.log(`[run] Delegating HubSpot rule "${rule.name}" (${ruleId}) to engine (fire-and-forget, runId: ${bulkRun.id})`);
 
   // Fire-and-forget: don't await — routing happens in the background
   fetch(`${engineUrl}/run-scheduled`, {
@@ -163,7 +168,7 @@ async function runHubSpotRoute(
       "X-Org-Id": orgId,
       ...(internalToken ? { Authorization: `Bearer ${internalToken}` } : {}),
     },
-    body: JSON.stringify({ ruleId }),
+    body: JSON.stringify({ ruleId, runId: bulkRun.id }),
   }).catch((err) => {
     console.error(`[run] Engine run-scheduled fire-and-forget error:`, err);
   });
@@ -188,11 +193,12 @@ async function runHubSpotRoute(
     },
   });
 
-  // Return immediately — routing happens in the background
+  // Return immediately with bulkRunId — UI polls /api/bulk-run/{id}/status
   return NextResponse.json({
     success: true,
     async: true,
-    recordsFound: -1, // -1 signals "count pending — engine determining"
+    bulkRunId: bulkRun.id,
+    recordsFound: -1,
     recordsRouted: 0,
     durationMs,
     message: `Route started — records are being processed in the background`,

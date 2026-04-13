@@ -2,7 +2,7 @@ import { prisma } from "@lead-routing/db";
 import { getActiveRules, type CachedRule } from "./cache.js";
 import { buildSearchSOQL, buildCountSOQL } from "./soql-builder.js";
 import { routeRecord } from "./router.js";
-import { getOrgConnection } from "./sfdc.js";
+import { getOrgConnection, evictOrgConnection } from "./sfdc.js";
 import { runBulkSearch } from "./bulk-search.js";
 import { runExportRoute } from "./export-runner.js";
 import { getOrgHubSpotClient, toCrmObjectType, evictOrgHubSpotClient } from "./hubspot-connection.js";
@@ -79,7 +79,7 @@ async function runHubSpotScheduledRoute(
     //             <10K  → Search API + bulk pipeline (fast, no async wait)
     if (totalCount < 10_000) {
       console.log(`[search-runner] Rule ${ruleId}: ${totalCount} records — using Search API + bulk pipeline`);
-      return runHubSpotSearchPath(hsClient, crmObjectType, searchRequest, rule, ruleId, orgId, startTime);
+      return runHubSpotSearchPath(hsClient, crmObjectType, searchRequest, rule, ruleId, orgId, startTime, existingRunId);
     }
 
     console.log(`[search-runner] Rule ${ruleId}: ${totalCount} records — using Export API (exceeds 10K Search API cap)`);
@@ -200,18 +200,23 @@ async function runHubSpotSearchPath(
   ruleId: string,
   orgId: string,
   startTime: number,
+  existingRunId?: string,
 ): Promise<RunResult> {
   const records = await hsClient.searchApi.searchAll(crmObjectType, searchRequest);
   console.log(`[search-runner] Search API: found ${records.length} records for rule ${ruleId}`);
 
   if (records.length === 0) {
     await updateRuleStats(ruleId, 0, 0, Date.now() - startTime, "SUCCESS");
+    // Update existing run if provided
+    if (existingRunId) {
+      await prisma.bulkSearchRun.update({ where: { id: existingRunId }, data: { status: "COMPLETED", recordsFound: 0 } }).catch(() => {});
+    }
     return { status: "SUCCESS", recordsFound: 0, recordsRouted: 0, durationMs: Date.now() - startTime };
   }
 
-  const run = await prisma.bulkSearchRun.create({
-    data: { orgId, ruleId, status: "RUNNING" },
-  });
+  const run = existingRunId
+    ? await prisma.bulkSearchRun.update({ where: { id: existingRunId }, data: { status: "RUNNING", recordsFound: records.length } })
+    : await prisma.bulkSearchRun.create({ data: { orgId, ruleId, status: "RUNNING" } });
 
   const queue = getBulkSearchQueue();
   const runKey = `bulk-run:${run.id}`;
@@ -330,6 +335,25 @@ async function runSfdcScheduledRoute(
     // ── REST path (< BULK_THRESHOLD records) ───────────────────────────
     return await runRestPath(conn, rule, ruleId, orgId, searchCriteria, startTime);
   } catch (err: any) {
+    // Retry once on SFDC auth failure — evict stale connection and try again
+    const isAuthError = err.message?.includes("INVALID_SESSION_ID") || err.message?.includes("Session expired") || err.errorCode === "INVALID_SESSION_ID";
+    if (isAuthError) {
+      console.warn(`[search-runner] SFDC auth failed for rule ${ruleId}, evicting connection and retrying...`);
+      evictOrgConnection(orgId);
+      try {
+        const retryConn = await getOrgConnection(orgId);
+        const countSoql = buildCountSOQL(rule.objectType, searchCriteria);
+        const countResult = await retryConn.query(countSoql);
+        const totalCount = countResult.totalSize;
+        console.log(`[search-runner] Retry: COUNT = ${totalCount}`);
+        if (totalCount < BULK_THRESHOLD) {
+          return await runRestPath(retryConn, rule, ruleId, orgId, searchCriteria, startTime);
+        }
+        // For bulk path on retry, let it fail — too complex to restart mid-bulk
+      } catch (retryErr: any) {
+        console.error(`[search-runner] Retry also failed for rule ${ruleId}:`, retryErr);
+      }
+    }
     const durationMs = Date.now() - startTime;
     console.error(`[search-runner] Error running rule ${ruleId}:`, err);
     await updateRuleStats(ruleId, 0, 0, durationMs, "FAILED");

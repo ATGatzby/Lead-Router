@@ -256,7 +256,7 @@ describe("POST /run-scheduled", () => {
     const json = JSON.parse(res.body);
 
     expect(res.statusCode).toBe(200);
-    expect(mockRunScheduledRoute).toHaveBeenCalledWith("rule-42", "org-7");
+    expect(mockRunScheduledRoute).toHaveBeenCalledWith("rule-42", "org-7", undefined);
     expect(json).toEqual(mockResult);
   });
 

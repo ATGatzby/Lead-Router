@@ -269,10 +269,11 @@ export async function executeSteps(
         }
 
         if (Object.keys(properties).length > 0) {
-          if (ctx.isDryRun) {
-            // Collect for batched write later (bulk routing)
-            Object.assign(pendingFieldUpdates, properties);
-          } else {
+          // Always record for trace (both dry-run and live)
+          Object.assign(pendingFieldUpdates, properties);
+
+          if (!ctx.isDryRun) {
+            // Execute CRM write immediately (realtime routing)
             try {
               const crmType = await getOrgCrmType(ctx.orgId);
               if (crmType === "HUBSPOT") {
@@ -1212,6 +1213,10 @@ async function routeNewStyle(
         const branchTraceEntry = ruleTrace.branches?.[ruleTrace.branches.length - 1];
         if (branchTraceEntry && branchTraceCtx.splitTraces.length > 0) {
           branchTraceEntry.splitTraces = branchTraceCtx.splitTraces;
+        }
+        // Record field updates in trace (both realtime and bulk paths)
+        if (stepResult?.pendingFieldUpdates && Object.keys(stepResult.pendingFieldUpdates).length > 0) {
+          trace!.fieldUpdates = Object.entries(stepResult.pendingFieldUpdates).map(([field, value]) => ({ field, value }));
         }
         // If a nested assign step returned assignment info, use it to override branch-level assignment
         // (This allows nested splits to determine the final assignee)
