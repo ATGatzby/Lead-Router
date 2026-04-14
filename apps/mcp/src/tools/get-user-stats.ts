@@ -13,16 +13,21 @@ export const getUserStatsTool = {
 
 export async function handleGetUserStats(web: WebClient, logger: Logger) {
   const start = Date.now();
-  const data = await web.getUserStats();
+  const data = await web.getUserStats() as any;
   logger.log({ tool: "get_user_stats", action: "read", durationMs: Date.now() - start });
 
   const lines = [
     "User Statistics",
-    `  Total Users: ${data.totalUsers ?? "—"}`,
-    `  Licensed: ${data.licensedCount ?? "—"}`,
-    `  Seats Used: ${data.seatsUsed ?? "—"}`,
     `  Seats Purchased: ${data.seatsPurchased ?? "—"}`,
+    `  Seats Used: ${data.seatsUsed ?? "—"}`,
   ];
+
+  if (Array.isArray(data.breakdown)) {
+    lines.push("\nBreakdown:");
+    for (const b of data.breakdown) {
+      lines.push(`  ${b.label || b.role || b.profile}: ${b.count ?? "—"}`);
+    }
+  }
 
   return successResponse(lines.join("\n"));
 }

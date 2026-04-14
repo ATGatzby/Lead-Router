@@ -19,7 +19,7 @@ export function validateInput<T>(schema: z.ZodSchema<T>, input: unknown): T {
 
 // ── Shared enums ────────────────────────────────────────────────────────────
 
-export const ObjectTypeEnum = z.enum(["LEAD", "CONTACT", "ACCOUNT"]);
+export const ObjectTypeEnum = z.enum(["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"]);
 export const EventTypeEnum = z.enum(["INSERT", "UPDATE", "BOTH", "SEARCH"]);
 export const AssignmentTypeEnum = z.enum(["USER", "ROUND_ROBIN", "QUEUE"]);
 export const DistributionTypeEnum = z.enum(["round-robin", "weighted"]);
@@ -66,6 +66,16 @@ export const CreateRuleInput = z.object({
       sortOrder: z.number().optional(),
     })).optional(),
   })).optional(),
+  routeType: z.enum(["STANDARD", "SEARCH", "SCHEDULED"]).optional(),
+  searchCriteria: z.any().optional(),
+  searchMaxRecords: z.number().optional(),
+  searchBatchSize: z.number().optional(),
+  scheduleFrequency: z.string().optional(),
+  scheduleTime: z.string().optional(),
+  scheduleTimezone: z.string().optional(),
+  scheduleCron: z.string().optional(),
+  matchConfig: z.any().optional(),
+  defaultOwner: z.string().optional(),
   isDryRun: z.boolean().optional(),
   confirm: z.boolean().optional(),
 }).strict();

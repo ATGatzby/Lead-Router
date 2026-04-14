@@ -8,6 +8,8 @@ export interface McpConfig {
   apiToken: string;
   webhookSecret: string;
   sfdcOrgId: string;
+  crmOrgId: string;
+  crmType: "SALESFORCE" | "HUBSPOT";
   logDir: string;
 }
 
@@ -19,6 +21,8 @@ interface McpJsonFile {
   webhookSecret?: string;
   apiToken?: string;
   sfdcOrgId?: string;
+  crmOrgId?: string;
+  crmType?: string;
 }
 
 /**
@@ -42,6 +46,8 @@ export function loadConfig(): McpConfig {
   const webhookSecret = process.env.WEBHOOK_SECRET || process.env.ENGINE_WEBHOOK_SECRET || file.webhookSecret;
   const apiToken = process.env.API_TOKEN || file.apiToken || "";
   const sfdcOrgId = process.env.SFDC_ORG_ID || file.sfdcOrgId || "";
+  const crmOrgId = process.env.CRM_ORG_ID || file.crmOrgId || sfdcOrgId;
+  const crmType = (process.env.CRM_TYPE || file.crmType || "SALESFORCE") as "SALESFORCE" | "HUBSPOT";
 
   const missing: string[] = [];
   if (!appUrl) missing.push("appUrl");
@@ -61,6 +67,8 @@ export function loadConfig(): McpConfig {
     apiToken,
     webhookSecret: webhookSecret!,
     sfdcOrgId,
+    crmOrgId,
+    crmType,
     logDir: process.env.LOG_DIR || join(homedir(), ".lead-routing"),
   };
 }

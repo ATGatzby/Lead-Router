@@ -30,7 +30,7 @@ export async function handleResetTeamPointer(web: WebClient, logger: Logger, arg
     const lines = [
       "Will reset round-robin pointer:",
       `  Team: ${team.name} (${teamId})`,
-      `  Distribution: ${team.distributionMethod || "ROUND_ROBIN"}`,
+      `  Distribution: ${team.distributionType || "round-robin"}`,
     ];
     logger.log({ tool: "reset_team_pointer", action: "preview", input: args, durationMs: Date.now() - start });
     return previewResponse(lines.join("\n"));

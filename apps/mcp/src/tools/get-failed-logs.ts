@@ -28,11 +28,7 @@ export async function handleGetFailedLogs(web: WebClient, logger: Logger, args: 
   logger.log({ tool: "get_failed_logs", action: "read", input: args, durationMs: Date.now() - start });
 
   let text = formatLogsSummary(logs);
-  if (data.total !== undefined) {
-    text += `\n\nTotal: ${data.total}`;
-    if (data.page !== undefined) text += ` | Page: ${data.page}`;
-    if (data.totalPages !== undefined) text += ` of ${data.totalPages}`;
-  }
+  text += `\n\nFailed logs: ${logs.length}`;
 
   return successResponse(text);
 }

@@ -22,16 +22,26 @@ export const getAnalyticsRulesTool = {
 
 export async function handleGetAnalyticsRules(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
-  const data = await web.getAnalyticsRules(args?.from, args?.to);
+  const data = await web.getAnalyticsRules(args?.from, args?.to) as any;
   const rules = data.rules || data;
   logger.log({ tool: "get_analytics_rules", action: "read", input: args, durationMs: Date.now() - start });
 
   if (!Array.isArray(rules) || !rules.length) return successResponse("No per-rule analytics found.");
 
   const text = rules
-    .map((r: any, i: number) =>
-      `${i + 1}. ${r.name ?? r.ruleId}\n   Route Count: ${r.routeCount ?? "—"} | Match Rate: ${r.matchRate != null ? `${r.matchRate}%` : "—"} | Avg Latency: ${r.avgLatency != null ? `${r.avgLatency}ms` : "—"}`
-    )
+    .map((r: any, i: number) => {
+      let line = `${i + 1}. ${r.ruleName ?? r.name ?? r.ruleId}`;
+      line += `\n   Total: ${r.total ?? "—"} | Success: ${r.success ?? "—"} | Failed: ${r.failed ?? "—"} | Unmatched: ${r.unmatched ?? "—"}`;
+      if (r.successRate != null) line += ` | Success Rate: ${r.successRate}%`;
+      if (r.avgDurationMs != null) line += ` | Avg Duration: ${r.avgDurationMs}ms`;
+      if (Array.isArray(r.paths) && r.paths.length) {
+        line += "\n   Paths:";
+        for (const p of r.paths) {
+          line += `\n     • ${p.label || p.name}: ${p.count ?? "—"}`;
+        }
+      }
+      return line;
+    })
     .join("\n\n");
 
   return successResponse(text);

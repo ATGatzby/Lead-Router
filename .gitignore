@@ -52,3 +52,4 @@ apps/web/lib/flow-*.ts
 apps/mcp/src/tools/*-flow*.ts
 packages/db/prisma/migrations/*_add_routing_flows/
 packages/db/prisma/migrations/*_add_flow_edge_handles/
+license-server/.wrangler/

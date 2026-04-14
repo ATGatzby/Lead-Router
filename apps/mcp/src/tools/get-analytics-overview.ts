@@ -22,15 +22,20 @@ export const getAnalyticsOverviewTool = {
 
 export async function handleGetAnalyticsOverview(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
-  const data = await web.getAnalyticsOverview(args?.from, args?.to);
+  const data = await web.getAnalyticsOverview(args?.from, args?.to) as any;
   logger.log({ tool: "get_analytics_overview", action: "read", input: args, durationMs: Date.now() - start });
 
+  const sb = data.statusBreakdown ?? {};
   const lines = [
     "Analytics Overview",
     `  Total Routed: ${data.totalRouted ?? "—"}`,
-    `  Unmatched: ${data.unmatched ?? "—"}`,
-    `  Failed: ${data.failed ?? "—"}`,
-    `  Avg Latency: ${data.avgLatency != null ? `${data.avgLatency}ms` : "—"}`,
+    `  Success: ${sb.success ?? "—"}`,
+    `  Failed: ${sb.failed ?? "—"}`,
+    `  Unmatched: ${sb.unmatched ?? "—"}`,
+    `  Merged: ${sb.merged ?? "—"}`,
+    `  Success Rate: ${data.successRate != null ? `${data.successRate}%` : "—"}`,
+    `  Avg Speed: ${data.avgSpeedSeconds != null ? `${data.avgSpeedSeconds}s` : "—"}`,
+    `  Conversion Rate: ${data.conversionRate != null ? `${data.conversionRate}%` : "—"}`,
   ];
   if (data.from) lines.push(`  Period: ${data.from} → ${data.to}`);
 

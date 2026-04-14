@@ -46,8 +46,13 @@ export async function handleAddTeamMember(web: WebClient, logger: Logger, args: 
   }
 
   const data: Record<string, unknown> = { userIds: [userId] };
-  if (weight !== undefined) data.weight = weight;
   const result = await web.addTeamMember(teamId, data);
+
+  // If weight was specified, set it via a separate weights update call
+  if (weight !== undefined) {
+    await web.updateTeamWeights(teamId, [{ userId, weight }]);
+  }
+
   logger.log({ tool: "add_team_member", action: "execute", input: args, result, durationMs: Date.now() - start });
-  return successResponse(`User ${userId} added to team ${teamId} successfully.`);
+  return successResponse(`User ${userId} added to team ${teamId} successfully.${weight !== undefined ? ` Weight set to ${weight}.` : ""}`);
 }

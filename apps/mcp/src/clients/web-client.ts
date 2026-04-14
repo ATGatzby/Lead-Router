@@ -80,7 +80,11 @@ export class WebClient {
     return this.request(`/api/teams/${teamId}/members/${userId}`, { method: "PATCH", body: JSON.stringify(data) });
   }
   async updateTeamWeights(teamId: string, weights: Array<{ userId: string; weight: number }>) {
-    return this.request(`/api/teams/${teamId}/weights`, { method: "PUT", body: JSON.stringify({ weights }) });
+    const weightsMap: Record<string, number> = {};
+    for (const w of weights) {
+      weightsMap[w.userId] = w.weight;
+    }
+    return this.request(`/api/teams/${teamId}/weights`, { method: "PUT", body: JSON.stringify({ mode: "percentage", weights: weightsMap }) });
   }
   async resetTeamPointer(teamId: string) {
     return this.request(`/api/teams/${teamId}/reset-pointer`, { method: "POST" });
@@ -131,13 +135,13 @@ export class WebClient {
 
   // Bulk user operations
   async bulkLicenseUsers(userIds: string[]) {
-    return this.request("/api/users/bulk-license", { method: "POST", body: JSON.stringify({ userIds }) });
+    return this.request("/api/users/bulk-license", { method: "POST", body: JSON.stringify({ userIds, action: "license" }) });
   }
   async licenseUsersByRole(role: string) {
-    return this.request("/api/users/license-by-role", { method: "POST", body: JSON.stringify({ role }) });
+    return this.request("/api/users/license-by-role", { method: "POST", body: JSON.stringify({ roles: [role] }) });
   }
   async licenseUsersByProfile(profile: string) {
-    return this.request("/api/users/license-by-profile", { method: "POST", body: JSON.stringify({ profile }) });
+    return this.request("/api/users/license-by-profile", { method: "POST", body: JSON.stringify({ profiles: [profile] }) });
   }
 
   // SFDC status

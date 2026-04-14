@@ -13,26 +13,24 @@ export const getRoutingStatsTool = {
 
 export async function handleGetRoutingStats(web: WebClient, logger: Logger) {
   const start = Date.now();
-  const data = await web.getRoutingStats();
+  const data = await web.getRoutingStats() as any;
   logger.log({ tool: "get_routing_stats", action: "read", durationMs: Date.now() - start });
 
   const lines = ["Routing Statistics"];
 
-  if (data.byStatus) {
-    lines.push("\nBy Status:");
-    for (const [status, count] of Object.entries(data.byStatus)) {
-      lines.push(`  ${status}: ${count}`);
+  const stats = data.stats || data;
+  if (Array.isArray(stats) && stats.length) {
+    for (const s of stats) {
+      lines.push(`\n• ${s.name ?? "Unknown"}: ${s.total ?? 0} total`);
+      for (const key of Object.keys(s)) {
+        if (!["name", "total"].includes(key) && typeof s[key] === "number") {
+          lines.push(`    ${key}: ${s[key]}`);
+        }
+      }
     }
   }
 
-  if (data.byObjectType) {
-    lines.push("\nBy Object Type:");
-    for (const [type, count] of Object.entries(data.byObjectType)) {
-      lines.push(`  ${type}: ${count}`);
-    }
-  }
-
-  if (data.total !== undefined) lines.push(`\nTotal: ${data.total}`);
+  if (data.period) lines.push(`\nPeriod: ${data.period}`);
 
   return successResponse(lines.join("\n"));
 }

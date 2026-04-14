@@ -20,7 +20,7 @@ export const getRecordJourneyTool = {
 export async function handleGetRecordJourney(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
   const data = await web.getRecordJourney(args.recordId);
-  const events = data.events || data.journey || data;
+  const events = data.entries || data.events || data.journey || data;
   logger.log({ tool: "get_record_journey", action: "read", input: args, durationMs: Date.now() - start });
 
   if (!Array.isArray(events) || events.length === 0) {

@@ -51,7 +51,7 @@ export async function handleGetRoutingLogs(web: WebClient, logger: Logger, args:
   if (data.total !== undefined) {
     text += `\n\nTotal: ${data.total}`;
     if (data.page !== undefined) text += ` | Page: ${data.page}`;
-    if (data.totalPages !== undefined) text += ` of ${data.totalPages}`;
+    if (data.pageCount !== undefined) text += ` of ${data.pageCount}`;
   }
 
   return successResponse(text);

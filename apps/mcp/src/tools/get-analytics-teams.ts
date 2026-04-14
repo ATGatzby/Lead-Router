@@ -22,7 +22,7 @@ export const getAnalyticsTeamsTool = {
 
 export async function handleGetAnalyticsTeams(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
-  const data = await web.getAnalyticsTeams(args?.from, args?.to);
+  const data = await web.getAnalyticsTeams(args?.from, args?.to) as any;
   const teams = data.teams || data;
   logger.log({ tool: "get_analytics_teams", action: "read", input: args, durationMs: Date.now() - start });
 
@@ -30,10 +30,12 @@ export async function handleGetAnalyticsTeams(web: WebClient, logger: Logger, ar
 
   const text = teams
     .map((t: any, i: number) => {
-      let line = `${i + 1}. ${t.name ?? t.teamId}\n   Assignments: ${t.assignmentCount ?? "—"}`;
+      let line = `${i + 1}. ${t.teamName ?? t.name ?? t.teamId}`;
+      line += `\n   Total: ${t.total ?? "—"} | Success: ${t.success ?? "—"}`;
+      if (t.fairnessScore != null) line += ` | Fairness Score: ${t.fairnessScore}`;
       if (Array.isArray(t.members) && t.members.length) {
         const memberLines = t.members
-          .map((m: any) => `     • ${m.name}: ${m.assignmentCount ?? 0}`)
+          .map((m: any) => `     • ${m.assigneeName || m.name}: target ${m.targetPercent ?? "—"}% / actual ${m.actualPercent ?? "—"}%`)
           .join("\n");
         line += `\n${memberLines}`;
       }

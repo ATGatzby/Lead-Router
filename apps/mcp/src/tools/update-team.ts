@@ -16,7 +16,7 @@ export const updateTeamTool = {
       description: { type: "string", description: "New description" },
       distributionType: {
         type: "string",
-        enum: ["ROUND_ROBIN", "WEIGHTED", "LOAD_BALANCED"],
+        enum: ["round-robin", "weighted"],
         description: "New distribution type",
       },
       confirm: {

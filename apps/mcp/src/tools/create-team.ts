@@ -18,8 +18,8 @@ export const createTeamTool = {
       },
       distributionType: {
         type: "string",
-        enum: ["ROUND_ROBIN", "WEIGHTED", "LOAD_BALANCED"],
-        description: "How leads are distributed among team members. Defaults to ROUND_ROBIN.",
+        enum: ["round-robin", "weighted"],
+        description: "How leads are distributed among team members. Defaults to round-robin.",
       },
       confirm: {
         type: "boolean",
@@ -40,12 +40,13 @@ export async function handleCreateTeam(web: WebClient, logger: Logger, args: any
       `  Name: ${data.name}`,
     ];
     if (data.description) lines.push(`  Description: ${data.description}`);
-    lines.push(`  Distribution: ${data.distributionType || "ROUND_ROBIN"}`);
+    lines.push(`  Distribution: ${data.distributionType || "round-robin"}`);
     logger.log({ tool: "create_team", action: "preview", input: data, durationMs: Date.now() - start });
     return previewResponse(lines.join("\n"));
   }
 
-  const result = await web.createTeam(data);
+  const result = await web.createTeam(data) as any;
+  const team = result.team || result;
   logger.log({ tool: "create_team", action: "execute", input: data, result, durationMs: Date.now() - start });
-  return successResponse(`Team created successfully.\nID: ${result.id}\nName: ${result.name}`);
+  return successResponse(`Team created successfully.\nID: ${team.id}\nName: ${team.name}`);
 }
