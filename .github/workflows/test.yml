@@ -29,10 +29,6 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @lead-routing/db db:generate
 
-      # ── T0: Build workspace packages (needed for type-checks) ────────────────
-      - name: Build agent-api package
-        run: pnpm --filter @lead-routing/agent-api build
-
       # ── T0: Type checks ──────────────────────────────────────────────────────
       - name: Type-check CLI
         run: pnpm --filter @lead-routing/cli type-check
