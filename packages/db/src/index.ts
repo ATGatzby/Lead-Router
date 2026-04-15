@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "./generated/prisma";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -19,7 +19,7 @@ if (process.env.NODE_ENV !== "production") {
   globalThis.__prisma = prisma;
 }
 
-export * from "@prisma/client";
+export * from "./generated/prisma";
 export { PLAN_LIMITS, getPlanLimits, startOfNextMonth } from "./plan-limits";
 export type { PlanType, PlanLimits } from "./plan-limits";
 export { RULES_INVALIDATE_CHANNEL } from "./constants";

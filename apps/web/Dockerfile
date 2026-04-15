@@ -25,15 +25,13 @@ COPY packages/hubspot/  ./packages/hubspot/
 COPY packages/crm-adapter/ ./packages/crm-adapter/
 COPY packages/agent-api/   ./packages/agent-api/
 
-# Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
-RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
+# Generate Prisma client into packages/db/src/generated/prisma
+# (local path avoids pnpm .pnpm store resolution issues with Next.js bundler)
+RUN pnpm --filter @lead-routing/db db:generate
 
 # Build Next.js (produces .next/standalone via output: 'standalone')
-# Use --webpack because Turbopack bundles @prisma/client and can't resolve
-# .prisma/client from pnpm's .pnpm store path. Webpack respects
-# serverExternalPackages, keeping @prisma/client as a native require().
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN cd apps/web && npx next build --webpack
+RUN pnpm --filter @lead-routing/web build
 
 
 # ── Stage 2: Install Prisma CLI cleanly (no pnpm interference) ───────────────
@@ -59,8 +57,8 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 # 2) Prisma CLI + all deps ON TOP (overwrites any broken prisma traces from standalone)
 COPY --from=prisma-installer /prisma-pkg/node_modules ./node_modules
 
-# 3) Generated Prisma client — needed for runtime database queries
-COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
+# 3) Generated Prisma client — lives inside packages/db, not node_modules
+COPY --from=builder /app/packages/db/src/generated   ./packages/db/src/generated
 
 # Static assets and public files
 COPY --from=builder /app/apps/web/.next/static  ./apps/web/.next/static

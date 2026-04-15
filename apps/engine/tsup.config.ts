@@ -11,5 +11,5 @@ export default defineConfig({
   // installs them via pnpm install --prod.
   // @prisma/client is also external — it ships native query-engine binaries.
   noExternal: ['@lead-routing/db', '@lead-routing/sfdc', '@lead-routing/hubspot', '@lead-routing/crm-adapter'],
-  external: ['@prisma/client'],
+  external: ['@prisma/client', /generated\/prisma/],
 })
