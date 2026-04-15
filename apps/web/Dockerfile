@@ -25,8 +25,12 @@ COPY packages/hubspot/  ./packages/hubspot/
 COPY packages/crm-adapter/ ./packages/crm-adapter/
 COPY packages/agent-api/   ./packages/agent-api/
 
-# Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
-RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
+# Generate Prisma client — use pnpm filter so it runs from packages/db context
+RUN pnpm --filter @lead-routing/db db:generate
+
+# Debug: verify generated client location
+RUN find /app/node_modules/.prisma -name "index.js" 2>/dev/null || echo "NOT FOUND in /app/node_modules/.prisma" && \
+    find /app/packages/db/node_modules/.prisma -name "index.js" 2>/dev/null || echo "NOT FOUND in packages/db/node_modules/.prisma"
 
 # Build Next.js (produces .next/standalone via output: 'standalone')
 ENV NEXT_TELEMETRY_DISABLED=1
