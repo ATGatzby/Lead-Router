@@ -25,9 +25,9 @@ COPY packages/sfdc/     ./packages/sfdc/
 COPY packages/hubspot/  ./packages/hubspot/
 COPY packages/crm-adapter/ ./packages/crm-adapter/
 
-# Generate Prisma client — outputs into @prisma/client's own directory
-# (default output, no custom path — resolves correctly in pnpm's .pnpm store)
-RUN pnpm --filter @lead-routing/db db:generate
+# Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
+# Run from /app so the output lands in /app/node_modules, not packages/db/node_modules
+RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
 
 # Bundle engine + inline workspace packages into dist/server.js.
 # @prisma/client is kept external (it ships native query-engine binaries).
@@ -54,7 +54,8 @@ RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 # Bundled engine (workspace packages inlined by tsup)
 COPY --from=builder /app/apps/engine/dist ./dist
 
-# Prisma client — generated inside @prisma/client's directory (default output)
+# Prisma JS wrapper + native query-engine binary
+COPY --from=builder /app/node_modules/.prisma      ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma      ./node_modules/@prisma
 
 # Prisma schema — required by `prisma migrate deploy` run from the CLI

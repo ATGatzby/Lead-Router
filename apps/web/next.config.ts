@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@lead-routing/agent-api'],
   // Keep ioredis and langfuse as server-side externals — they use native
   // modules or need to be traced into standalone output.
-  serverExternalPackages: ['ioredis', 'langfuse'],
+  serverExternalPackages: ['ioredis', 'langfuse', '@prisma/client'],
   typescript: {
     // Type-checking is done separately via `tsc --noEmit`.
     // Docker's hoisted node_modules resolves @prisma/client types
