@@ -29,8 +29,11 @@ COPY packages/agent-api/   ./packages/agent-api/
 RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
 
 # Build Next.js (produces .next/standalone via output: 'standalone')
+# Use --webpack because Turbopack bundles @prisma/client and can't resolve
+# .prisma/client from pnpm's .pnpm store path. Webpack respects
+# serverExternalPackages, keeping @prisma/client as a native require().
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @lead-routing/web build
+RUN cd apps/web && npx next build --webpack
 
 
 # ── Stage 2: Install Prisma CLI cleanly (no pnpm interference) ───────────────
