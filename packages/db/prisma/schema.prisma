@@ -183,6 +183,7 @@ model Organization {
   apiTokens               ApiToken[]
   slaPolicies             SlaPolicy[]
   slaInstances            SlaInstance[]
+  toolCallLogs            ToolCallLog[]
 
   @@map("organizations")
 }
@@ -881,4 +882,27 @@ model SlaInstance {
   @@index([orgId, crmRecordId, status])   // Webhook lookup + circuit breaker count
   @@index([orgId, slaPolicyId, status])   // Compliance reporting
   @@map("sla_instances")
+}
+
+model ToolCallLog {
+  id            String   @id @default(cuid())
+  orgId         String
+  tokenId       String
+  tool          String
+  category      String
+  status        String
+  errorCode     String?
+  durationMs    Int
+  inputHash     String
+  responseSize  Int
+  crmType       String
+  warnings      String[]
+  createdAt     DateTime @default(now())
+
+  org           Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([orgId, tool])
+  @@index([tokenId, createdAt])
+  @@map("tool_call_logs")
 }

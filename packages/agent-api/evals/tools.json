@@ -1,0 +1,424 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "setup_team",
+      "description": "Create a routing team with members and assignment strategy in one step. PREFERRED over create_team + add_team_member + update_team_weights.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Team name (required)" },
+          "description": { "type": "string", "description": "Optional team description" },
+          "strategy": {
+            "type": "string",
+            "enum": ["round_robin", "weighted", "manual"],
+            "description": "Distribution strategy. Defaults to round_robin."
+          },
+          "members": {
+            "type": "array",
+            "items": { "type": "string", "format": "email" },
+            "description": "Email addresses of team members"
+          },
+          "weights": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "minimum": 0 },
+            "description": "Map of member email to weight (for weighted strategy)"
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "setup_routing_rule",
+      "description": "Create a routing rule with criteria and assignment target, then optionally activate it. PREFERRED over create_rule + update_rule_criteria + activate_rule.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Rule name (required)" },
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "CRM object type this rule applies to"
+          },
+          "triggerEvent": {
+            "type": "string",
+            "enum": ["INSERT", "UPDATE", "BOTH", "SEARCH"],
+            "description": "When to trigger. Defaults to INSERT."
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "operator": { "type": "string" },
+                "value": {}
+              },
+              "required": ["field", "operator", "value"]
+            },
+            "description": "Filter criteria for matching records"
+          },
+          "assignTo": {
+            "type": "object",
+            "properties": {
+              "teamId": { "type": "string" },
+              "userId": { "type": "string" },
+              "queueId": { "type": "string" }
+            },
+            "description": "Assignment target — specify teamId, userId, or queueId"
+          },
+          "activate": {
+            "type": "boolean",
+            "description": "Whether to activate the rule immediately. Defaults to true."
+          }
+        },
+        "required": ["name", "objectType"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sync_crm_schema",
+      "description": "Refresh CRM field definitions, picklist values, and queue metadata from the connected CRM.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"]
+            },
+            "description": "Limit sync to specific object types. Omit to sync all."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "import_users",
+      "description": "Sync users from the connected CRM into the Lead Routing system and optionally auto-license them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "autoLicense": {
+            "type": "boolean",
+            "description": "Automatically assign licenses to imported users. Defaults to false."
+          },
+          "profileFilter": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Only import users matching these CRM profile names"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "route_record",
+      "description": "Route a single CRM record through the routing engine immediately.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "CRM object type"
+          },
+          "eventType": {
+            "type": "string",
+            "enum": ["INSERT", "UPDATE", "BOTH", "SEARCH"],
+            "description": "Event type. Defaults to INSERT."
+          },
+          "recordId": { "type": "string", "description": "CRM record ID to route" },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Record field values for rule evaluation"
+          },
+          "ruleId": { "type": "string", "description": "Force evaluation against a specific rule" }
+        },
+        "required": ["objectType", "recordId", "fields"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "bulk_route",
+      "description": "Route multiple CRM records through the routing engine in a single batch.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "CRM object type"
+          },
+          "eventType": {
+            "type": "string",
+            "enum": ["INSERT", "UPDATE", "BOTH", "SEARCH"],
+            "description": "Event type. Defaults to INSERT."
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "recordId": { "type": "string" },
+                "fields": { "type": "object", "additionalProperties": {} }
+              },
+              "required": ["recordId", "fields"]
+            },
+            "description": "Array of records to route"
+          },
+          "ruleId": { "type": "string", "description": "Force evaluation against a specific rule" }
+        },
+        "required": ["objectType", "records"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "retry_failed",
+      "description": "Retry routing attempts that previously failed, optionally filtered by date range or rule.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fromDate": { "type": "string", "format": "date-time", "description": "Start of date range (ISO 8601)" },
+          "toDate": { "type": "string", "format": "date-time", "description": "End of date range (ISO 8601)" },
+          "ruleId": { "type": "string", "description": "Only retry failures for this rule" },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Max records to retry. Defaults to 100."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "toggle_routing",
+      "description": "Pause or resume routing for a specific object type and mode. Use to temporarily stop routing during maintenance.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "CRM object type to toggle"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["CLASSIC", "FLOW"],
+            "description": "Routing mode to toggle"
+          }
+        },
+        "required": ["objectType", "mode"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "rebalance_team",
+      "description": "Rebalance assignment weights across team members to equalize or proportionally distribute workload.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "teamId": { "type": "string", "description": "Team ID to rebalance" },
+          "strategy": {
+            "type": "string",
+            "enum": ["equalize", "proportional"],
+            "description": "Rebalancing strategy. Defaults to equalize."
+          }
+        },
+        "required": ["teamId"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_rule_criteria",
+      "description": "Replace the filter criteria on an existing routing rule and optionally sync changes to the CRM.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ruleId": { "type": "string", "description": "Rule ID to update" },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": { "type": "string" },
+                "operator": { "type": "string" },
+                "value": {}
+              },
+              "required": ["field", "operator", "value"]
+            },
+            "description": "New criteria to set on the rule"
+          },
+          "syncToCrm": {
+            "type": "boolean",
+            "description": "Push criteria changes to the CRM trigger. Defaults to false."
+          }
+        },
+        "required": ["ruleId", "criteria"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "reorder_rules",
+      "description": "Set the evaluation order of routing rules for an object type. Rules are evaluated top-to-bottom; first match wins.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "Object type whose rules to reorder"
+          },
+          "ruleIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Rule IDs in desired evaluation order"
+          }
+        },
+        "required": ["objectType", "ruleIds"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "clone_and_modify_rule",
+      "description": "Clone an existing routing rule and optionally modify properties on the copy.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sourceRuleId": { "type": "string", "description": "ID of the rule to clone" },
+          "newName": { "type": "string", "description": "Name for the cloned rule" },
+          "modifications": {
+            "type": "object",
+            "properties": {
+              "objectType": {
+                "type": "string",
+                "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"]
+              },
+              "triggerEvent": {
+                "type": "string",
+                "enum": ["INSERT", "UPDATE", "BOTH", "SEARCH"]
+              },
+              "assignTo": {
+                "type": "object",
+                "properties": {
+                  "teamId": { "type": "string" },
+                  "userId": { "type": "string" },
+                  "queueId": { "type": "string" }
+                }
+              },
+              "activate": { "type": "boolean" }
+            },
+            "description": "Properties to override on the cloned rule"
+          }
+        },
+        "required": ["sourceRuleId"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_routing_status",
+      "description": "Get the overall health and status of the routing system including engine status, CRM connection, queue depth, and recent errors.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_performance",
+      "description": "Get routing performance analytics including success rates, average routing time, volume trends, and top rules.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fromDate": { "type": "string", "format": "date-time", "description": "Start of date range (ISO 8601)" },
+          "toDate": { "type": "string", "format": "date-time", "description": "End of date range (ISO 8601)" },
+          "ruleId": { "type": "string", "description": "Filter to a specific rule" },
+          "teamId": { "type": "string", "description": "Filter to a specific team" }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_team_workload",
+      "description": "Get current workload distribution across team members, including assignment counts, capacity, and balance metrics.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "teamId": { "type": "string", "description": "Filter to a specific team" },
+          "fromDate": { "type": "string", "format": "date-time", "description": "Start of date range (ISO 8601)" },
+          "toDate": { "type": "string", "format": "date-time", "description": "End of date range (ISO 8601)" }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "export_report",
+      "description": "Export routing log data as CSV or JSON for a given date range, with optional filters.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fromDate": { "type": "string", "format": "date-time", "description": "Start of date range (ISO 8601, required)" },
+          "toDate": { "type": "string", "format": "date-time", "description": "End of date range (ISO 8601, required)" },
+          "format": {
+            "type": "string",
+            "enum": ["csv", "json"],
+            "description": "Export format. Defaults to csv."
+          },
+          "objectType": {
+            "type": "string",
+            "enum": ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+            "description": "Filter to a specific object type"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["SUCCESS", "FAILED", "UNMATCHED", "RETRY", "MERGED"],
+            "description": "Filter to a specific routing status"
+          },
+          "ruleId": { "type": "string", "description": "Filter to a specific rule" },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000,
+            "description": "Max records to export. Defaults to 5000."
+          }
+        },
+        "required": ["fromDate", "toDate"]
+      }
+    }
+  }
+]

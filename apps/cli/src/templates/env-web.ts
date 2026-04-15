@@ -17,6 +17,9 @@ export interface WebEnvConfig {
   hubspotClientId?: string
   hubspotClientSecret?: string
   hubspotAppId?: string
+  langfuseEnabled?: boolean
+  langfusePublicKey?: string
+  langfuseSecretKey?: string
 }
 
 export function renderEnvWeb(c: WebEnvConfig): string {
@@ -68,6 +71,16 @@ export function renderEnvWeb(c: WebEnvConfig): string {
           `HUBSPOT_CLIENT_SECRET=${c.hubspotClientSecret ?? 'f95949ac-6464-40d3-bdaa-893c48749951'}`,
           `HUBSPOT_APP_ID=${c.hubspotAppId ?? '35016223'}`,
           `HUBSPOT_REDIRECT_URI=${c.appUrl}/api/auth/hubspot/callback`,
+        ]
+      : []),
+    ...(c.langfuseEnabled
+      ? [
+          ``,
+          `# Langfuse (agent evaluation dashboard)`,
+          `LANGFUSE_ENABLED=true`,
+          `LANGFUSE_URL=http://langfuse:3000`,
+          `LANGFUSE_PUBLIC_KEY=${c.langfusePublicKey ?? ''}`,
+          `LANGFUSE_SECRET_KEY=${c.langfuseSecretKey ?? ''}`,
         ]
       : []),
   ].join('\n')

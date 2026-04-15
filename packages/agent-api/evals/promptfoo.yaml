@@ -1,0 +1,130 @@
+description: "Lead Routing Agent API — Tool Use Evaluation"
+
+providers:
+  - id: google:gemini-2.0-flash
+    config:
+      tools:
+        - file://tools.json
+
+prompts:
+  - "You are a lead routing assistant. When the user asks you to do something, call the appropriate tool immediately with reasonable defaults. Do not ask clarifying questions. Today is 2026-04-14.\n\nUser: {{prompt}}"
+
+tests:
+  # ── Tool Selection Accuracy ──
+  - description: "Should call get_routing_status for health check"
+    vars:
+      prompt: "Is my routing system healthy?"
+    assert:
+      - type: contains
+        value: "get_routing_status"
+
+  - description: "Should call setup_team for team creation"
+    vars:
+      prompt: "Create a team called West Coast SDRs with alice@co.com and bob@co.com using round robin"
+    assert:
+      - type: contains
+        value: "setup_team"
+
+  - description: "Should call get_performance for analytics"
+    vars:
+      prompt: "How is my routing performing this week?"
+    assert:
+      - type: contains
+        value: "get_performance"
+
+  - description: "Should call setup_routing_rule for rule creation"
+    vars:
+      prompt: "Create a routing rule called Enterprise CA for LEAD records that triggers on INSERT. Assign to team team-123."
+    assert:
+      - type: contains
+        value: "setup_routing_rule"
+
+  - description: "Should call toggle_routing to pause"
+    vars:
+      prompt: "Pause lead routing while we do maintenance"
+    assert:
+      - type: contains
+        value: "toggle_routing"
+
+  - description: "Should call retry_failed for failures"
+    vars:
+      prompt: "Retry all the failed routing attempts"
+    assert:
+      - type: contains
+        value: "retry_failed"
+
+  - description: "Should call rebalance_team for load balancing"
+    vars:
+      prompt: "Rebalance team team-abc weights using equal strategy"
+    assert:
+      - type: contains
+        value: "rebalance_team"
+
+  - description: "Should call sync_crm_schema for field refresh"
+    vars:
+      prompt: "Refresh the CRM fields and queues"
+    assert:
+      - type: contains
+        value: "sync_crm_schema"
+
+  - description: "Should call export_report for data export"
+    vars:
+      prompt: "Export routing data from 2026-03-01 to 2026-03-31 as CSV"
+    assert:
+      - type: contains
+        value: "export_report"
+
+  - description: "Should call get_team_workload for team analysis"
+    vars:
+      prompt: "Show me the current load distribution across all teams"
+    assert:
+      - type: contains
+        value: "get_team_workload"
+
+  - description: "Should call route_record for single routing"
+    vars:
+      prompt: "Route lead 00Q123 of type LEAD with event INSERT and fields {\"State\": \"CA\"} through the engine"
+    assert:
+      - type: contains
+        value: "route_record"
+
+  - description: "Should call import_users for user sync"
+    vars:
+      prompt: "Sync and license all users from our CRM"
+    assert:
+      - type: contains
+        value: "import_users"
+
+  # ── Argument Correctness ──
+  - description: "Should handle COMPANY object type for HubSpot"
+    vars:
+      prompt: "Create a routing rule called HubSpot Companies for COMPANY records, trigger on INSERT, assign to team team-456"
+    assert:
+      - type: contains
+        value: "COMPANY"
+
+  - description: "Should set round_robin strategy"
+    vars:
+      prompt: "Create a team called Test Team with round_robin strategy"
+    assert:
+      - type: contains
+        value: "round_robin"
+
+  # ── Tool Disambiguation ──
+  - description: "Should prefer setup_team over create_team"
+    vars:
+      prompt: "Set up a team called Sales with members alice@co.com and bob@co.com using round robin distribution"
+    assert:
+      - type: contains
+        value: "setup_team"
+      - type: not-contains
+        value: "create_team"
+
+  - description: "Should prefer setup_routing_rule over create_rule"
+    vars:
+      prompt: "Set up a new routing rule called Inbound for LEAD records, trigger on INSERT, assign to team team-789, and activate it"
+    assert:
+      - type: contains
+        value: "setup_routing_rule"
+      - type: not-contains
+        value: "create_rule"

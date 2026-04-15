@@ -1,6 +1,6 @@
 {
   "name": "@lead-routing/mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "MCP server for Lead Routing — route leads, manage rules and teams from Claude Code",
   "type": "module",
   "bin": {

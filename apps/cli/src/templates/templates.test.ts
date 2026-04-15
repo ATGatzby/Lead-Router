@@ -245,6 +245,245 @@ describe('renderCaddyfile — Case B: same domain, port-based engine URL', () =>
   })
 })
 
+// ─── renderEnvWeb — Langfuse integration ─────────────────────────────────────
+
+describe('renderEnvWeb — Langfuse integration', () => {
+  it('includes Langfuse env vars when langfuseEnabled is true', () => {
+    const out = renderEnvWeb({ ...baseWebConfig, langfuseEnabled: true })
+    expect(out).toContain('LANGFUSE_ENABLED=true')
+    expect(out).toContain('LANGFUSE_URL=http://langfuse:3000')
+    expect(out).toContain('LANGFUSE_PUBLIC_KEY=')
+    expect(out).toContain('LANGFUSE_SECRET_KEY=')
+  })
+
+  it('does not include Langfuse env vars when langfuseEnabled is false', () => {
+    const out = renderEnvWeb({ ...baseWebConfig, langfuseEnabled: false })
+    expect(out).not.toContain('LANGFUSE_ENABLED')
+    expect(out).not.toContain('LANGFUSE_URL')
+  })
+
+  it('does not include Langfuse env vars when langfuseEnabled is undefined', () => {
+    const out = renderEnvWeb(baseWebConfig)
+    expect(out).not.toContain('LANGFUSE_ENABLED')
+    expect(out).not.toContain('LANGFUSE_URL')
+  })
+
+  it('includes Langfuse keys when provided', () => {
+    const out = renderEnvWeb({
+      ...baseWebConfig,
+      langfuseEnabled: true,
+      langfusePublicKey: 'pk-lf-abc',
+      langfuseSecretKey: 'sk-lf-xyz',
+    })
+    expect(out).toContain('LANGFUSE_PUBLIC_KEY=pk-lf-abc')
+    expect(out).toContain('LANGFUSE_SECRET_KEY=sk-lf-xyz')
+  })
+})
+
+// ─── renderDockerCompose — Langfuse service ──────────────────────────────────
+
+describe('renderDockerCompose — Langfuse service', () => {
+  it('includes langfuse service when managedLangfuse is true', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedLangfuse: true,
+      langfuseUrl: 'https://evals.acme.com',
+      langfuseSecret: 'secret123',
+      langfuseSalt: 'salt123',
+      dbPassword: 'testpw',
+    })
+    expect(out).toContain('  langfuse:')
+    expect(out).toContain('langfuse/langfuse:2')
+    expect(out).toContain('NEXTAUTH_URL: https://evals.acme.com')
+    expect(out).toContain('NEXTAUTH_SECRET: secret123')
+    expect(out).toContain('SALT: salt123')
+    expect(out).toContain('TELEMETRY_ENABLED: "false"')
+  })
+
+  it('does not include langfuse service when managedLangfuse is false', () => {
+    const out = renderDockerCompose({ managedDb: true, managedRedis: true, managedLangfuse: false })
+    expect(out).not.toContain('  langfuse:')
+    expect(out).not.toContain('langfuse/langfuse:2')
+  })
+
+  it('caddy depends on langfuse when managedLangfuse is true', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedLangfuse: true,
+      langfuseUrl: 'https://evals.acme.com',
+      langfuseSecret: 's',
+      langfuseSalt: 's',
+    })
+    const caddyStart = out.indexOf('  caddy:')
+    const caddyBlock = out.slice(caddyStart)
+    expect(caddyBlock).toContain('- langfuse')
+  })
+
+  it('caddy does not depend on langfuse when managedLangfuse is false', () => {
+    const out = renderDockerCompose({ managedDb: false, managedRedis: false })
+    const caddyStart = out.indexOf('  caddy:')
+    const caddyBlock = out.slice(caddyStart)
+    expect(caddyBlock).not.toContain('- langfuse')
+  })
+
+  it('langfuse DATABASE_URL points to langfuse database', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedLangfuse: true,
+      langfuseUrl: 'https://evals.acme.com',
+      langfuseSecret: 's',
+      langfuseSalt: 's',
+      dbPassword: 'mydbpw',
+    })
+    expect(out).toContain('postgresql://leadrouting:mydbpw@postgres:5432/langfuse')
+  })
+})
+
+// ─── renderCaddyfile — Langfuse block ────────────────────────────────────────
+
+describe('renderCaddyfile — Langfuse block', () => {
+  it('includes Langfuse site block when langfuseUrl is provided (Case A)', () => {
+    const out = renderCaddyfile('https://leads.acme.com', 'https://engine.acme.com', 'https://evals.acme.com')
+    expect(out).toContain('evals.acme.com {')
+    expect(out).toContain('reverse_proxy langfuse:3000')
+  })
+
+  it('includes Langfuse site block when langfuseUrl is provided (Case B)', () => {
+    const out = renderCaddyfile('https://leads.acme.com', 'https://leads.acme.com:3001', 'https://evals.acme.com')
+    expect(out).toContain('evals.acme.com {')
+    expect(out).toContain('reverse_proxy langfuse:3000')
+  })
+
+  it('does not include Langfuse block when langfuseUrl is undefined', () => {
+    const out = renderCaddyfile('https://leads.acme.com', 'https://engine.acme.com')
+    expect(out).not.toContain('langfuse')
+  })
+
+  it('does not include Langfuse block when langfuseUrl is empty string', () => {
+    const out = renderCaddyfile('https://leads.acme.com', 'https://engine.acme.com', '')
+    expect(out).not.toContain('langfuse')
+  })
+})
+
+// ─── renderDockerCompose — MCP service ──────────────────────────────────────
+
+describe('renderDockerCompose — MCP service', () => {
+  it('includes mcp service when managedMcp is true', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedMcp: true,
+      mcpWebhookSecret: 'ws123',
+      mcpCrmType: 'salesforce',
+    })
+    expect(out).toContain('  mcp:')
+    expect(out).toContain('ghcr.io/atgatzby/lead-routing-mcp:latest')
+    expect(out).toContain('WEBHOOK_SECRET: ws123')
+    expect(out).toContain('CRM_TYPE: salesforce')
+    expect(out).toContain('PORT: "3100"')
+    expect(out).toContain('TRANSPORT: http')
+  })
+
+  it('does not include mcp service when managedMcp is false', () => {
+    const out = renderDockerCompose({ managedDb: true, managedRedis: true, managedMcp: false })
+    expect(out).not.toContain('  mcp:')
+    expect(out).not.toContain('lead-routing-mcp')
+  })
+
+  it('caddy depends on mcp when managedMcp is true', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedMcp: true,
+    })
+    const caddyStart = out.indexOf('  caddy:')
+    const caddyBlock = out.slice(caddyStart)
+    expect(caddyBlock).toContain('- mcp')
+  })
+
+  it('caddy does not depend on mcp when managedMcp is false', () => {
+    const out = renderDockerCompose({ managedDb: false, managedRedis: false })
+    const caddyStart = out.indexOf('  caddy:')
+    const caddyBlock = out.slice(caddyStart)
+    expect(caddyBlock).not.toContain('- mcp')
+  })
+
+  it('mcp service depends on web with service_healthy', () => {
+    const out = renderDockerCompose({
+      managedDb: true,
+      managedRedis: true,
+      managedMcp: true,
+    })
+    const mcpStart = out.indexOf('  mcp:')
+    const mcpEnd = out.indexOf('\n  caddy:', mcpStart)
+    const mcpBlock = out.slice(mcpStart, mcpEnd)
+    expect(mcpBlock).toContain('depends_on:')
+    expect(mcpBlock).toContain('web:')
+    expect(mcpBlock).toContain('condition: service_healthy')
+  })
+})
+
+// ─── renderCaddyfile — MCP block ────────────────────────────────────────────
+
+describe('renderCaddyfile — MCP block', () => {
+  it('includes MCP site block when mcpEnabled and mcpUrl are provided', () => {
+    const out = renderCaddyfile({
+      appUrl: 'https://app.acme.com',
+      engineUrl: 'https://api.acme.com',
+      mcpEnabled: true,
+      mcpUrl: 'https://mcp.acme.com',
+    })
+    expect(out).toContain('mcp.acme.com {')
+    expect(out).toContain('reverse_proxy mcp:3100')
+  })
+
+  it('does not include MCP block when mcpEnabled is false', () => {
+    const out = renderCaddyfile({
+      appUrl: 'https://app.acme.com',
+      engineUrl: 'https://api.acme.com',
+      mcpEnabled: false,
+    })
+    expect(out).not.toContain('mcp.')
+    expect(out).not.toContain('reverse_proxy mcp:3100')
+  })
+
+  it('includes both Langfuse and MCP blocks when both enabled', () => {
+    const out = renderCaddyfile({
+      appUrl: 'https://app.acme.com',
+      engineUrl: 'https://api.acme.com',
+      langfuseUrl: 'https://evals.acme.com',
+      mcpEnabled: true,
+      mcpUrl: 'https://mcp.acme.com',
+    })
+    expect(out).toContain('evals.acme.com {')
+    expect(out).toContain('reverse_proxy langfuse:3000')
+    expect(out).toContain('mcp.acme.com {')
+    expect(out).toContain('reverse_proxy mcp:3100')
+  })
+})
+
+// ─── renderCaddyfile — baseDomain subdomain model ──────────────────────────
+
+describe('renderCaddyfile — baseDomain subdomain model', () => {
+  it('generates all 4 subdomain blocks for full agent API config', () => {
+    const out = renderCaddyfile({
+      appUrl: 'https://app.acme.com',
+      engineUrl: 'https://api.acme.com',
+      baseDomain: 'acme.com',
+      langfuseUrl: 'https://evals.acme.com',
+      mcpEnabled: true,
+      mcpUrl: 'https://mcp.acme.com',
+    })
+    expect(out).toContain('app.acme.com {')
+    expect(out).toContain('api.acme.com {')
+    expect(out).toContain('evals.acme.com {')
+    expect(out).toContain('mcp.acme.com {')
+  })
+})
+
 // ─── renderEnvEngine ──────────────────────────────────────────────────────────
 
 const baseEngineConfig = {

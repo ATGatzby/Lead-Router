@@ -5,6 +5,14 @@ export interface ComposeConfig {
   redisPassword?: string
   webPort?: number
   enginePort?: number
+  managedLangfuse?: boolean
+  langfuseUrl?: string
+  langfuseSecret?: string
+  langfuseSalt?: string
+  managedMcp?: boolean
+  mcpApiToken?: string
+  mcpWebhookSecret?: string
+  mcpCrmType?: string
 }
 
 export function renderDockerCompose(c: ComposeConfig): string {
@@ -80,6 +88,48 @@ export function renderDockerCompose(c: ComposeConfig): string {
       retries: 6${engineDependsOn}
 `
 
+  const langfuseService = c.managedLangfuse
+    ? `
+  langfuse:
+    image: langfuse/langfuse:2
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://leadrouting:${dbPassword}@postgres:5432/langfuse
+      NEXTAUTH_URL: ${c.langfuseUrl ?? ''}
+      NEXTAUTH_SECRET: ${c.langfuseSecret ?? ''}
+      SALT: ${c.langfuseSalt ?? ''}
+      TELEMETRY_ENABLED: "false"
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+`
+    : ''
+
+  const mcpService = c.managedMcp
+    ? `
+  mcp:
+    image: ghcr.io/atgatzby/lead-routing-mcp:latest
+    restart: unless-stopped
+    environment:
+      APP_URL: http://web:3000
+      ENGINE_URL: http://engine:3001
+      API_TOKEN: ${c.mcpApiToken ?? ''}
+      WEBHOOK_SECRET: ${c.mcpWebhookSecret ?? ''}
+      CRM_TYPE: ${c.mcpCrmType ?? 'salesforce'}
+      PORT: "3100"
+      TRANSPORT: http
+    depends_on:
+      web:
+        condition: service_healthy
+`
+    : ''
+
+  const caddyDeps = ['web', 'engine']
+  if (c.managedLangfuse) caddyDeps.push('langfuse')
+  if (c.managedMcp) caddyDeps.push('mcp')
+
   const caddyService = `
   caddy:
     image: caddy:2-alpine
@@ -93,8 +143,7 @@ export function renderDockerCompose(c: ComposeConfig): string {
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - web
-      - engine
+${caddyDeps.map((d) => `      - ${d}`).join('\n')}
 `
 
   const volumes = buildVolumes(c.managedDb, c.managedRedis)
@@ -109,6 +158,8 @@ export function renderDockerCompose(c: ComposeConfig): string {
     redisService.trimEnd(),
     webService.trimEnd(),
     engineService.trimEnd(),
+    langfuseService.trimEnd(),
+    mcpService.trimEnd(),
     caddyService.trimEnd(),
     volumes,
   ]

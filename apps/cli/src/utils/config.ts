@@ -12,6 +12,10 @@ export interface SshInstallConfig {
 export interface InstallConfig {
   appUrl: string
   engineUrl: string
+  /** Base domain (e.g. acme.com) — all subdomains derived from this */
+  baseDomain?: string
+  /** Public MCP HTTP server URL */
+  mcpUrl?: string
   /** CRM type — 'salesforce' or 'hubspot' */
   crmType?: 'salesforce' | 'hubspot'
   /** Local directory where config files are written (./lead-routing/) */
@@ -30,6 +34,10 @@ export interface InstallConfig {
   licenseKey?: string
   /** License tier — 'free' or 'pro' */
   licenseTier: 'free' | 'pro'
+  /** Whether the agent API + Langfuse integration is enabled */
+  enableAgentApi?: boolean
+  /** Public URL for the Langfuse dashboard */
+  langfuseUrl?: string
   installedAt: string
   version: string
 }

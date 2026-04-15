@@ -12,6 +12,7 @@ COPY packages/db/package.json          ./packages/db/
 COPY packages/sfdc/package.json        ./packages/sfdc/
 COPY packages/hubspot/package.json     ./packages/hubspot/
 COPY packages/crm-adapter/package.json ./packages/crm-adapter/
+COPY packages/agent-api/package.json   ./packages/agent-api/
 
 # Install all deps (devDeps included — needed for next build, prisma generate)
 RUN pnpm install --frozen-lockfile --shamefully-hoist
@@ -22,6 +23,7 @@ COPY packages/db/       ./packages/db/
 COPY packages/sfdc/     ./packages/sfdc/
 COPY packages/hubspot/  ./packages/hubspot/
 COPY packages/crm-adapter/ ./packages/crm-adapter/
+COPY packages/agent-api/   ./packages/agent-api/
 
 # Generate Prisma client into root node_modules/@prisma + node_modules/.prisma
 RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma

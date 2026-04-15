@@ -7,9 +7,11 @@ const nextConfig: NextConfig = {
   // Trace files from the monorepo root so workspace packages (packages/db,
   // packages/sfdc) are included in the standalone bundle.
   outputFileTracingRoot: path.join(__dirname, '../../'),
-  // Keep ioredis as a server-side external — it uses native modules that
-  // break Next.js bundling in CI Docker builds.
-  serverExternalPackages: ['ioredis'],
+  // Transpile workspace packages that ship raw TypeScript (no build step).
+  transpilePackages: ['@lead-routing/agent-api'],
+  // Keep ioredis and langfuse as server-side externals — they use native
+  // modules or need to be traced into standalone output.
+  serverExternalPackages: ['ioredis', 'langfuse'],
 }
 
 export default nextConfig

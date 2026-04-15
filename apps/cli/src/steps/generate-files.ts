@@ -33,7 +33,14 @@ export interface LicenseConfig {
   licenseTier: 'free' | 'pro'
 }
 
-export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: LicenseConfig = { licenseTier: 'free' }): GeneratedPaths {
+export interface AgentApiConfig {
+  langfuseUrl: string
+  langfuseSecret: string
+  langfuseSalt: string
+  dbPassword: string
+}
+
+export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: LicenseConfig = { licenseTier: 'free' }, agentApi?: AgentApiConfig): GeneratedPaths {
   const dir = join(process.cwd(), 'lead-routing')
   mkdirSync(dir, { recursive: true })
 
@@ -46,13 +53,27 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     managedRedis: cfg.managedRedis,
     dbPassword: cfg.dbPassword,
     redisPassword: cfg.redisPassword,
+    managedLangfuse: !!agentApi,
+    langfuseUrl: agentApi?.langfuseUrl,
+    langfuseSecret: agentApi?.langfuseSecret,
+    langfuseSalt: agentApi?.langfuseSalt,
+    managedMcp: !!agentApi,
+    mcpWebhookSecret: cfg.engineWebhookSecret,
+    mcpCrmType: cfg.crmType,
   })
   const composeFile = join(dir, 'docker-compose.yml')
   writeFileSync(composeFile, composeContent, 'utf8')
   log.success('Generated docker-compose.yml')
 
   // Caddyfile (auto-HTTPS via Let's Encrypt)
-  const caddyfileContent = renderCaddyfile(cfg.appUrl, cfg.engineUrl)
+  const caddyfileContent = renderCaddyfile({
+    appUrl: cfg.appUrl,
+    engineUrl: cfg.engineUrl,
+    baseDomain: cfg.baseDomain,
+    langfuseUrl: agentApi ? cfg.langfuseUrl : undefined,
+    mcpEnabled: !!agentApi,
+    mcpUrl: cfg.mcpUrl,
+  })
   writeFileSync(join(dir, 'Caddyfile'), caddyfileContent, 'utf8')
   log.success('Generated Caddyfile')
 
@@ -76,6 +97,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     hubspotClientId: cfg.hubspotClientId,
     hubspotClientSecret: cfg.hubspotClientSecret,
     hubspotAppId: cfg.hubspotAppId,
+    langfuseEnabled: !!agentApi,
   })
   const envWeb = join(dir, '.env.web')
   writeFileSync(envWeb, envWebContent, 'utf8')
@@ -101,6 +123,8 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
   writeConfig(dir, {
     appUrl: cfg.appUrl,
     engineUrl: cfg.engineUrl,
+    baseDomain: cfg.baseDomain,
+    mcpUrl: cfg.mcpUrl,
     crmType: cfg.crmType,
     installDir: dir,
     remoteDir: sshCfg.remoteDir,
@@ -118,6 +142,8 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     engineWebhookSecret: cfg.engineWebhookSecret,
     licenseKey: license.licenseKey,
     licenseTier: license.licenseTier,
+    enableAgentApi: !!agentApi,
+    langfuseUrl: agentApi?.langfuseUrl,
     installedAt: new Date().toISOString(),
     version: getCliVersion(),
   })

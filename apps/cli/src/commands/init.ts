@@ -8,6 +8,7 @@ import chalk from 'chalk'
 
 /** Managed package install URL — mirrors packages/sfdc/src/constants.ts */
 const MANAGED_PACKAGE_INSTALL_URL = 'https://login.salesforce.com/packaging/installPackage.apexp?p0=04tgL000000CTnp'
+import { generateSecret } from '../utils/crypto.js'
 import { checkPrerequisites } from '../steps/prerequisites.js'
 import { collectSshConfig } from '../steps/collect-ssh-config.js'
 import { collectConfig } from '../steps/collect-config.js'
@@ -315,12 +316,32 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     // DNS pre-flight
     await checkDnsResolvable(cfg.appUrl, cfg.engineUrl)
 
+    // ── Agent API ─────────────────────────────────────────────────
+    const enableAgentApi = await confirm({
+      message: 'Enable AI agent API? (Langfuse eval dashboard + MCP composite tools)',
+      initialValue: true,
+    })
+    if (isCancel(enableAgentApi)) { cancel('Setup cancelled.'); process.exit(0) }
+
+    let langfuseUrl = cfg.langfuseUrl
+    let langfuseSecret = ''
+    let langfuseSalt = ''
+    if (enableAgentApi) {
+      langfuseSecret = generateSecret(32)
+      langfuseSalt = generateSecret(16)
+    }
+
     // Step 6 — Generate config files locally
     log.step('Step 6/9  Generating config files')
     const { dir } = generateFiles(cfg, sshCfg, {
       licenseKey: licenseResult.key,
       licenseTier: licenseResult.tier,
-    })
+    }, enableAgentApi ? {
+      langfuseUrl,
+      langfuseSecret,
+      langfuseSalt,
+      dbPassword: cfg.dbPassword,
+    } : undefined)
 
     note(
       `Local config directory: ${chalk.cyan(dir)}\n` +
@@ -347,6 +368,15 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     // Step 8 — Start services on remote server
     log.step('Step 8/9  Starting services')
     await startServices(ssh, remoteDir)
+
+    // Create Langfuse database if agent API is enabled
+    if (enableAgentApi) {
+      log.step('Creating Langfuse database...')
+      await ssh.exec(`docker exec $(docker ps -qf "name=postgres") psql -U leadrouting -d postgres -c "CREATE DATABASE langfuse OWNER leadrouting;" 2>/dev/null || true`)
+      // Restart langfuse to pick up the new DB
+      await ssh.exec(`cd ${remoteDir} && docker compose restart langfuse`)
+      log.success('Langfuse database created')
+    }
 
     // Step 9 — Health check on public HTTPS URLs
     log.step('Step 9/9  Verifying health')
@@ -391,7 +421,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         const { dir: newDir } = generateFiles(cfg, sshCfg, {
           licenseKey: licenseResult.key,
           licenseTier: licenseResult.tier,
-        })
+        }, enableAgentApi ? {
+          langfuseUrl,
+          langfuseSecret,
+          langfuseSalt,
+          dbPassword: cfg.dbPassword,
+        } : undefined)
         await uploadFiles(ssh, newDir, remoteDir)
         log.step('Restarting services with new config...')
         await startServices(ssh, remoteDir)
@@ -465,7 +500,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
                 'Content-Type': 'application/json',
                 'Cookie': cookieHeader,
               },
-              body: JSON.stringify({ name: 'Claude Code MCP', scopes: ['read', 'write', 'route'] }),
+              body: JSON.stringify({ name: 'Claude Code MCP', scopes: ['read', 'write', 'route', 'agent'] }),
             })
             if (tokenRes.ok) {
               const tokenData = await tokenRes.json() as { token: string }
@@ -479,7 +514,8 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       if (webhookSecret) {
         const mcpDir = join(homedir(), '.lead-routing')
         mkdirSync(mcpDir, { recursive: true })
-        const mcpConfig: Record<string, string> = { appUrl: cfg.appUrl, engineUrl: cfg.engineUrl, webhookSecret }
+        const mcpConfig: Record<string, string> = { appUrl: cfg.appUrl, engineUrl: cfg.engineUrl, webhookSecret, crmType: cfg.crmType || 'salesforce' }
+        if (cfg.mcpUrl) mcpConfig.mcpUrl = cfg.mcpUrl
         if (apiToken) mcpConfig.apiToken = apiToken
         writeFileSync(
           join(mcpDir, 'mcp.json'),
@@ -501,12 +537,26 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       : `  ${chalk.cyan('2.')} Go to Integrations → HubSpot → Connect\n` +
         `  ${chalk.cyan('3.')} Authorize the HubSpot integration\n`
 
+    const agentApiLines = enableAgentApi
+      ? `  Evals:          ${chalk.cyan(cfg.langfuseUrl)}\n` +
+        `  MCP:            ${chalk.cyan(cfg.mcpUrl)}\n` +
+        `  MCP config:     ~/.lead-routing/mcp.json\n`
+      : ''
+
+    const dnsLine = cfg.baseDomain
+      ? `\n  DNS: Add ${chalk.white(`*.${cfg.baseDomain}`)} -> A -> <server IP>\n`
+      : ''
+
     outro(
       chalk.green("✔  You're live!") +
         '\n\n' +
         `  Dashboard:      ${chalk.cyan(cfg.appUrl)}\n` +
-        `  Routing engine: ${chalk.cyan(cfg.engineUrl)}\n\n` +
-        `  Admin email:    ${chalk.white(cfg.adminEmail)}\n\n` +
+        `  Engine:         ${chalk.cyan(cfg.engineUrl)}\n` +
+        agentApiLines +
+        '\n' +
+        `  Admin email:    ${chalk.white(cfg.adminEmail)}\n` +
+        dnsLine +
+        '\n' +
         chalk.bold('  Next steps:\n') +
         `  ${chalk.cyan('1.')} Open ${chalk.cyan(cfg.appUrl)} and log in\n` +
         crmSteps +

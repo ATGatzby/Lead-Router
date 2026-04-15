@@ -6,6 +6,12 @@ export type CrmType = 'salesforce' | 'hubspot'
 export interface CollectedConfig {
   appUrl: string
   engineUrl: string
+  /** Base domain (e.g. acme.com) — all subdomains derived from this */
+  baseDomain: string
+  /** Langfuse evals dashboard URL (derived from baseDomain) */
+  langfuseUrl: string
+  /** MCP HTTP server URL (derived from baseDomain) */
+  mcpUrl: string
   crmType: CrmType
   managedDb: boolean
   databaseUrl: string
@@ -52,42 +58,40 @@ export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?:
 
   note(
     'You will need:\n' +
-      '  • Public HTTPS URLs for the web app and routing engine',
+      '  • A domain with wildcard DNS (*.acme.com) pointing to your server',
     'Before you begin'
   )
 
-  // ── App URL ────────────────────────────────────────────────────────────────
-  const appUrl = await text({
-    message: 'App URL (public URL where the web app will be accessible)',
-    placeholder: 'https://routing.acme.com',
+  // ── Base Domain ────────────────────────────────────────────────────────────
+  const domain = await text({
+    message: 'Your domain (we\'ll create app/api/evals/mcp subdomains):',
+    placeholder: 'acme.com',
     validate: (v) => {
-      if (!v) return 'Required'
-      try {
-        const u = new URL(v)
-        if (u.protocol !== 'https:') return 'Must be an HTTPS URL (required for Salesforce OAuth)'
-      } catch {
-        return 'Must be a valid URL (e.g. https://routing.acme.com)'
-      }
+      if (!v?.trim()) return 'Domain is required'
+      // Strip protocol if pasted
+      const clean = v.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+      if (!clean.includes('.')) return 'Enter a valid domain (e.g. acme.com)'
     },
   })
-  if (isCancel(appUrl)) bail(appUrl)
+  if (isCancel(domain)) bail(domain)
 
-  // ── Engine URL ─────────────────────────────────────────────────────────────
-  const crmLabel = crmType === 'hubspot' ? 'HubSpot' : 'Salesforce'
-  const engineUrl = await text({
-    message: `Engine URL (public URL ${crmLabel} will use to route leads)`,
-    placeholder: 'https://engine.acme.com  or  https://acme.com:3001',
-    validate: (v) => {
-      if (!v) return 'Required'
-      try {
-        const u = new URL(v)
-        if (u.protocol !== 'https:') return `Must be an HTTPS URL (${crmLabel} requires HTTPS)`
-      } catch {
-        return 'Must be a valid URL (e.g. https://engine.acme.com)'
-      }
-    },
-  })
-  if (isCancel(engineUrl)) bail(engineUrl)
+  const baseDomain = (domain as string).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  const appUrl = `https://app.${baseDomain}`
+  const engineUrl = `https://api.${baseDomain}`
+  const langfuseUrl = `https://evals.${baseDomain}`
+  const mcpUrl = `https://mcp.${baseDomain}`
+
+  note(
+    [
+      `App:     ${appUrl}`,
+      `Engine:  ${engineUrl}`,
+      `Evals:   ${langfuseUrl}`,
+      `MCP:     ${mcpUrl}`,
+      '',
+      `Add this DNS record: *.${baseDomain} -> A -> <your server IP>`,
+    ].join('\n'),
+    'URLs'
+  )
 
   // ── Database ───────────────────────────────────────────────────────────────
   // Default: managed Docker container. Override with --external-db <url>.
@@ -146,8 +150,11 @@ export async function collectConfig(opts: ConfigCollectOptions = {}, authEmail?:
   const hubspotClientSecret: string | undefined = undefined
 
   return {
-    appUrl: (appUrl as string).trim().replace(/\/+$/, ''),
-    engineUrl: (engineUrl as string).trim().replace(/\/+$/, ''),
+    appUrl,
+    engineUrl,
+    baseDomain,
+    langfuseUrl,
+    mcpUrl,
     crmType,
     managedDb,
     databaseUrl,

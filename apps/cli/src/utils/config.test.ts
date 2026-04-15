@@ -112,3 +112,71 @@ describe('findInstallDir', () => {
     expect(findInstallDir('/work')).toBeNull()
   })
 })
+
+// ─── Agent API fields in InstallConfig ──────────────────────────────────────
+
+describe('InstallConfig — agent API fields', () => {
+  const configWithAgentApi: InstallConfig = {
+    ...sampleConfig,
+    enableAgentApi: true,
+    langfuseUrl: 'https://evals.acme.com',
+  }
+
+  it('round-trips enableAgentApi and langfuseUrl through write/read', () => {
+    let written = ''
+    mockFs.writeFileSync.mockImplementation((_path: string, content: string) => {
+      written = content
+    })
+    writeConfig('/some/dir', configWithAgentApi)
+
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(written)
+    const result = readConfig('/some/dir')
+
+    expect(result?.enableAgentApi).toBe(true)
+    expect(result?.langfuseUrl).toBe('https://evals.acme.com')
+  })
+
+  it('enableAgentApi defaults to undefined when not set', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify(sampleConfig))
+
+    const result = readConfig('/some/dir')
+    expect(result?.enableAgentApi).toBeUndefined()
+    expect(result?.langfuseUrl).toBeUndefined()
+  })
+})
+
+// ─── baseDomain and mcpUrl fields ──────────────────────────────────────────
+
+describe('InstallConfig — baseDomain and mcpUrl fields', () => {
+  const configWithDomain: InstallConfig = {
+    ...sampleConfig,
+    baseDomain: 'acme.com',
+    mcpUrl: 'https://mcp.acme.com',
+  }
+
+  it('round-trips baseDomain and mcpUrl through write/read', () => {
+    let written = ''
+    mockFs.writeFileSync.mockImplementation((_path: string, content: string) => {
+      written = content
+    })
+    writeConfig('/some/dir', configWithDomain)
+
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(written)
+    const result = readConfig('/some/dir')
+
+    expect(result?.baseDomain).toBe('acme.com')
+    expect(result?.mcpUrl).toBe('https://mcp.acme.com')
+  })
+
+  it('baseDomain and mcpUrl default to undefined when not set', () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify(sampleConfig))
+
+    const result = readConfig('/some/dir')
+    expect(result?.baseDomain).toBeUndefined()
+    expect(result?.mcpUrl).toBeUndefined()
+  })
+})
