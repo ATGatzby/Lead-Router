@@ -5,16 +5,27 @@ RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 WORKDIR /app
 
-# Copy monorepo manifests first (layer-cache friendly)
+# Copy monorepo manifests + ALL workspace package.jsons
+# pnpm needs every package listed in pnpm-workspace.yaml to be present
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
-COPY apps/mcp/package.json ./apps/mcp/
-COPY apps/mcp/tsup.config.ts ./apps/mcp/
-COPY apps/mcp/tsconfig.json ./apps/mcp/
+COPY apps/cli/package.json        ./apps/cli/
+COPY apps/engine/package.json     ./apps/engine/
+COPY apps/mcp/package.json        ./apps/mcp/
+COPY apps/web/package.json        ./apps/web/
+COPY packages/agent-api/package.json  ./packages/agent-api/
+COPY packages/crm-adapter/package.json ./packages/crm-adapter/
+COPY packages/db/package.json     ./packages/db/
+COPY packages/hubspot/package.json ./packages/hubspot/
+COPY packages/sfdc/package.json   ./packages/sfdc/
 
-# Install all deps (including devDeps — needed for tsup/esbuild)
+# MCP build config
+COPY apps/mcp/tsup.config.ts ./apps/mcp/
+COPY apps/mcp/tsconfig.json  ./apps/mcp/
+
+# Install all deps (esbuild platform binaries need full workspace resolution)
 RUN pnpm install --frozen-lockfile --shamefully-hoist
 
-# Copy full source
+# Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
 
 # Build
