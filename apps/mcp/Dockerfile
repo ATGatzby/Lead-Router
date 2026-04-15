@@ -1,23 +1,28 @@
-FROM node:20-slim AS builder
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+FROM node:24-alpine AS builder
+
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 WORKDIR /app
 
-# Copy package files for install
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/mcp/package.json apps/mcp/
-COPY apps/mcp/tsup.config.ts apps/mcp/
-COPY apps/mcp/tsconfig.json apps/mcp/
-COPY apps/mcp/src/ apps/mcp/src/
+# Copy monorepo manifests first (layer-cache friendly)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs ./
+COPY apps/mcp/package.json ./apps/mcp/
+COPY apps/mcp/tsup.config.ts ./apps/mcp/
+COPY apps/mcp/tsconfig.json ./apps/mcp/
 
-# Install pnpm and dependencies
-RUN npm install -g pnpm@10.30.1 && \
-    pnpm install --filter @lead-routing/mcp --shamefully-hoist
+# Install all deps (including devDeps — needed for tsup/esbuild)
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 
-# Build using pnpm (not npx — avoids esbuild native binary issues)
+# Copy full source
+COPY apps/mcp/src/ ./apps/mcp/src/
+
+# Build
 RUN pnpm --filter @lead-routing/mcp build
 
-# --- Runner ---
-FROM node:20-slim
+
+# ── Stage 2: Production runner ────────────────────────────────────────────────
+FROM node:24-alpine
 
 WORKDIR /app
 
