@@ -1,5 +1,8 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM node:24-alpine AS builder
+# Use slim (debian/glibc) for builder — esbuild lockfile has linux-x64 (glibc),
+# Alpine uses musl which needs a different binary. Verified locally with
+# docker buildx build --platform linux/amd64.
+FROM node:24-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
@@ -28,12 +31,17 @@ RUN pnpm install --frozen-lockfile --shamefully-hoist
 # Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
 
-# Build — use DEBUG for verbose esbuild output on failure
-RUN DEBUG="*" pnpm --filter @lead-routing/mcp build 2>&1 || \
-    (echo "=== Build failed. Checking esbuild ===" && \
-     node_modules/.bin/esbuild --version && \
-     echo "=== esbuild works ===" || echo "=== esbuild binary broken ===" && \
-     exit 1)
+# Build — capture full error output on failure
+RUN pnpm --filter @lead-routing/mcp build 2>&1; \
+    EXIT=$?; \
+    if [ $EXIT -ne 0 ]; then \
+      echo "=== tsup exit code: $EXIT ==="; \
+      echo "=== Trying direct esbuild for error details ==="; \
+      cd apps/mcp && ../../node_modules/.bin/esbuild src/index.ts \
+        --bundle --platform=node --format=esm --target=node20 \
+        --outfile=/tmp/test.js 2>&1 || true; \
+      exit 1; \
+    fi
 
 
 # ── Stage 2: Production runner ────────────────────────────────────────────────
