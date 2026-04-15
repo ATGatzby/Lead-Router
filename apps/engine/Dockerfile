@@ -54,8 +54,7 @@ RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 # Bundled engine (workspace packages inlined by tsup)
 COPY --from=builder /app/apps/engine/dist ./dist
 
-# Prisma JS wrapper + native query-engine binary
-COPY --from=builder /app/node_modules/.prisma      ./node_modules/.prisma
+# Prisma client — generated inside @prisma/client's directory (default output)
 COPY --from=builder /app/node_modules/@prisma      ./node_modules/@prisma
 
 # Prisma schema — required by `prisma migrate deploy` run from the CLI

@@ -58,8 +58,7 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=prisma-installer /prisma-pkg/node_modules ./node_modules
 
 # 3) Generated Prisma client — needed for runtime database queries
-# With default output, the generated client lives inside @prisma/client
-COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
+# Default output puts the generated client inside @prisma/client's directory
 COPY --from=builder /app/node_modules/@prisma        ./node_modules/@prisma
 
 # Static assets and public files
