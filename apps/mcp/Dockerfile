@@ -23,7 +23,8 @@ COPY apps/mcp/tsup.config.ts ./apps/mcp/
 COPY apps/mcp/tsconfig.json  ./apps/mcp/
 
 # Install all deps (esbuild platform binaries need full workspace resolution)
-RUN pnpm install --frozen-lockfile --shamefully-hoist
+RUN pnpm install --frozen-lockfile --shamefully-hoist && \
+    npm rebuild esbuild
 
 # Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
