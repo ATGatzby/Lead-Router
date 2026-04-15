@@ -13,8 +13,8 @@ COPY apps/mcp/src/ apps/mcp/src/
 RUN npm install -g pnpm@10.30.1 && \
     pnpm install --filter @lead-routing/mcp --shamefully-hoist
 
-# Build
-RUN cd apps/mcp && npx tsup
+# Build using pnpm (not npx — avoids esbuild native binary issues)
+RUN pnpm --filter @lead-routing/mcp build
 
 # --- Runner ---
 FROM node:20-slim
