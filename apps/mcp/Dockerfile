@@ -1,5 +1,6 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM node:24-alpine AS builder
+# Use debian (not alpine) for builder — esbuild/tsup needs glibc platform binary
+FROM node:24-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
@@ -23,8 +24,7 @@ COPY apps/mcp/tsup.config.ts ./apps/mcp/
 COPY apps/mcp/tsconfig.json  ./apps/mcp/
 
 # Install all deps (esbuild platform binaries need full workspace resolution)
-RUN pnpm install --frozen-lockfile --shamefully-hoist && \
-    pnpm rebuild esbuild
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 
 # Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
