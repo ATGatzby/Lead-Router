@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     const castFields = (
       raw: typeof leadFields,
     ): FieldSchema[] =>
-      raw.map((f) => ({
+      raw.map((f: { fieldApiName: string; fieldLabel: string; fieldType: string; picklistValues: unknown }) => ({
         id: "",
         fieldApiName: f.fieldApiName,
         fieldLabel: f.fieldLabel,

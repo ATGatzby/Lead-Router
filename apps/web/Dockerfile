@@ -25,12 +25,9 @@ COPY packages/hubspot/  ./packages/hubspot/
 COPY packages/crm-adapter/ ./packages/crm-adapter/
 COPY packages/agent-api/   ./packages/agent-api/
 
-# Generate Prisma client — use pnpm filter so it runs from packages/db context
+# Generate Prisma client — outputs into @prisma/client's own directory
+# (default output, no custom path — resolves correctly in pnpm's .pnpm store)
 RUN pnpm --filter @lead-routing/db db:generate
-
-# Debug: verify generated client location
-RUN find /app/node_modules/.prisma -name "index.js" 2>/dev/null || echo "NOT FOUND in /app/node_modules/.prisma" && \
-    find /app/packages/db/node_modules/.prisma -name "index.js" 2>/dev/null || echo "NOT FOUND in packages/db/node_modules/.prisma"
 
 # Build Next.js (produces .next/standalone via output: 'standalone')
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -61,7 +58,9 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=prisma-installer /prisma-pkg/node_modules ./node_modules
 
 # 3) Generated Prisma client — needed for runtime database queries
+# With default output, the generated client lives inside @prisma/client
 COPY --from=builder /app/node_modules/.prisma        ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma        ./node_modules/@prisma
 
 # Static assets and public files
 COPY --from=builder /app/apps/web/.next/static  ./apps/web/.next/static
