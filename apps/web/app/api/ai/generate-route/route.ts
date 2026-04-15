@@ -121,17 +121,17 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
-    const users: Assignee[] = usersRaw.map((u) => ({
+    const users: Assignee[] = usersRaw.map((u: { id: string; name: string }) => ({
       id: u.id,
       name: u.name,
       type: "user" as const,
     }));
-    const teams: Assignee[] = teamsRaw.map((t) => ({
+    const teams: Assignee[] = teamsRaw.map((t: { id: string; name: string }) => ({
       id: t.id,
       name: t.name,
       type: "team" as const,
     }));
-    const queues: Assignee[] = queuesRaw.map((q) => ({
+    const queues: Assignee[] = queuesRaw.map((q: { id: string; name: string }) => ({
       id: q.id,
       name: q.name,
       type: "queue" as const,
