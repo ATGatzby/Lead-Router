@@ -1,6 +1,5 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-# Use debian (not alpine) for builder — esbuild/tsup needs glibc platform binary
-FROM node:24-slim AS builder
+FROM node:24-alpine AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
@@ -29,8 +28,12 @@ RUN pnpm install --frozen-lockfile --shamefully-hoist
 # Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
 
-# Build
-RUN pnpm --filter @lead-routing/mcp build
+# Build — use DEBUG for verbose esbuild output on failure
+RUN DEBUG="*" pnpm --filter @lead-routing/mcp build 2>&1 || \
+    (echo "=== Build failed. Checking esbuild ===" && \
+     node_modules/.bin/esbuild --version && \
+     echo "=== esbuild works ===" || echo "=== esbuild binary broken ===" && \
+     exit 1)
 
 
 # ── Stage 2: Production runner ────────────────────────────────────────────────
