@@ -51,7 +51,16 @@ const start = async () => {
 
     // Pre-warm rule cache and flow cache from DB
     await loadAllRules();
-    await loadAllFlows();
+    try {
+      await loadAllFlows();
+    } catch (err: any) {
+      // routing_flows table may not exist if Flow Builder migrations aren't applied
+      if (err?.code === "P2021") {
+        console.log("[cache] Flow Builder tables not found — skipping flow cache (this is normal for fresh installs)");
+      } else {
+        throw err;
+      }
+    }
 
     // Subscribe to cache invalidation events from the web app
     const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";

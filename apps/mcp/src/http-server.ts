@@ -38,18 +38,21 @@ export async function startHttpServer(
   });
 
   // OAuth routes — must be mounted BEFORE bearer auth middleware
-  if (options.oauthMode) {
-    const issuerUrl = options.issuerUrl || `http://${options.host}:${options.port}`;
+  // MCP SDK requires HTTPS issuer URL — only enable OAuth when MCP_PUBLIC_URL is set
+  const publicUrl = process.env.MCP_PUBLIC_URL || options.issuerUrl;
+  if (options.oauthMode && publicUrl?.startsWith("https://")) {
     const oauthProvider = new LeadRoutingOAuthProvider(config.appUrl);
 
     app.use(mcpAuthRouter({
       provider: oauthProvider,
-      issuerUrl: new URL(issuerUrl),
+      issuerUrl: new URL(publicUrl),
       scopesSupported: ["read", "route", "agent"],
       serviceDocumentationUrl: new URL(config.appUrl),
     }));
 
-    console.log(`[OAuth] Issuer URL: ${issuerUrl}`);
+    console.log(`[OAuth] Issuer URL: ${publicUrl}`);
+  } else if (options.oauthMode) {
+    console.log("[OAuth] Skipped — MCP_PUBLIC_URL not set or not HTTPS. MCP running without OAuth.");
   }
 
   // Bearer auth middleware for MCP routes

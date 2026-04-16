@@ -45,6 +45,6 @@ COPY --from=builder /app/apps/mcp/package.json ./
 
 RUN npm install --omit=dev
 
-EXPOSE 3002
+EXPOSE 3100
 
-CMD ["node", "dist/index.js", "--http", "--oauth", "--port", "3002", "--host", "0.0.0.0"]
+CMD ["node", "dist/index.js", "--http", "--oauth", "--port", "3100", "--host", "0.0.0.0"]

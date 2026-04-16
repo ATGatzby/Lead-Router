@@ -58,6 +58,7 @@ export function generateFiles(cfg: CollectedConfig, sshCfg: SshConfig, license: 
     langfuseSecret: agentApi?.langfuseSecret,
     langfuseSalt: agentApi?.langfuseSalt,
     managedMcp: !!agentApi,
+    mcpUrl: cfg.mcpUrl,
     mcpWebhookSecret: cfg.engineWebhookSecret,
     mcpCrmType: cfg.crmType,
   })

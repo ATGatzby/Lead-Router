@@ -10,6 +10,7 @@ export interface ComposeConfig {
   langfuseSecret?: string
   langfuseSalt?: string
   managedMcp?: boolean
+  mcpUrl?: string
   mcpApiToken?: string
   mcpWebhookSecret?: string
   mcpCrmType?: string
@@ -118,6 +119,7 @@ export function renderDockerCompose(c: ComposeConfig): string {
       API_TOKEN: ${c.mcpApiToken ?? ''}
       WEBHOOK_SECRET: ${c.mcpWebhookSecret ?? ''}
       CRM_TYPE: ${c.mcpCrmType ?? 'salesforce'}
+      MCP_PUBLIC_URL: ${c.mcpUrl ?? ''}
       PORT: "3100"
       TRANSPORT: http
     depends_on:
