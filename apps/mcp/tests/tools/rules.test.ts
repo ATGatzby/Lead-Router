@@ -144,6 +144,107 @@ describe("handleCreateRule", () => {
     expect(callArgs.branches[0].priority).toBe(0);
   });
 
+  it("converts tree to branches with nested steps", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "Tree" } }),
+    });
+    await handleCreateRule(web, mockLogger(), {
+      name: "Tree", objectType: "COMPANY", triggerEvent: "BOTH", confirm: true,
+      tree: [
+        {
+          label: "US",
+          condition: { fieldApiName: "country", operator: "equals", value: "US" },
+          fieldUpdates: [{ fieldApiName: "type", fieldValue: "US" }],
+          paths: [
+            {
+              label: "Enterprise",
+              condition: { fieldApiName: "numberofemployees", operator: "gte", value: "1000" },
+              assignmentType: "ROUND_ROBIN", teamId: "team-us-ent",
+            },
+            {
+              label: "SMB",
+              condition: { fieldApiName: "numberofemployees", operator: "lt", value: "100" },
+              assignmentType: "ROUND_ROBIN", teamId: "team-us-smb",
+            },
+          ],
+        },
+      ],
+    });
+    const callArgs = web.createRule.mock.calls[0][0];
+    // Tree should be converted to branches
+    expect(callArgs.tree).toBeUndefined();
+    expect(callArgs.branches).toHaveLength(1);
+    const branch = callArgs.branches[0];
+    expect(branch.label).toBe("US");
+    expect(branch.conditions[0].fieldName).toBe("country");
+    // Steps should have filter → updateField → split
+    expect(branch.steps).toHaveLength(3);
+    expect(branch.steps[0].type).toBe("filter");
+    expect(branch.steps[0].conditions[0].fieldApiName).toBe("country");
+    expect(branch.steps[1].type).toBe("updateField");
+    expect(branch.steps[1].fieldUpdates[0].fieldApiName).toBe("type");
+    expect(branch.steps[1].fieldUpdates[0].fieldValue).toBe("US");
+    expect(branch.steps[2].type).toBe("split");
+    expect(branch.steps[2].paths).toHaveLength(2);
+    // First split path: Enterprise
+    const entPath = branch.steps[2].paths[0];
+    expect(entPath.label).toBe("Enterprise");
+    expect(entPath.steps[0].type).toBe("filter");
+    expect(entPath.steps[1].type).toBe("assign");
+    expect(entPath.steps[1].teamId).toBe("team-us-ent");
+    // Second split path: SMB
+    const smbPath = branch.steps[2].paths[1];
+    expect(smbPath.label).toBe("SMB");
+    expect(smbPath.steps[1].teamId).toBe("team-us-smb");
+  });
+
+  it("converts 3-level tree with defaultOwner", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "Deep" } }),
+    });
+    await handleCreateRule(web, mockLogger(), {
+      name: "Deep", objectType: "COMPANY", triggerEvent: "BOTH", confirm: true,
+      tree: [{
+        label: "US",
+        condition: { fieldApiName: "country", operator: "equals", value: "US" },
+        paths: [{
+          label: "Enterprise",
+          condition: { fieldApiName: "numberofemployees", operator: "gte", value: "1000" },
+          paths: [
+            { label: "Tech", condition: { fieldApiName: "industry", operator: "equals", value: "Technology" }, assignmentType: "ROUND_ROBIN", teamId: "team-tech" },
+            { label: "Finance", condition: { fieldApiName: "industry", operator: "equals", value: "Finance" }, assignmentType: "ROUND_ROBIN", teamId: "team-fin" },
+          ],
+          defaultOwner: { assignmentType: "ROUND_ROBIN", teamId: "team-ent-default" },
+        }],
+      }],
+    });
+    const branch = web.createRule.mock.calls[0][0].branches[0];
+    // Root → filter + split(Enterprise → filter + split(Tech, Finance))
+    const rootSplit = branch.steps.find((s: any) => s.type === "split");
+    expect(rootSplit.paths[0].label).toBe("Enterprise");
+    const entSteps = rootSplit.paths[0].steps;
+    const innerSplit = entSteps.find((s: any) => s.type === "split");
+    expect(innerSplit.paths).toHaveLength(2);
+    expect(innerSplit.paths[0].label).toBe("Tech");
+    expect(innerSplit.defaultOwner.teamId).toBe("team-ent-default");
+  });
+
+  it("tree preview shows nesting depth", async () => {
+    const web = mockWebClient();
+    const res = await handleCreateRule(web, mockLogger(), {
+      name: "Preview", objectType: "COMPANY", triggerEvent: "BOTH",
+      tree: [{
+        label: "US",
+        condition: { fieldApiName: "country", operator: "equals", value: "US" },
+        paths: [
+          { label: "Ent", condition: { fieldApiName: "numberofemployees", operator: "gte", value: "1000" }, assignmentType: "ROUND_ROBIN", teamId: "t" },
+        ],
+      }],
+    });
+    expect(res.content[0].text).toContain("PREVIEW");
+    expect(res.content[0].text).toContain("Nesting depth: 1");
+  });
+
   it("includes branch info in preview", async () => {
     const web = mockWebClient();
     const res = await handleCreateRule(web, mockLogger(), {
