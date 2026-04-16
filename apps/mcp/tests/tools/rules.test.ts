@@ -87,6 +87,63 @@ describe("handleCreateRule", () => {
     expect(web.createRule).toHaveBeenCalled();
   });
 
+  it("auto-sets routeType=SCHEDULED for SEARCH rules", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "Search" } }),
+    });
+    await handleCreateRule(web, mockLogger(), { name: "Search", objectType: "LEAD", triggerEvent: "SEARCH", confirm: true });
+    expect(web.createRule).toHaveBeenCalledWith(expect.objectContaining({
+      routeType: "SCHEDULED",
+      scheduleFrequency: "ONE_TIME",
+    }));
+  });
+
+  it("auto-sets routeType=REALTIME for INSERT rules", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "RT" } }),
+    });
+    await handleCreateRule(web, mockLogger(), { name: "RT", objectType: "LEAD", triggerEvent: "INSERT", confirm: true });
+    expect(web.createRule).toHaveBeenCalledWith(expect.objectContaining({
+      routeType: "REALTIME",
+    }));
+  });
+
+  it("auto-derives searchCriteria from branches for SEARCH rules", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "Search" } }),
+    });
+    await handleCreateRule(web, mockLogger(), {
+      name: "Search", objectType: "CONTACT", triggerEvent: "SEARCH",
+      branches: [{
+        label: "Old", conditions: [{ fieldName: "last_activity", fieldType: "DATE", operator: "before", value: "2026-01-01" }],
+        assignmentType: "ROUND_ROBIN",
+      }],
+      confirm: true,
+    });
+    const callArgs = web.createRule.mock.calls[0][0];
+    expect(callArgs.searchCriteria).toBeDefined();
+    expect(callArgs.searchCriteria[0].conditions[0].fieldApiName).toBe("last_activity");
+  });
+
+  it("ensures groupIds and defaults on branch conditions", async () => {
+    const web = mockWebClient({
+      createRule: vi.fn().mockResolvedValue({ rule: { id: "r1", name: "Test" } }),
+    });
+    await handleCreateRule(web, mockLogger(), {
+      name: "Test", objectType: "LEAD", triggerEvent: "INSERT",
+      branches: [{
+        label: "B1",
+        conditions: [{ fieldName: "industry", operator: "equals", value: "Tech" }],
+        assignmentType: "USER",
+      }],
+      confirm: true,
+    });
+    const callArgs = web.createRule.mock.calls[0][0];
+    expect(callArgs.branches[0].conditions[0].groupId).toBe("g1");
+    expect(callArgs.branches[0].conditions[0].fieldType).toBe("TEXT");
+    expect(callArgs.branches[0].priority).toBe(0);
+  });
+
   it("includes branch info in preview", async () => {
     const web = mockWebClient();
     const res = await handleCreateRule(web, mockLogger(), {
@@ -118,7 +175,66 @@ describe("handleUpdateRule", () => {
     });
     const res = await handleUpdateRule(web, mockLogger(), { ruleId: "r1", name: "Updated", confirm: true });
     expect(res.content[0].text).toContain("Rule updated");
-    expect(web.updateRule).toHaveBeenCalledWith("r1", { name: "Updated" });
+    expect(web.updateRule).toHaveBeenCalledWith("r1", expect.objectContaining({ name: "Updated" }));
+  });
+
+  it("auto-sets routeType=SCHEDULED for SEARCH triggerEvent", async () => {
+    const web = mockWebClient({
+      updateRule: vi.fn().mockResolvedValue({ id: "r1", name: "Search Rule" }),
+    });
+    await handleUpdateRule(web, mockLogger(), { ruleId: "r1", triggerEvent: "SEARCH", confirm: true });
+    expect(web.updateRule).toHaveBeenCalledWith("r1", expect.objectContaining({
+      routeType: "SCHEDULED",
+      scheduleFrequency: "ONE_TIME",
+    }));
+  });
+
+  it("auto-sets routeType=REALTIME for INSERT triggerEvent", async () => {
+    const web = mockWebClient({
+      updateRule: vi.fn().mockResolvedValue({ id: "r1", name: "RT Rule" }),
+    });
+    await handleUpdateRule(web, mockLogger(), { ruleId: "r1", triggerEvent: "INSERT", confirm: true });
+    expect(web.updateRule).toHaveBeenCalledWith("r1", expect.objectContaining({
+      routeType: "REALTIME",
+    }));
+  });
+
+  it("auto-derives searchCriteria from branch conditions for SEARCH rules", async () => {
+    const web = mockWebClient({
+      updateRule: vi.fn().mockResolvedValue({ id: "r1", name: "Search" }),
+    });
+    await handleUpdateRule(web, mockLogger(), {
+      ruleId: "r1",
+      triggerEvent: "SEARCH",
+      branches: [{
+        label: "Stale",
+        conditions: [{ fieldName: "last_activity", fieldType: "DATE", operator: "before", value: "2026-01-01" }],
+        assignmentType: "ROUND_ROBIN",
+      }],
+      confirm: true,
+    });
+    const callArgs = web.updateRule.mock.calls[0][1];
+    expect(callArgs.searchCriteria).toBeDefined();
+    expect(callArgs.searchCriteria[0].conditions[0].fieldApiName).toBe("last_activity");
+  });
+
+  it("ensures groupIds on branch conditions", async () => {
+    const web = mockWebClient({
+      updateRule: vi.fn().mockResolvedValue({ id: "r1", name: "Updated" }),
+    });
+    await handleUpdateRule(web, mockLogger(), {
+      ruleId: "r1",
+      branches: [{
+        label: "B1",
+        conditions: [{ fieldName: "industry", operator: "equals", value: "Tech" }],
+        assignmentType: "USER",
+      }],
+      confirm: true,
+    });
+    const callArgs = web.updateRule.mock.calls[0][1];
+    expect(callArgs.branches[0].conditions[0].groupId).toBe("g1");
+    expect(callArgs.branches[0].conditions[0].fieldType).toBe("TEXT");
+    expect(callArgs.branches[0].priority).toBe(0);
   });
 });
 

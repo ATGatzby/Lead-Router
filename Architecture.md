@@ -2309,17 +2309,27 @@ Tokens authenticate MCP server requests to the web app, bypassing iron-session.
 | Session fallback | `requireSession()` falls back to header-based auth for Bearer tokens |
 | Endpoints | `POST/GET/DELETE /api/tokens` + settings UI page |
 
-### 26.4 Preview/Confirm Pattern
+### 26.4 Comprehensive Tool Descriptions
+
+`create_rule` and `update_rule` include extensive inline documentation in their `description` field:
+- Full operator/field type/assignment type reference
+- WRONG vs RIGHT examples for nested routing (flat branches vs nested splits)
+- 7 complete JSON examples covering simple, OR logic, search, lifecycle, 3-level nested, deal prioritization, and 4-level routing
+- Step types: filter, updateField, assign, split (with nested paths and defaultOwner)
+
+Both tools auto-process input: auto-set `routeType` from `triggerEvent`, auto-derive `searchCriteria` from branch conditions for SEARCH rules, and auto-fill `groupId`/`fieldType`/`priority` defaults on conditions and branches.
+
+### 26.5 Preview/Confirm Pattern
 
 All write tools default to `confirm: false`. The first call returns a preview of what would happen; a second call with `confirm: true` executes the operation. Routing tools default to dry-run mode.
 
-### 26.5 Local Audit Logging
+### 26.6 Local Audit Logging
 
 - JSON lines at `~/.lead-routing/mcp.log`
 - Logs every tool call: timestamp, tool name, action, input, result, duration
 - 10 MB rotation, 3 files kept
 
-### 26.6 Setup
+### 26.7 Setup
 
 ```bash
 claude mcp add --scope user --transport stdio lead-routing \
@@ -2331,7 +2341,7 @@ claude mcp add --scope user --transport stdio lead-routing \
   -- npx -y @lead-routing/mcp
 ```
 
-### 26.7 Key Files
+### 26.8 Key Files
 
 | File | Purpose |
 |------|---------|
