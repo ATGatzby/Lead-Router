@@ -48,9 +48,10 @@ import { getFailedLogsTool, handleGetFailedLogs } from "./tools/get-failed-logs.
 import { retryRoutingTool, handleRetryRouting } from "./tools/retry-routing.js";
 import { retryAllFailedTool, handleRetryAllFailed } from "./tools/retry-all-failed.js";
 import { dismissLogTool, handleDismissLog } from "./tools/dismiss-log.js";
-import { listFlowsTool, handleListFlows } from "./tools/list-flows.js";
-import { getFlowTool, handleGetFlow } from "./tools/get-flow.js";
-import { testFlowTool, handleTestFlow } from "./tools/test-flow.js";
+// Flow Builder tools excluded — feature not public yet (files gitignored)
+// import { listFlowsTool, handleListFlows } from "./tools/list-flows.js";
+// import { getFlowTool, handleGetFlow } from "./tools/get-flow.js";
+// import { testFlowTool, handleTestFlow } from "./tools/test-flow.js";
 import { getAuditLogsTool, handleGetAuditLogs } from "./tools/get-audit-logs.js";
 import { getUserStatsTool, handleGetUserStats } from "./tools/get-user-stats.js";
 import { listFieldsTool, handleListFields } from "./tools/list-fields.js";
@@ -118,9 +119,7 @@ const allTools = [
   retryRoutingTool,
   retryAllFailedTool,
   dismissLogTool,
-  listFlowsTool,
-  getFlowTool,
-  testFlowTool,
+  // listFlowsTool, getFlowTool, testFlowTool — excluded (Flow Builder not public)
   getAuditLogsTool,
   getUserStatsTool,
   listFieldsTool,
@@ -183,9 +182,9 @@ const validationMap: Record<string, ZodSchema> = {
   get_analytics_overview: V.DateRangeInput as ZodSchema,
   get_analytics_rules: V.DateRangeInput as ZodSchema,
   get_analytics_teams: V.DateRangeInput as ZodSchema,
-  // Flows
-  get_flow: V.GetFlowInput,
-  test_flow: V.TestFlowInput,
+  // Flows — excluded (Flow Builder not public)
+  // get_flow: V.GetFlowInput,
+  // test_flow: V.TestFlowInput,
   // Audit
   get_audit_logs: V.GetAuditLogsInput as ZodSchema,
   // Fields
@@ -277,12 +276,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await handleRetryAllFailed(web, logger, args);
       case "dismiss_log":
         return await handleDismissLog(web, logger, args);
-      case "list_flows":
-        return await handleListFlows(web, logger);
-      case "get_flow":
-        return await handleGetFlow(web, logger, args);
-      case "test_flow":
-        return await handleTestFlow(web, logger, args);
+      // Flow Builder cases excluded — feature not public yet
+      // case "list_flows": return await handleListFlows(web, logger);
+      // case "get_flow": return await handleGetFlow(web, logger, args);
+      // case "test_flow": return await handleTestFlow(web, logger, args);
       case "get_audit_logs":
         return await handleGetAuditLogs(web, logger, args);
       case "get_user_stats":

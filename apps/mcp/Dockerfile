@@ -31,17 +31,8 @@ RUN pnpm install --frozen-lockfile --shamefully-hoist
 # Copy MCP source only
 COPY apps/mcp/src/ ./apps/mcp/src/
 
-# Build — capture full error output on failure
-RUN pnpm --filter @lead-routing/mcp build 2>&1; \
-    EXIT=$?; \
-    if [ $EXIT -ne 0 ]; then \
-      echo "=== tsup exit code: $EXIT ==="; \
-      echo "=== Trying direct esbuild for error details ==="; \
-      cd apps/mcp && ../../node_modules/.bin/esbuild src/index.ts \
-        --bundle --platform=node --format=esm --target=node20 \
-        --outfile=/tmp/test.js 2>&1 || true; \
-      exit 1; \
-    fi
+# Build
+RUN pnpm --filter @lead-routing/mcp build
 
 
 # ── Stage 2: Production runner ────────────────────────────────────────────────
