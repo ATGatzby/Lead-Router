@@ -26,15 +26,19 @@ function treeNodeToSteps(node: TreeNode): any[] {
   // Filter step from condition
   // UI expects conditions as ConditionGroup[] format: [{ id, conditions: [{ fieldApiName, operator, value }] }]
   if (node.condition) {
+    const groupId = randomUUID();
     steps.push({
       type: "filter",
       conditions: [{
-        id: randomUUID(),
+        id: groupId,
+        conjunction: "AND",
         conditions: [{
+          id: randomUUID(),
+          groupId,
           fieldApiName: node.condition.fieldApiName,
           fieldType: node.condition.fieldType || "TEXT",
           operator: node.condition.operator,
-          value: node.condition.value,
+          value: node.condition.value ?? "",
         }],
       }],
     });
