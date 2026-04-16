@@ -4,13 +4,13 @@ import { successResponse } from "../utils/confirm.js";
 
 export const listFieldsTool = {
   name: "list_fields",
-  description: "List Salesforce field schemas synced for routing. Shows field names, types, and picklist values available for rule conditions.",
+  description: "List CRM field schemas synced for routing. Shows field names, types, and picklist values available for rule conditions and field updates. Works for both Salesforce and HubSpot. If no fields returned, call sync_fields first.",
   inputSchema: {
     type: "object" as const,
     properties: {
       objectType: {
         type: "string",
-        description: "Filter fields by Salesforce object type (e.g. LEAD, CONTACT, ACCOUNT)",
+        description: "Filter by object type. Salesforce: LEAD, CONTACT, ACCOUNT. HubSpot: CONTACT, COMPANY, DEAL.",
       },
     },
   },
@@ -23,7 +23,7 @@ export async function handleListFields(web: WebClient, logger: Logger, args: any
   logger.log({ tool: "list_fields", action: "read", input: args, durationMs: Date.now() - start });
 
   if (!Array.isArray(fields) || fields.length === 0) {
-    return successResponse("No fields found. Run sync_fields to sync field schemas from Salesforce.");
+    return successResponse("No fields found. Run sync_fields (with confirm: true) to sync field schemas from your CRM.");
   }
 
   const lines = [`${fields.length} field(s) synced:`];

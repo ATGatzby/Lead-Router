@@ -59,13 +59,13 @@ export async function GET(req: NextRequest) {
     const orgId = await getOrgIdFromHeaders();
     const objectParam = req.nextUrl.searchParams.get("object")?.toUpperCase() ?? null;
 
-    if (objectParam && !["LEAD", "CONTACT", "ACCOUNT"].includes(objectParam)) {
+    if (objectParam && !["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"].includes(objectParam)) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
-    const where: { orgId: string; objectType?: "LEAD" | "CONTACT" | "ACCOUNT" } = { orgId };
+    const where: { orgId: string; objectType?: string } = { orgId };
     if (objectParam) {
-      where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT";
+      where.objectType = objectParam;
     }
 
     const rules = await prisma.routingRule.findMany({
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
-    if (!["LEAD", "CONTACT", "ACCOUNT"].includes(objectType)) {
+    if (!["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"].includes(objectType)) {
       return NextResponse.json({ error: "Invalid objectType" }, { status: 400 });
     }
 

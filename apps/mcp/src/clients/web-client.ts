@@ -116,6 +116,9 @@ export class WebClient {
   async syncFields() {
     return this.request("/api/fields/sync", { method: "POST" });
   }
+  async syncHubSpotFields() {
+    return this.request("/api/integrations/hubspot/fields", { method: "POST" });
+  }
 
   // Queues
   async listQueues() {
