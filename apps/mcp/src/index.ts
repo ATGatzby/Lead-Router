@@ -72,15 +72,31 @@ import { getLicenseInfoTool, handleGetLicenseInfo } from "./tools/get-license-in
 import { rulesResource, handleRulesResource } from "./resources/rules-resource.js";
 import { teamsResource, handleTeamsResource } from "./resources/teams-resource.js";
 
+// --- Parse CLI args ---
+const args = process.argv.slice(2);
+const httpMode = args.includes("--http");
+const oauthMode = args.includes("--oauth");
+const portFlag = args.indexOf("--port");
+const hostFlag = args.indexOf("--host");
+const port = portFlag !== -1 ? parseInt(args[portFlag + 1], 10) : 3002;
+const host = hostFlag !== -1 ? args[hostFlag + 1] : "0.0.0.0";
+
 const config = loadConfig();
 const engine = new EngineClient(config);
 const web = new WebClient(config);
 const logger = new Logger(config.logDir);
 
-const server = new Server(
-  { name: "lead-routing", version: "0.1.0" },
-  { capabilities: { tools: {}, resources: {} } }
-);
+/** Create a fresh MCP server with all tools + resources registered */
+function createServer(): Server {
+  const srv = new Server(
+    { name: "lead-routing", version: "0.1.0" },
+    { capabilities: { tools: {}, resources: {} } }
+  );
+  registerHandlers(srv);
+  return srv;
+}
+
+const server = createServer();
 
 // --- Tools ---
 
@@ -137,13 +153,7 @@ const allTools = [
   getLicenseInfoTool,
 ];
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: allTools,
-}));
-
 // ── Input validation map ────────────────────────────────────────────────
-// Maps tool names to their Zod validation schemas.
-// Validated centrally before dispatching to handlers.
 const validationMap: Record<string, ZodSchema> = {
   // Rules
   list_rules: V.ListRulesInput as ZodSchema,
@@ -196,7 +206,13 @@ const validationMap: Record<string, ZodSchema> = {
   cancel_bulk_run: V.CancelBulkRunInput,
 };
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+function registerHandlers(srv: Server) {
+
+srv.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: allTools,
+}));
+
+srv.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const start = Date.now();
 
@@ -334,11 +350,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 const allResources = [rulesResource, teamsResource];
 
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+srv.setRequestHandler(ListResourcesRequestSchema, async () => ({
   resources: allResources,
 }));
 
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+srv.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
   switch (uri) {
     case "lead-routing://rules":
@@ -350,7 +366,14 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 });
 
+} // end registerHandlers
+
 // --- Start ---
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+if (httpMode) {
+  const { startHttpServer } = await import("./http-server.js");
+  await startHttpServer(createServer, config, { port, host, oauthMode });
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

@@ -54,8 +54,9 @@ RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 # Bundled engine (workspace packages inlined by tsup)
 COPY --from=builder /app/apps/engine/dist ./dist
 
-# Generated Prisma client — lives inside packages/db, not node_modules
-COPY --from=builder /app/packages/db/src/generated ./packages/db/src/generated
+# Generated Prisma client — tsup externalizes as require("./generated/prisma")
+# relative to dist/server.js, so it must be at dist/generated/prisma/
+COPY --from=builder /app/packages/db/src/generated/prisma ./dist/generated/prisma
 
 # Prisma schema — required by `prisma migrate deploy` run from the CLI
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
