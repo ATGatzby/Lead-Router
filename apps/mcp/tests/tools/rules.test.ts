@@ -191,11 +191,12 @@ describe("handleCreateRule", () => {
     expect(entPath.label).toBe("Enterprise");
     expect(entPath.steps[0].type).toBe("filter");
     expect(entPath.steps[1].type).toBe("assign");
-    expect(entPath.steps[1].teamId).toBe("team-us-ent");
+    expect(entPath.steps[1].assigneeId).toBe("team-us-ent");
+    expect(entPath.steps[1].assigneeName).toBeNull();
     // Second split path: SMB
     const smbPath = branch.steps[2].paths[1];
     expect(smbPath.label).toBe("SMB");
-    expect(smbPath.steps[1].teamId).toBe("team-us-smb");
+    expect(smbPath.steps[1].assigneeId).toBe("team-us-smb");
   });
 
   it("converts 3-level tree with defaultOwner", async () => {

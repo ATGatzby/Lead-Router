@@ -44,12 +44,15 @@ function treeNodeToSteps(node: TreeNode): any[] {
   }
 
   // If leaf: assign step
+  // UI expects assigneeId for ALL types (USER, ROUND_ROBIN, QUEUE) — it checks assigneeId to show "configured"
   if (node.assignmentType && !node.paths?.length) {
-    const assign: any = { type: "assign", assignmentType: node.assignmentType };
-    if (node.assigneeId) assign.assigneeId = node.assigneeId;
-    if (node.teamId) assign.teamId = node.teamId;
-    if (node.queueId) assign.queueId = node.queueId;
-    steps.push(assign);
+    const id = node.assigneeId || node.teamId || node.queueId || null;
+    steps.push({
+      type: "assign",
+      assignmentType: node.assignmentType,
+      assigneeId: id,
+      assigneeName: null, // resolved by UI on display
+    });
   }
 
   // If non-leaf: split step with nested paths
