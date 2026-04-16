@@ -308,15 +308,63 @@ EXAMPLE 3: CONTACT — 4-Level tree (Source → Stage → Score → Country)
   ]
 }
 
-matchConfig enables lead-to-lead/contact/account matching (deduplication). Example:
+MATCHING / DEDUPLICATION (matchConfig):
+Use matchConfig to check if an incoming record matches an existing lead, contact, or account BEFORE routing.
+The match step runs BEFORE branch/tree evaluation. If a match is found, the configured action fires instead of normal routing.
+
+Match criteria (what to check against):
+- checkLeads: true/false — check against existing leads
+- checkContacts: true/false — check against existing contacts
+- checkAccounts: true/false — check against existing accounts
+
+Match fields (how to match):
+- matchEmail: true/false — match by email address
+- matchPhone: true/false — match by phone number
+- matchDomain: true/false — match by email domain
+- matchCompanyName: true/false — match by company name
+- fuzzyMatchMode: "STRICT" (exact) | "FUZZY" (approximate) | "AI_SMART" (AI-powered)
+
+Match actions (what to do when a match is found):
+- onLeadMatch: "SFDC_MERGE" (merge duplicates) | "ASSIGN_TO_OWNER" (route to existing owner) | "ASSIGN_CUSTOM" (route to specific user/team)
+- onContactMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP" (skip routing)
+- onAccountMatch: "ASSIGN_TO_OWNER" | "ASSIGN_CUSTOM" | "SKIP"
+
+For ASSIGN_CUSTOM, also provide the assignment target:
+- leadAssignmentType/contactAssignmentType/accountAssignmentType: "USER" | "ROUND_ROBIN" | "QUEUE"
+- leadAssigneeUserId/contactAssigneeUserId/accountAssigneeUserId (for USER)
+- leadAssigneeTeamId/contactAssigneeTeamId/accountAssigneeTeamId (for ROUND_ROBIN)
+
+────────────────────────────────────────────────
+EXAMPLE 4: CONTACT — Tree with match step (deduplicate before routing)
+────────────────────────────────────────────────
 {
-  "checkLeads": true, "checkContacts": true, "checkAccounts": false,
-  "matchEmail": true, "matchPhone": false, "matchDomain": false, "matchCompanyName": false,
-  "fuzzyMatchMode": "STRICT",
-  "onLeadMatch": "SFDC_MERGE",
-  "onContactMatch": "ASSIGN_TO_OWNER",
-  "onAccountMatch": "SKIP"
-}`,
+  "name": "Inbound with Dedup",
+  "objectType": "CONTACT",
+  "triggerEvent": "INSERT",
+  "matchConfig": {
+    "checkLeads": true, "checkContacts": true, "checkAccounts": false,
+    "matchEmail": true, "matchPhone": false, "matchDomain": true, "matchCompanyName": false,
+    "fuzzyMatchMode": "STRICT",
+    "onLeadMatch": "ASSIGN_TO_OWNER",
+    "onContactMatch": "ASSIGN_TO_OWNER",
+    "onAccountMatch": "SKIP"
+  },
+  "tree": [
+    {
+      "label": "High Value",
+      "condition": { "fieldApiName": "hubspotscore", "operator": "gte", "value": "80" },
+      "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "IN_PROGRESS" }],
+      "assignmentType": "ROUND_ROBIN", "teamId": "team-senior-sdr"
+    },
+    {
+      "label": "Standard",
+      "condition": { "fieldApiName": "hubspotscore", "operator": "lt", "value": "80" },
+      "assignmentType": "ROUND_ROBIN", "teamId": "team-sdr"
+    }
+  ]
+}
+This rule: (1) checks if the incoming contact matches an existing lead or contact by email/domain,
+(2) if matched → routes to existing owner, (3) if no match → evaluates the tree branches.`,
   inputSchema: {
     type: "object" as const,
     properties: {

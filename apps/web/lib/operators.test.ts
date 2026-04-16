@@ -109,12 +109,16 @@ describe("operators", () => {
       }
     });
 
-    it("TEXT does NOT have numeric comparison operators", () => {
+    it("TEXT includes all operators for MCP compatibility", () => {
       const ops = getOperatorsForType("TEXT").map((o) => o.value);
-      expect(ops).not.toContain("gt");
-      expect(ops).not.toContain("gte");
-      expect(ops).not.toContain("lt");
-      expect(ops).not.toContain("lte");
+      // TEXT now includes numeric + multi-value operators because MCP tree converter
+      // stores all conditions as fieldType TEXT — UI must render any operator Claude uses
+      expect(ops).toContain("gt");
+      expect(ops).toContain("gte");
+      expect(ops).toContain("lt");
+      expect(ops).toContain("lte");
+      expect(ops).toContain("includes");
+      expect(ops).toContain("excludes");
     });
 
     it("TEXT has fuzzy matching operators", () => {
