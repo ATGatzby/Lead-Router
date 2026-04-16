@@ -9,6 +9,15 @@ export const updateRuleTool = {
 IMPORTANT: When updating branches or conditions, you REPLACE the entire array — there is no merge/patch.
 Always call get_rule first to see the current state, then send the complete updated branches array.
 
+PREREQUISITE: ALWAYS call list_fields with the objectType FIRST to get the actual field API names available.
+DO NOT guess field names — they differ between CONTACT, COMPANY, and DEAL objects.
+
+COMMON FIELDS BY OBJECT TYPE (call list_fields for the actual list):
+- CONTACT: email, firstname, lastname, phone, jobtitle, lifecyclestage, hs_lead_status, hubspotscore, hs_analytics_source, country, city, state, company, notes_last_contacted, createdate, lastmodifieddate
+- COMPANY: name, domain, industry, numberofemployees, annualrevenue, country, city, state, phone, website, type, founded_year
+- DEAL: dealname, dealstage, amount, closedate, pipeline, hs_deal_stage_probability
+DO NOT use Company fields (industry, numberofemployees, annualrevenue) on Contact rules — they will not match.
+
 triggerEvent determines how the rule fires:
 - "SEARCH" = Search-based rule (queries CRM for matching records). Sets routeType=SCHEDULED automatically.
 - "INSERT" / "UPDATE" / "BOTH" = Real-time trigger (fires on CRM events). Sets routeType=REALTIME.
@@ -19,44 +28,20 @@ CONDITION LOGIC: conditions with the SAME groupId are AND'd together, different 
 
 ASSIGNMENT TYPES: USER (assigneeUserId), ROUND_ROBIN (assigneeTeamId), QUEUE (assigneeQueueId)
 
-NESTED ROUTING (CRITICAL — read carefully):
-When the user asks for multi-level routing (e.g. "split by region, then by size, then by industry"),
-you MUST use the "steps" array with nested "split" steps. DO NOT flatten into separate branches —
-that loses the hierarchical decision tree and field updates at each level.
+FIELD UPDATES (FULLY SUPPORTED — DO NOT SKIP):
+The "updateField" step type IS supported and SHOULD be used. It writes values back to the CRM record.
+Use it to stamp routing metadata (e.g. status, tier) on records as they are routed.
 
-WRONG (flat branches — loses nesting):
-  branches: [
-    { label: "US/Enterprise/Tech", conditions: [...3 conditions...], assignmentType: "USER" },
-    { label: "US/SMB", conditions: [...2 conditions...], assignmentType: "ROUND_ROBIN" }
-  ]
+NESTED ROUTING (CRITICAL):
+Use "steps" array with nested "split" steps for multi-level routing. DO NOT flatten into separate branches.
 
-RIGHT (nested steps with splits — preserves hierarchy):
-  branches: [{
-    label: "US", steps: [
-      { type: "filter", conditions: [{fieldApiName: "country", operator: "equals", value: "US"}] },
-      { type: "updateField", fieldUpdates: [{fieldApiName: "region", fieldValue: "Americas"}] },
-      { type: "split", paths: [
-        { label: "Enterprise", steps: [
-          { type: "filter", conditions: [{fieldApiName: "employees", operator: "gte", value: "500"}] },
-          { type: "split", paths: [
-            { label: "Tech", steps: [...filter + assign...] },
-            { label: "Other", steps: [...assign...] }
-          ]}
-        ]},
-        { label: "SMB", steps: [...filter + assign...] }
-      ]}
-    ]
-  }]
+Step types (ALL are supported — use them):
+- "filter" — { "type": "filter", "conditions": [{ "fieldApiName": "field", "operator": "op", "value": "val" }] }
+- "updateField" — { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "field", "fieldValue": "value" }] }
+- "assign" — { "type": "assign", "assignmentType": "USER"|"ROUND_ROBIN", "assigneeId": "id" or "teamId": "id" }
+- "split" — { "type": "split", "paths": [{ "label": "...", "steps": [...] }], "defaultOwner": { "assignmentType": "...", "assigneeId": "..." } }
 
-Step types:
-- "filter" — conditions to match: { "type": "filter", "conditions": [{ "fieldApiName": "field", "operator": "op", "value": "val" }] }
-- "updateField" — update CRM fields: { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "field", "fieldValue": "value" }] }
-- "assign" — assign to user/team: { "type": "assign", "assignmentType": "USER"|"ROUND_ROBIN", "assigneeId": "id" or "teamId": "id" }
-- "split" — nested decision split: { "type": "split", "paths": [{ "label": "...", "steps": [...] }, ...], "defaultOwner": { "assignmentType": "...", "assigneeId": "..." } }
-
-When using steps on a branch, ALSO set the branch-level conditions and assignmentType as fallback.
-
-EXAMPLE — Adding a nested split to an existing rule:
+EXAMPLE — COMPANY rule: Adding a nested split with field updates:
 {
   "ruleId": "rule-123",
   "branches": [{
@@ -64,7 +49,7 @@ EXAMPLE — Adding a nested split to an existing rule:
     "conditions": [{ "groupId": "g1", "fieldName": "numberofemployees", "fieldType": "NUMBER", "operator": "gte", "value": "500" }],
     "steps": [
       { "type": "filter", "conditions": [{ "fieldApiName": "numberofemployees", "operator": "gte", "value": "500" }] },
-      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "company_tier", "fieldValue": "Enterprise" }] },
+      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "type", "fieldValue": "Enterprise" }] },
       { "type": "split", "paths": [
         { "label": "Tech", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "industry", "operator": "equals", "value": "Technology" }] },
@@ -75,14 +60,6 @@ EXAMPLE — Adding a nested split to an existing rule:
           { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-finance" }
         ]}
       ], "defaultOwner": { "assignmentType": "ROUND_ROBIN", "assigneeId": "team-ent-general" }}
-    ]
-  },
-  {
-    "label": "SMB", "priority": 1, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-smb",
-    "conditions": [{ "groupId": "g1", "fieldName": "numberofemployees", "fieldType": "NUMBER", "operator": "lt", "value": "100" }],
-    "steps": [
-      { "type": "filter", "conditions": [{ "fieldApiName": "numberofemployees", "operator": "lt", "value": "100" }] },
-      { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-smb" }
     ]
   }],
   "confirm": true

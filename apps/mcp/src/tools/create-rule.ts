@@ -7,6 +7,16 @@ export const createRuleTool = {
   name: "create_rule",
   description: `Create a new routing rule. First call without confirm to preview, then call with confirm: true to execute.
 
+PREREQUISITE: ALWAYS call list_fields with the objectType FIRST to get the actual field API names available.
+DO NOT guess field names — they differ between CONTACT, COMPANY, and DEAL objects.
+Only use fields that list_fields returns. Custom fields require the exact API name from the CRM.
+
+COMMON FIELDS BY OBJECT TYPE (call list_fields for the actual list):
+- CONTACT: email, firstname, lastname, phone, jobtitle, lifecyclestage, hs_lead_status, hubspotscore, hs_analytics_source, country, city, state, company, notes_last_contacted, createdate, lastmodifieddate
+- COMPANY: name, domain, industry, numberofemployees, annualrevenue, country, city, state, phone, website, type, founded_year
+- DEAL: dealname, dealstage, amount, closedate, pipeline, hs_deal_stage_probability
+DO NOT use Company fields (industry, numberofemployees, annualrevenue) on Contact rules — they will not match.
+
 IMPORTANT: triggerEvent determines how the rule fires:
 - "SEARCH" = Search-based rule (queries CRM for matching records). Sets routeType=SCHEDULED automatically.
 - "INSERT" / "UPDATE" / "BOTH" = Real-time trigger (fires on CRM events). Sets routeType=REALTIME.
@@ -20,6 +30,11 @@ FIELD TYPES: TEXT, NUMBER, DATE, BOOLEAN, PICKLIST
 CONDITION LOGIC: conditions with the SAME groupId are AND'd together, different groupIds are OR'd.
 
 ASSIGNMENT TYPES: USER (assigneeUserId), ROUND_ROBIN (assigneeTeamId), QUEUE (assigneeQueueId)
+
+FIELD UPDATES (FULLY SUPPORTED — DO NOT SKIP):
+The "updateField" step type IS supported and SHOULD be used. It writes values back to the CRM record.
+Use it to stamp routing metadata (e.g. region, tier, status) on records as they are routed.
+Every example below includes updateField steps — follow the same pattern.
 
 NESTED ROUTING (CRITICAL — read carefully):
 When the user asks for multi-level routing (e.g. "split by region, then by size, then by industry"),
@@ -36,10 +51,10 @@ RIGHT (nested steps with splits — preserves hierarchy):
   branches: [{
     label: "US", steps: [
       { type: "filter", conditions: [{fieldApiName: "country", operator: "equals", value: "US"}] },
-      { type: "updateField", fieldUpdates: [{fieldApiName: "region", fieldValue: "Americas"}] },
+      { type: "updateField", fieldUpdates: [{fieldApiName: "hs_lead_status", fieldValue: "IN_PROGRESS"}] },
       { type: "split", paths: [
         { label: "Enterprise", steps: [
-          { type: "filter", conditions: [{fieldApiName: "employees", operator: "gte", value: "500"}] },
+          { type: "filter", conditions: [{fieldApiName: "jobtitle", operator: "contains", value: "VP"}] },
           { type: "split", paths: [
             { label: "Tech", steps: [...filter + assign...] },
             { label: "Other", steps: [...assign...] }
@@ -50,7 +65,7 @@ RIGHT (nested steps with splits — preserves hierarchy):
     ]
   }]
 
-Step types:
+Step types (ALL are supported — use them):
 - "filter" — conditions to match: { "type": "filter", "conditions": [{ "fieldApiName": "field", "operator": "op", "value": "val" }] }
 - "updateField" — update CRM fields: { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "field", "fieldValue": "value" }] }
 - "assign" — assign to user/team: { "type": "assign", "assignmentType": "USER"|"ROUND_ROBIN", "assigneeId": "id" or "teamId": "id" }
@@ -59,7 +74,7 @@ Step types:
 When using steps on a branch, ALSO set the branch-level conditions and assignmentType as fallback.
 
 ────────────────────────────────────────────────
-EXAMPLE 1: Simple — Revenue-tiered with field updates
+EXAMPLE 1: COMPANY — Revenue-tiered with field updates
 ────────────────────────────────────────────────
 {
   "name": "Enterprise vs SMB",
@@ -74,7 +89,7 @@ EXAMPLE 1: Simple — Revenue-tiered with field updates
       ],
       "steps": [
         { "type": "filter", "conditions": [{ "fieldApiName": "annualrevenue", "operator": "gte", "value": "1000000" }, { "fieldApiName": "numberofemployees", "operator": "gte", "value": "500" }] },
-        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "company_tier", "fieldValue": "Enterprise" }, { "fieldApiName": "routing_status", "fieldValue": "Assigned" }] },
+        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "type", "fieldValue": "Enterprise" }] },
         { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-ent" }
       ]
     },
@@ -83,7 +98,7 @@ EXAMPLE 1: Simple — Revenue-tiered with field updates
       "conditions": [{ "groupId": "g1", "fieldName": "annualrevenue", "fieldType": "NUMBER", "operator": "lt", "value": "100000" }],
       "steps": [
         { "type": "filter", "conditions": [{ "fieldApiName": "annualrevenue", "operator": "lt", "value": "100000" }] },
-        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "company_tier", "fieldValue": "SMB" }] },
+        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "type", "fieldValue": "SMB" }] },
         { "type": "assign", "assignmentType": "USER", "assigneeId": "user-smb" }
       ]
     }
@@ -91,23 +106,28 @@ EXAMPLE 1: Simple — Revenue-tiered with field updates
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 2: OR logic — Lead source OR industry (different groupIds = OR)
+EXAMPLE 2: CONTACT — OR logic (different groupIds = OR) with field update
 ────────────────────────────────────────────────
 {
-  "name": "Tech Lead Router",
+  "name": "Inbound Lead Router",
   "objectType": "CONTACT",
   "triggerEvent": "INSERT",
   "branches": [{
-    "label": "Tech Leads", "priority": 0, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-tech",
+    "label": "Inbound Leads", "priority": 0, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-sdr",
     "conditions": [
       { "groupId": "g1", "fieldName": "hs_analytics_source", "fieldType": "TEXT", "operator": "equals", "value": "ORGANIC_SEARCH" },
-      { "groupId": "g2", "fieldName": "industry", "fieldType": "TEXT", "operator": "equals", "value": "Technology" }
+      { "groupId": "g2", "fieldName": "jobtitle", "fieldType": "TEXT", "operator": "contains", "value": "Director" }
+    ],
+    "steps": [
+      { "type": "filter", "conditions": [{ "fieldApiName": "hs_analytics_source", "operator": "equals", "value": "ORGANIC_SEARCH" }] },
+      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "NEW" }] },
+      { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-sdr" }
     ]
   }]
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 3: Search rule — Weekly stale lead re-engagement
+EXAMPLE 3: CONTACT — Search rule (weekly stale re-engagement)
 ────────────────────────────────────────────────
 {
   "name": "Weekly Stale Re-engage",
@@ -116,12 +136,17 @@ EXAMPLE 3: Search rule — Weekly stale lead re-engagement
   "scheduleFrequency": "WEEKLY",
   "branches": [{
     "label": "90+ days stale", "priority": 0, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-re-engage",
-    "conditions": [{ "groupId": "g1", "fieldName": "notes_last_updated", "fieldType": "DATE", "operator": "before", "value": "2026-01-01" }]
+    "conditions": [{ "groupId": "g1", "fieldName": "notes_last_contacted", "fieldType": "DATE", "operator": "before", "value": "2026-01-01" }],
+    "steps": [
+      { "type": "filter", "conditions": [{ "fieldApiName": "notes_last_contacted", "operator": "before", "value": "2026-01-01" }] },
+      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "OPEN" }] },
+      { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-re-engage" }
+    ]
   }]
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 4: Lifecycle stage routing with field updates
+EXAMPLE 4: CONTACT — Lifecycle stage routing with field updates
 ────────────────────────────────────────────────
 {
   "name": "Lifecycle Router",
@@ -129,16 +154,16 @@ EXAMPLE 4: Lifecycle stage routing with field updates
   "triggerEvent": "UPDATE",
   "branches": [
     {
-      "label": "MQL → SDR", "priority": 0, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-sdr",
+      "label": "MQL to SDR", "priority": 0, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-sdr",
       "conditions": [{ "groupId": "g1", "fieldName": "lifecyclestage", "fieldType": "TEXT", "operator": "equals", "value": "marketingqualifiedlead" }],
       "steps": [
         { "type": "filter", "conditions": [{ "fieldApiName": "lifecyclestage", "operator": "equals", "value": "marketingqualifiedlead" }] },
-        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "NEW" }, { "fieldApiName": "lead_routing_source", "fieldValue": "MQL Auto-Route" }] },
+        { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "NEW" }] },
         { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-sdr" }
       ]
     },
     {
-      "label": "SQL → AE", "priority": 1, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-ae",
+      "label": "SQL to AE", "priority": 1, "assignmentType": "ROUND_ROBIN", "assigneeTeamId": "team-ae",
       "conditions": [{ "groupId": "g1", "fieldName": "lifecyclestage", "fieldType": "TEXT", "operator": "equals", "value": "salesqualifiedlead" }],
       "steps": [
         { "type": "filter", "conditions": [{ "fieldApiName": "lifecyclestage", "operator": "equals", "value": "salesqualifiedlead" }] },
@@ -150,7 +175,7 @@ EXAMPLE 4: Lifecycle stage routing with field updates
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 5: 3-Level nested — Region → Size → Industry with field updates at each level
+EXAMPLE 5: COMPANY — 3-Level nested (Region -> Size -> Industry) with field updates at each level
 ────────────────────────────────────────────────
 {
   "name": "Region-Size-Industry Router",
@@ -161,27 +186,24 @@ EXAMPLE 5: 3-Level nested — Region → Size → Industry with field updates at
     "conditions": [{ "groupId": "g1", "fieldName": "country", "fieldType": "TEXT", "operator": "includes", "value": "US;CA;BR;MX" }],
     "steps": [
       { "type": "filter", "conditions": [{ "fieldApiName": "country", "operator": "includes", "value": "US;CA;BR;MX" }] },
-      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "region", "fieldValue": "Americas" }] },
+      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "type", "fieldValue": "Americas" }] },
       { "type": "split", "paths": [
         { "label": "Enterprise Americas", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "numberofemployees", "operator": "gte", "value": "1000" }] },
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "company_tier", "fieldValue": "Enterprise" }] },
+          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "description", "fieldValue": "Enterprise - Americas" }] },
           { "type": "split", "paths": [
             { "label": "Tech", "steps": [
               { "type": "filter", "conditions": [{ "fieldApiName": "industry", "operator": "equals", "value": "Technology" }] },
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "vertical", "fieldValue": "Tech" }] },
               { "type": "assign", "assignmentType": "USER", "assigneeId": "user-tech-ent" }
             ]},
             { "label": "Finance", "steps": [
               { "type": "filter", "conditions": [{ "fieldApiName": "industry", "operator": "equals", "value": "Finance" }] },
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "vertical", "fieldValue": "Finance" }] },
               { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-finance" }
             ]}
           ], "defaultOwner": { "assignmentType": "ROUND_ROBIN", "assigneeId": "team-ent-americas" }}
         ]},
         { "label": "SMB Americas", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "numberofemployees", "operator": "lt", "value": "100" }] },
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "company_tier", "fieldValue": "SMB" }] },
           { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-smb-americas" }
         ]}
       ]}
@@ -190,7 +212,7 @@ EXAMPLE 5: 3-Level nested — Region → Size → Industry with field updates at
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 6: 3-Level Deal — Stage → Amount → Urgency with priority stamping
+EXAMPLE 6: DEAL — 3-Level (Stage -> Amount -> Urgency) with priority stamping
 ────────────────────────────────────────────────
 {
   "name": "Deal Prioritization",
@@ -204,21 +226,17 @@ EXAMPLE 6: 3-Level Deal — Stage → Amount → Urgency with priority stamping
       { "type": "split", "paths": [
         { "label": "Big Deal >$100K", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "amount", "operator": "gte", "value": "100000" }] },
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "deal_tier", "fieldValue": "Strategic" }] },
           { "type": "split", "paths": [
             { "label": "Closing This Month", "steps": [
               { "type": "filter", "conditions": [{ "fieldApiName": "closedate", "operator": "within_last", "value": "30" }] },
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "deal_priority", "fieldValue": "URGENT" }] },
               { "type": "assign", "assignmentType": "USER", "assigneeId": "user-vp-sales" }
             ]},
             { "label": "Closing Later", "steps": [
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "deal_priority", "fieldValue": "HIGH" }] },
               { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-senior-ae" }
             ]}
           ]}
         ]},
         { "label": "Standard Deal", "steps": [
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "deal_priority", "fieldValue": "NORMAL" }] },
           { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-ae" }
         ]}
       ]}
@@ -227,7 +245,7 @@ EXAMPLE 6: 3-Level Deal — Stage → Amount → Urgency with priority stamping
 }
 
 ────────────────────────────────────────────────
-EXAMPLE 7: 4-Level — Source → Stage → Score → Territory (deepest nesting)
+EXAMPLE 7: CONTACT — 4-Level (Source -> Stage -> Score -> Country) with field updates at each level
 ────────────────────────────────────────────────
 {
   "name": "Full Funnel 4-Level Router",
@@ -238,37 +256,34 @@ EXAMPLE 7: 4-Level — Source → Stage → Score → Territory (deepest nesting
     "conditions": [{ "groupId": "g1", "fieldName": "hs_analytics_source", "fieldType": "TEXT", "operator": "includes", "value": "ORGANIC_SEARCH;PAID_SEARCH;SOCIAL_MEDIA" }],
     "steps": [
       { "type": "filter", "conditions": [{ "fieldApiName": "hs_analytics_source", "operator": "includes", "value": "ORGANIC_SEARCH;PAID_SEARCH;SOCIAL_MEDIA" }] },
-      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "lead_channel", "fieldValue": "Inbound" }] },
+      { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "NEW" }] },
       { "type": "split", "paths": [
         { "label": "MQL", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "lifecyclestage", "operator": "equals", "value": "marketingqualifiedlead" }] },
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "lead_funnel_stage", "fieldValue": "MQL" }] },
           { "type": "split", "paths": [
             { "label": "High Score", "steps": [
               { "type": "filter", "conditions": [{ "fieldApiName": "hubspotscore", "operator": "gte", "value": "80" }] },
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "lead_score_tier", "fieldValue": "Hot" }, { "fieldApiName": "hs_lead_status", "fieldValue": "IN_PROGRESS" }] },
+              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "IN_PROGRESS" }] },
               { "type": "split", "paths": [
                 { "label": "US", "steps": [
                   { "type": "filter", "conditions": [{ "fieldApiName": "country", "operator": "equals", "value": "US" }] },
-                  { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "territory", "fieldValue": "US" }] },
                   { "type": "assign", "assignmentType": "USER", "assigneeId": "user-us-senior-sdr" }
                 ]},
                 { "label": "EMEA", "steps": [
-                  { "type": "filter", "conditions": [{ "fieldApiName": "country", "operator": "includes", "value": "UK;DE;FR" }] },
-                  { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "territory", "fieldValue": "EMEA" }] },
+                  { "type": "filter", "conditions": [{ "fieldApiName": "country", "operator": "includes", "value": "United Kingdom;Germany;France" }] },
                   { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-emea-sdr" }
                 ]}
               ], "defaultOwner": { "assignmentType": "ROUND_ROBIN", "assigneeId": "team-global-sdr" }}
             ]},
             { "label": "Low Score", "steps": [
-              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "lead_score_tier", "fieldValue": "Warm" }, { "fieldApiName": "hs_lead_status", "fieldValue": "OPEN" }] },
+              { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "OPEN" }] },
               { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-nurture" }
             ]}
           ]}
         ]},
         { "label": "SQL", "steps": [
           { "type": "filter", "conditions": [{ "fieldApiName": "lifecyclestage", "operator": "equals", "value": "salesqualifiedlead" }] },
-          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "lead_funnel_stage", "fieldValue": "SQL" }] },
+          { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "hs_lead_status", "fieldValue": "IN_PROGRESS" }] },
           { "type": "assign", "assignmentType": "ROUND_ROBIN", "teamId": "team-ae" }
         ]}
       ]}
