@@ -53,6 +53,7 @@ apps/web/app/(dashboard)/flow-builder/
 apps/web/app/api/flows/
 apps/web/lib/flow-*.ts
 apps/mcp/src/tools/*-flow*.ts
-packages/db/prisma/migrations/*_add_routing_flows/
-packages/db/prisma/migrations/*_add_flow_edge_handles/
+# Flow Builder migrations are NOT gitignored — the schema has Flow Builder
+# fields (routingMode, RoutingFlow, etc.) so the DB must have these columns
+# even if the Flow Builder UI isn't shipped yet.
 license-server/.wrangler/
