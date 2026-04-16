@@ -78,6 +78,7 @@ export const CreateRuleInput = z.object({
   defaultOwner: z.string().optional(),
   isDryRun: z.boolean().optional(),
   confirm: z.boolean().optional(),
+  tree: z.array(z.any()).optional(),
 }).strict();
 
 export const UpdateRuleInput = z.object({
@@ -88,7 +89,10 @@ export const UpdateRuleInput = z.object({
   triggerEvent: z.enum(["INSERT", "UPDATE", "BOTH", "SEARCH"]).optional(),
   conditions: z.array(z.any()).optional(),
   branches: z.array(z.any()).optional(),
+  tree: z.array(z.any()).optional(),
+  scheduleFrequency: z.string().optional(),
   isDryRun: z.boolean().optional(),
+  matchConfig: z.any().optional(),
   confirm: z.boolean().optional(),
 });
 
