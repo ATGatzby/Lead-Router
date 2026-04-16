@@ -522,6 +522,25 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
           JSON.stringify(mcpConfig, null, 2),
           'utf-8'
         )
+
+        // Update docker-compose with API token and restart MCP container
+        if (apiToken) {
+          try {
+            const composePath = join(dir, 'docker-compose.yml')
+            const composeContent = readFileSync(composePath, 'utf-8')
+            const updated = composeContent.replace(
+              /API_TOKEN:\s*.*/,
+              `API_TOKEN: ${apiToken}`
+            )
+            writeFileSync(composePath, updated, 'utf-8')
+            await uploadFiles(ssh, dir, remoteDir)
+            await ssh.exec(`cd ${remoteDir} && docker compose up -d --force-recreate mcp 2>&1`)
+            log.success('MCP container updated with API token')
+          } catch {
+            // Non-fatal — MCP OAuth still works, just direct API calls won't
+          }
+        }
+
         note(
           'Connect Lead Routing to Claude Code with one command:\n\n' +
             chalk.cyan('claude mcp add lead-routing -- npx -y @lead-routing/mcp'),
