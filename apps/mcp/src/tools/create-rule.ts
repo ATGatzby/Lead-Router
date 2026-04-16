@@ -7,17 +7,30 @@ export const createRuleTool = {
   name: "create_rule",
   description: `Create a new routing rule. First call without confirm to preview, then call with confirm: true to execute.
 
+IMPORTANT: triggerEvent determines how the rule fires:
+- "SEARCH" = Search-based rule (queries CRM for matching records). Sets routeType=SCHEDULED automatically.
+- "INSERT" / "UPDATE" / "BOTH" = Real-time trigger (fires on CRM events). Sets routeType=REALTIME.
+
+For SEARCH rules, also set scheduleFrequency: "ONE_TIME", "DAILY", "WEEKLY", or "MONTHLY".
+
 Branch conditions use groupId to group AND/OR logic: conditions with the SAME groupId are AND'd together, different groupIds are OR'd.
 
-Example branch with conditions:
+Example: Search HubSpot contacts with firstname containing "A", assign to round robin:
 {
-  "label": "Enterprise",
-  "priority": 0,
-  "assignmentType": "ROUND_ROBIN",
-  "assigneeTeamId": "team-id-here",
-  "conditions": [
-    { "groupId": "g1", "fieldName": "AnnualRevenue", "fieldType": "NUMBER", "operator": "gte", "value": "100000" }
-  ]
+  "name": "A-Name Contacts",
+  "objectType": "CONTACT",
+  "triggerEvent": "SEARCH",
+  "scheduleFrequency": "ONE_TIME",
+  "branches": [{
+    "label": "A-Names",
+    "priority": 0,
+    "assignmentType": "ROUND_ROBIN",
+    "assigneeTeamId": "team-id",
+    "conditions": [
+      { "groupId": "g1", "fieldName": "firstname", "fieldType": "TEXT", "operator": "contains", "value": "A" }
+    ]
+  }],
+  "confirm": true
 }
 
 matchConfig enables lead-to-lead/contact/account matching (deduplication). Example:
@@ -85,9 +98,14 @@ matchConfig enables lead-to-lead/contact/account matching (deduplication). Examp
           accountAssigneeQueueId: { type: "string" },
         },
       },
+      scheduleFrequency: {
+        type: "string",
+        enum: ["ONE_TIME", "DAILY", "WEEKLY", "MONTHLY"],
+        description: "For SEARCH rules: how often to run. Required when triggerEvent is SEARCH.",
+      },
       isDryRun: {
         type: "boolean",
-        description: "If true, the rule logs but doesn't actually assign in Salesforce",
+        description: "If true, the rule logs but doesn't actually assign in CRM",
       },
       confirm: {
         type: "boolean",
@@ -101,6 +119,14 @@ matchConfig enables lead-to-lead/contact/account matching (deduplication). Examp
 export async function handleCreateRule(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
   const { confirm, ...data } = args;
+
+  // Auto-set routeType based on triggerEvent
+  if (data.triggerEvent === "SEARCH") {
+    data.routeType = "SCHEDULED";
+    data.scheduleFrequency = data.scheduleFrequency || "ONE_TIME";
+  } else {
+    data.routeType = "REALTIME";
+  }
 
   // Ensure branches have proper groupIds on conditions
   if (data.branches) {
