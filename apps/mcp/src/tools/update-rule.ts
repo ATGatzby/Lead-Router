@@ -6,17 +6,16 @@ export const updateRuleTool = {
   name: "update_rule",
   description: `Update an existing routing rule. First call without confirm to see before/after diff, then call with confirm: true to execute.
 
-IMPORTANT: When updating branches or conditions, you REPLACE the entire array — there is no merge/patch.
-Always call get_rule first to see the current state, then send the complete updated branches array.
+CRITICAL RULES — DO NOT SKIP:
+1. ALWAYS call get_rule first to see current state. Branches/conditions are REPLACED entirely, not merged.
+2. ALWAYS call get_license_info to determine connected CRM (returns "CRM Type: SALESFORCE" or "CRM Type: HUBSPOT"). DO NOT assume Salesforce.
+3. ALWAYS call list_fields with the objectType to get actual field API names. DO NOT guess fields.
+4. ALWAYS call list_teams and list_users to get real team/user IDs. DO NOT hallucinate IDs.
+5. If the user's request is ambiguous, ASK for clarification instead of guessing.
 
-PREREQUISITE: ALWAYS call list_fields with the objectType FIRST to get the actual field API names available.
-DO NOT guess field names — they differ between CONTACT, COMPANY, and DEAL objects.
-
-COMMON FIELDS BY OBJECT TYPE (call list_fields for the actual list):
-- CONTACT: email, firstname, lastname, phone, jobtitle, lifecyclestage, hs_lead_status, hubspotscore, hs_analytics_source, country, city, state, company, notes_last_contacted, createdate, lastmodifieddate
-- COMPANY: name, domain, industry, numberofemployees, annualrevenue, country, city, state, phone, website, type, founded_year
-- DEAL: dealname, dealstage, amount, closedate, pipeline, hs_deal_stage_probability
-DO NOT use Company fields (industry, numberofemployees, annualrevenue) on Contact rules — they will not match.
+objectType depends on connected CRM:
+- Salesforce: LEAD, CONTACT, ACCOUNT
+- HubSpot: CONTACT, COMPANY, DEAL
 
 triggerEvent determines how the rule fires:
 - "SEARCH" = Search-based rule (queries CRM for matching records). Sets routeType=SCHEDULED automatically.

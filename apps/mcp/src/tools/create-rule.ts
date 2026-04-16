@@ -147,14 +147,15 @@ export const createRuleTool = {
   name: "create_rule",
   description: `Create a new routing rule. First call without confirm to preview, then call with confirm: true to execute.
 
-PREREQUISITE: ALWAYS call list_fields with the objectType FIRST to get the actual field API names.
-DO NOT guess field names — they differ between CONTACT, COMPANY, and DEAL.
+CRITICAL RULES — DO NOT SKIP:
+1. ALWAYS call get_license_info FIRST to determine the connected CRM type (returns "CRM Type: SALESFORCE" or "CRM Type: HUBSPOT"). DO NOT assume Salesforce.
+2. ALWAYS call list_fields with the objectType to get actual field API names. DO NOT guess fields.
+3. ALWAYS call list_teams and list_users to get real team/user IDs for assignments. DO NOT hallucinate IDs.
+4. If the user's request is ambiguous (e.g. unclear object type, unclear assignment), ASK for clarification instead of guessing.
 
-COMMON FIELDS (call list_fields for full list):
-- CONTACT: email, firstname, lastname, phone, jobtitle, lifecyclestage, hs_lead_status, hubspotscore, hs_analytics_source, country, city, state, company, notes_last_contacted
-- COMPANY: name, domain, industry, numberofemployees, annualrevenue, country, city, state, phone, website, type
-- DEAL: dealname, dealstage, amount, closedate, pipeline
-DO NOT use Company fields (industry, numberofemployees, annualrevenue) on Contact rules.
+objectType depends on the connected CRM:
+- Salesforce: "LEAD", "CONTACT", "ACCOUNT"
+- HubSpot: "CONTACT", "COMPANY", "DEAL"
 
 triggerEvent: "SEARCH" = scheduled, "INSERT"/"UPDATE"/"BOTH" = real-time.
 For SEARCH, also set scheduleFrequency: "ONE_TIME", "DAILY", "WEEKLY", or "MONTHLY".
@@ -321,8 +322,8 @@ matchConfig enables lead-to-lead/contact/account matching (deduplication). Examp
       },
       objectType: {
         type: "string",
-        enum: ["LEAD", "CONTACT", "ACCOUNT"],
-        description: "CRM object type this rule applies to",
+        enum: ["LEAD", "CONTACT", "ACCOUNT", "COMPANY", "DEAL"],
+        description: "CRM object type. Salesforce: LEAD, CONTACT, ACCOUNT. HubSpot: CONTACT, COMPANY, DEAL. Check which CRM is connected first.",
       },
       triggerEvent: {
         type: "string",
