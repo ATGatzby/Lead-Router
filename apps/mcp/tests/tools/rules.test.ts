@@ -180,15 +180,19 @@ describe("handleCreateRule", () => {
     // Steps should have filter → updateField → split
     expect(branch.steps).toHaveLength(3);
     expect(branch.steps[0].type).toBe("filter");
-    expect(branch.steps[0].conditions[0].fieldApiName).toBe("country");
+    expect(branch.steps[0].conditions[0].conditions[0].fieldApiName).toBe("country");
     expect(branch.steps[1].type).toBe("updateField");
     expect(branch.steps[1].fieldUpdates[0].fieldApiName).toBe("type");
     expect(branch.steps[1].fieldUpdates[0].fieldValue).toBe("US");
+    expect(branch.steps[1].fieldUpdates[0].fieldLabel).toBe("type"); // UI field
     expect(branch.steps[2].type).toBe("split");
     expect(branch.steps[2].paths).toHaveLength(2);
-    // First split path: Enterprise
+    // First split path: Enterprise — should have id, label, conditions, action, steps
     const entPath = branch.steps[2].paths[0];
     expect(entPath.label).toBe("Enterprise");
+    expect(entPath.id).toBeDefined(); // UI requires id
+    expect(entPath.conditions).toEqual([]); // conditions live in filter steps
+    expect(entPath.action).toBeDefined(); // legacy fallback
     expect(entPath.steps[0].type).toBe("filter");
     expect(entPath.steps[1].type).toBe("assign");
     expect(entPath.steps[1].assigneeId).toBe("team-us-ent");
@@ -196,6 +200,7 @@ describe("handleCreateRule", () => {
     // Second split path: SMB
     const smbPath = branch.steps[2].paths[1];
     expect(smbPath.label).toBe("SMB");
+    expect(smbPath.id).toBeDefined();
     expect(smbPath.steps[1].assigneeId).toBe("team-us-smb");
   });
 
@@ -227,7 +232,7 @@ describe("handleCreateRule", () => {
     const innerSplit = entSteps.find((s: any) => s.type === "split");
     expect(innerSplit.paths).toHaveLength(2);
     expect(innerSplit.paths[0].label).toBe("Tech");
-    expect(innerSplit.defaultOwner.teamId).toBe("team-ent-default");
+    expect(innerSplit.defaultOwner.assigneeId).toBe("team-ent-default");
   });
 
   it("tree preview shows nesting depth", async () => {

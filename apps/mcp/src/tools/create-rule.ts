@@ -24,22 +24,32 @@ function treeNodeToSteps(node: TreeNode): any[] {
   const steps: any[] = [];
 
   // Filter step from condition
+  // UI expects conditions as ConditionGroup[] format: [{ id, conditions: [{ fieldApiName, operator, value }] }]
   if (node.condition) {
     steps.push({
       type: "filter",
       conditions: [{
-        fieldApiName: node.condition.fieldApiName,
-        operator: node.condition.operator,
-        value: node.condition.value,
+        id: randomUUID(),
+        conditions: [{
+          fieldApiName: node.condition.fieldApiName,
+          fieldType: node.condition.fieldType || "TEXT",
+          operator: node.condition.operator,
+          value: node.condition.value,
+        }],
       }],
     });
   }
 
-  // Field updates
+  // Field updates — UI expects fieldLabel and fieldType on each update
   if (node.fieldUpdates?.length) {
     steps.push({
       type: "updateField",
-      fieldUpdates: node.fieldUpdates,
+      fieldUpdates: node.fieldUpdates.map(fu => ({
+        fieldApiName: fu.fieldApiName,
+        fieldLabel: fu.fieldApiName, // best-effort label
+        fieldType: "TEXT",
+        fieldValue: fu.fieldValue,
+      })),
     });
   }
 
@@ -56,15 +66,28 @@ function treeNodeToSteps(node: TreeNode): any[] {
   }
 
   // If non-leaf: split step with nested paths
+  // UI expects each path to be a full RoutePath: { id, label, conditions, action, steps }
   if (node.paths?.length) {
     const split: any = {
       type: "split",
-      paths: node.paths.map(child => ({
-        label: child.label,
-        steps: treeNodeToSteps(child),
-      })),
+      paths: node.paths.map(child => {
+        const childSteps = treeNodeToSteps(child);
+        // Find the assign step (if leaf) for the legacy action fallback
+        const assignStep = childSteps.find((s: any) => s.type === "assign");
+        return {
+          id: randomUUID(),
+          label: child.label,
+          conditions: [], // conditions live in filter steps
+          action: assignStep
+            ? { assignmentType: assignStep.assignmentType, assigneeId: assignStep.assigneeId, assigneeName: assignStep.assigneeName }
+            : { assignmentType: null, assigneeId: null, assigneeName: null },
+          steps: childSteps,
+        };
+      }),
+      defaultOwner: node.defaultOwner
+        ? { assignmentType: node.defaultOwner.assignmentType, assigneeId: node.defaultOwner.teamId || node.defaultOwner.assigneeId || null, assigneeName: null }
+        : null,
     };
-    if (node.defaultOwner) split.defaultOwner = node.defaultOwner;
     steps.push(split);
   }
 
