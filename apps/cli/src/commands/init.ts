@@ -529,7 +529,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
             const composePath = join(dir, 'docker-compose.yml')
             const composeContent = readFileSync(composePath, 'utf-8')
             const updated = composeContent.replace(
-              /API_TOKEN:\s*.*/,
+              /API_TOKEN:[^\n]*/,
               `API_TOKEN: ${apiToken}`
             )
             writeFileSync(composePath, updated, 'utf-8')
