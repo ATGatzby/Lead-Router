@@ -86,17 +86,20 @@ DROP INDEX IF EXISTS "routing_daily_aggregates_orgId_date_ruleId_pathLabel_branc
 CREATE UNIQUE INDEX "routing_daily_aggregates_orgId_date_ruleId_pathLabel_branchId_key" ON "routing_daily_aggregates"("orgId", "date", "ruleId", "pathLabel", "branchId", "teamId", "assigneeId", "objectType");
 
 -- AlterTable routing_flows - Migrate objectType to CrmObjectType
-ALTER TABLE "routing_flows" ADD COLUMN "objectType_new" "CrmObjectType";
-UPDATE "routing_flows" SET "objectType_new" = 'LEAD' WHERE "objectType" = 'LEAD';
-UPDATE "routing_flows" SET "objectType_new" = 'CONTACT' WHERE "objectType" = 'CONTACT';
-UPDATE "routing_flows" SET "objectType_new" = 'ACCOUNT' WHERE "objectType" = 'ACCOUNT';
-ALTER TABLE "routing_flows" DROP COLUMN "objectType";
-ALTER TABLE "routing_flows" RENAME COLUMN "objectType_new" TO "objectType";
-ALTER TABLE "routing_flows" ALTER COLUMN "objectType" SET NOT NULL;
-
--- Update routing_flows unique constraint
-DROP INDEX IF EXISTS "routing_flows_orgId_objectType_key";
-CREATE UNIQUE INDEX "routing_flows_orgId_objectType_key" ON "routing_flows"("orgId", "objectType");
+-- (conditional: routing_flows only exists if Flow Builder migrations were applied)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'routing_flows') THEN
+    ALTER TABLE "routing_flows" ADD COLUMN "objectType_new" "CrmObjectType";
+    UPDATE "routing_flows" SET "objectType_new" = 'LEAD' WHERE "objectType" = 'LEAD';
+    UPDATE "routing_flows" SET "objectType_new" = 'CONTACT' WHERE "objectType" = 'CONTACT';
+    UPDATE "routing_flows" SET "objectType_new" = 'ACCOUNT' WHERE "objectType" = 'ACCOUNT';
+    ALTER TABLE "routing_flows" DROP COLUMN "objectType";
+    ALTER TABLE "routing_flows" RENAME COLUMN "objectType_new" TO "objectType";
+    ALTER TABLE "routing_flows" ALTER COLUMN "objectType" SET NOT NULL;
+    DROP INDEX IF EXISTS "routing_flows_orgId_objectType_key";
+    CREATE UNIQUE INDEX "routing_flows_orgId_objectType_key" ON "routing_flows"("orgId", "objectType");
+  END IF;
+END $$;
 
 -- Drop the function that depends on SfdcObjectType BEFORE dropping the type
 DROP FUNCTION IF EXISTS immutable_object_type_text("SfdcObjectType");
