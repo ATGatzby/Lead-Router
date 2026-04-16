@@ -86,8 +86,36 @@ EXAMPLE — COMPANY rule: Adding a nested split with field updates:
       },
       branches: {
         type: "array",
-        description: "Replacement branches array (replaces ALL existing branches). Each branch: { label, priority, assignmentType (USER/ROUND_ROBIN/QUEUE), assigneeUserId/assigneeTeamId/assigneeQueueId, conditions[], steps[] }. Use steps with nested split for multi-level routing.",
-        items: { type: "object" },
+        description: "Replacement branches (replaces ALL existing). MUST include steps[] for field updates and nested routing.",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Branch display name" },
+            priority: { type: "number", description: "Evaluation order (0 = first)" },
+            assignmentType: { type: "string", enum: ["USER", "ROUND_ROBIN", "QUEUE"], description: "Fallback assignment type" },
+            assigneeUserId: { type: "string" },
+            assigneeTeamId: { type: "string" },
+            assigneeQueueId: { type: "string" },
+            conditions: { type: "array", description: "Branch-level conditions", items: { type: "object" } },
+            steps: {
+              type: "array",
+              description: "V2 step pipeline — filter, updateField, assign, split. ALWAYS include for field updates and nested routing.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["filter", "updateField", "assign", "split"] },
+                  conditions: { type: "array", description: "For filter: [{fieldApiName, operator, value}]", items: { type: "object" } },
+                  fieldUpdates: { type: "array", description: "For updateField: [{fieldApiName, fieldValue}] — writes to CRM", items: { type: "object" } },
+                  assignmentType: { type: "string" },
+                  assigneeId: { type: "string" },
+                  teamId: { type: "string" },
+                  paths: { type: "array", description: "For split: nested paths with label + steps[]", items: { type: "object" } },
+                  defaultOwner: { type: "object", description: "For split: fallback if no path matches" },
+                },
+              },
+            },
+          },
+        },
       },
       scheduleFrequency: {
         type: "string",

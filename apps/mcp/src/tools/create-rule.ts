@@ -324,8 +324,40 @@ matchConfig enables lead-to-lead/contact/account matching (deduplication). Examp
       },
       branches: {
         type: "array",
-        description: "Assignment branches. Each has label, priority, assignmentType (USER/ROUND_ROBIN/QUEUE), assigneeUserId/assigneeTeamId/assigneeQueueId, and conditions array",
-        items: { type: "object" },
+        description: "Assignment branches with optional steps for multi-level routing and field updates",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Branch display name" },
+            priority: { type: "number", description: "Evaluation order (0 = first)" },
+            assignmentType: { type: "string", enum: ["USER", "ROUND_ROBIN", "QUEUE"], description: "Fallback assignment type" },
+            assigneeUserId: { type: "string", description: "For USER assignment" },
+            assigneeTeamId: { type: "string", description: "For ROUND_ROBIN assignment" },
+            assigneeQueueId: { type: "string", description: "For QUEUE assignment" },
+            conditions: {
+              type: "array",
+              description: "Branch-level conditions (groupId, fieldName, fieldType, operator, value)",
+              items: { type: "object" },
+            },
+            steps: {
+              type: "array",
+              description: "V2 step pipeline — filter, updateField, assign, split. ALWAYS include this for field updates and nested routing.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["filter", "updateField", "assign", "split"], description: "Step type" },
+                  conditions: { type: "array", description: "For filter: [{fieldApiName, operator, value}]", items: { type: "object" } },
+                  fieldUpdates: { type: "array", description: "For updateField: [{fieldApiName, fieldValue}] — writes values to CRM record", items: { type: "object" } },
+                  assignmentType: { type: "string", description: "For assign: USER or ROUND_ROBIN" },
+                  assigneeId: { type: "string", description: "For assign with USER" },
+                  teamId: { type: "string", description: "For assign with ROUND_ROBIN" },
+                  paths: { type: "array", description: "For split: nested paths, each with label + steps[]", items: { type: "object" } },
+                  defaultOwner: { type: "object", description: "For split: fallback assignment if no path matches" },
+                },
+              },
+            },
+          },
+        },
       },
       matchConfig: {
         type: "object",
