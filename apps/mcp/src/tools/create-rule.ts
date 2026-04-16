@@ -177,7 +177,7 @@ The "tree" parameter is an array of root nodes. Each node has:
 - fieldUpdates: [{ fieldApiName, fieldValue }] — CRM field writes at this level (SUPPORTED)
 - paths: [...child nodes...] — nested sub-splits (non-leaf)
 - assignmentType + teamId/assigneeId/queueId — who to assign to (leaf nodes)
-- defaultOwner: { assignmentType, teamId } — fallback if no child path matches
+- defaultOwner: { assignmentType, teamId } — fallback if no child path matches. ONLY add this if the user explicitly requests a fallback/default. Do NOT add it as a safety net — it creates extra nodes in the UI.
 
 The handler converts the tree into the API's nested steps/splits format automatically.
 
@@ -238,8 +238,7 @@ EXAMPLE 2: COMPANY — 3-Level nested tree (Region → Size → Industry) — US
               "condition": { "fieldApiName": "industry", "operator": "equals", "value": "Finance" },
               "assignmentType": "ROUND_ROBIN", "teamId": "team-us-ent-fin"
             }
-          ],
-          "defaultOwner": { "assignmentType": "ROUND_ROBIN", "teamId": "team-us-ent" }
+          ]
         },
         {
           "label": "SMB",
