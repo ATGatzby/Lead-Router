@@ -147,6 +147,15 @@ export async function handleUpdateRule(web: WebClient, logger: Logger, args: any
     updates.routeType = "REALTIME";
   }
 
+  // Normalize filter conditions in steps to ConditionGroup format for UI compatibility
+  if (updates.branches) {
+    const { normalizeStepsConditions } = await import("./create-rule.js");
+    updates.branches = updates.branches.map((b: any) => {
+      if (!b.steps?.length) return b;
+      return { ...b, steps: normalizeStepsConditions(b.steps) };
+    });
+  }
+
   // Auto-derive searchCriteria from branch conditions for SEARCH rules
   if (updates.triggerEvent === "SEARCH" && !updates.searchCriteria && updates.branches?.length) {
     const seen = new Set<string>();

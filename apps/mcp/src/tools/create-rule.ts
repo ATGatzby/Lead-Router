@@ -145,6 +145,62 @@ function convertTreeToBranches(tree: TreeNode[]): any[] {
   });
 }
 
+// ─── Normalize flat filter conditions to ConditionGroup format ───────────────
+// Claude may send flat conditions [{fieldApiName, operator, value}] in steps,
+// but the UI expects [{id, conjunction, conditions: [{id, groupId, ...}]}].
+
+function isConditionGroup(cond: any): boolean {
+  return cond && typeof cond.conjunction === "string" && Array.isArray(cond.conditions);
+}
+
+function normalizeFilterConditions(conditions: any[]): any[] {
+  if (!conditions?.length) return conditions;
+  // Already in ConditionGroup format
+  if (conditions.every(isConditionGroup)) return conditions;
+  // Flat format — wrap each into a ConditionGroup
+  return conditions.map((c: any) => {
+    if (isConditionGroup(c)) return c;
+    const groupId = randomUUID();
+    return {
+      id: groupId,
+      conjunction: "AND",
+      conditions: [{
+        id: randomUUID(),
+        groupId,
+        fieldApiName: c.fieldApiName ?? c.fieldName ?? "",
+        fieldType: c.fieldType ?? "TEXT",
+        operator: c.operator ?? "equals",
+        value: c.value ?? "",
+      }],
+    };
+  });
+}
+
+export function normalizeStepsConditions(steps: any[]): any[] {
+  return steps.map((step: any) => {
+    if (step.type === "filter" && step.conditions) {
+      return { ...step, conditions: normalizeFilterConditions(step.conditions) };
+    }
+    if (step.type === "split" && step.paths) {
+      return {
+        ...step,
+        paths: step.paths.map((p: any) => ({
+          ...p,
+          id: p.id || randomUUID(),
+          conditions: p.conditions || [],
+          action: p.action || { assignmentType: null, assigneeId: null, assigneeName: null },
+          steps: p.steps ? normalizeStepsConditions(p.steps) : p.steps,
+        })),
+      };
+    }
+    // Normalize assign steps to have assigneeName
+    if (step.type === "assign" && step.assigneeName === undefined) {
+      return { ...step, assigneeName: null };
+    }
+    return step;
+  });
+}
+
 // ─── Tool definition ─────────────────────────────────────────────────────────
 
 export const createRuleTool = {
@@ -507,6 +563,19 @@ export async function handleCreateRule(web: WebClient, logger: Logger, args: any
   if (data.tree?.length) {
     data.branches = convertTreeToBranches(data.tree);
     delete data.tree;
+  }
+
+  // Normalize filter conditions in steps to ConditionGroup format for UI compatibility.
+  // Claude may send flat conditions [{fieldApiName, operator, value}] but the UI expects
+  // ConditionGroup format [{id, conjunction, conditions: [{id, groupId, fieldApiName, fieldType, operator, value}]}]
+  if (data.branches) {
+    data.branches = data.branches.map((b: any) => {
+      if (!b.steps?.length) return b;
+      return {
+        ...b,
+        steps: normalizeStepsConditions(b.steps),
+      };
+    });
   }
 
   // Auto-set routeType based on triggerEvent
