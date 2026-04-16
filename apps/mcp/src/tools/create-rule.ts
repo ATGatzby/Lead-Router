@@ -128,6 +128,35 @@ export async function handleCreateRule(web: WebClient, logger: Logger, args: any
     data.routeType = "REALTIME";
   }
 
+  // Auto-derive searchCriteria from branch conditions for SEARCH rules.
+  // searchCriteria tells the engine what to filter at the CRM level (HubSpot Search API / SFDC SOQL).
+  // Without it, the engine fetches ALL records and only filters in-memory (very slow for large datasets).
+  if (data.triggerEvent === "SEARCH" && !data.searchCriteria && data.branches?.length) {
+    // Collect unique conditions across all branches into a single search criteria group
+    const seen = new Set<string>();
+    const searchConditions: any[] = [];
+    for (const branch of data.branches) {
+      for (const cond of branch.conditions || []) {
+        const key = `${cond.fieldName}:${cond.operator}:${cond.value}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          searchConditions.push({
+            id: `sc-${searchConditions.length}`,
+            conditions: [{
+              fieldApiName: cond.fieldName,
+              fieldType: cond.fieldType || "TEXT",
+              operator: cond.operator,
+              value: cond.value ?? null,
+            }],
+          });
+        }
+      }
+    }
+    if (searchConditions.length > 0) {
+      data.searchCriteria = searchConditions;
+    }
+  }
+
   // Ensure branches have proper groupIds on conditions
   if (data.branches) {
     data.branches = data.branches.map((b: any, bi: number) => ({

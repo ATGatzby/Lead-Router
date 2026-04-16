@@ -83,7 +83,9 @@ export function renderDockerCompose(c: ComposeConfig): string {
     restart: unless-stopped
     ports:
       - "127.0.0.1:${enginePort}:3001"
-    env_file: .env.engine
+    env_file:
+      - .env.engine
+      - .env.web
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://$(hostname -i):3001/health || exit 1"]
       interval: 10s
