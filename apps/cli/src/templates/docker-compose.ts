@@ -11,6 +11,8 @@ export interface ComposeConfig {
   langfuseSalt?: string
   managedMcp?: boolean
   mcpUrl?: string
+  mcpAppUrl?: string
+  mcpEngineUrl?: string
   mcpApiToken?: string
   mcpWebhookSecret?: string
   mcpCrmType?: string
@@ -114,8 +116,8 @@ export function renderDockerCompose(c: ComposeConfig): string {
     image: ghcr.io/atgatzby/lead-routing-mcp:latest
     restart: unless-stopped
     environment:
-      APP_URL: http://web:3000
-      ENGINE_URL: http://engine:3001
+      APP_URL: ${c.mcpAppUrl ?? 'http://web:3000'}
+      ENGINE_URL: ${c.mcpEngineUrl ?? 'http://engine:3001'}
       API_TOKEN: ${c.mcpApiToken ?? ''}
       WEBHOOK_SECRET: ${c.mcpWebhookSecret ?? ''}
       CRM_TYPE: ${c.mcpCrmType ?? 'salesforce'}

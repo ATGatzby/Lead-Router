@@ -82,29 +82,33 @@ export default async function DashboardPage() {
           </div>
 
           <ul className="space-y-2.5">
-            {steps.map((step) => (
-              <li key={step.label}>
-                <Link
-                  href={step.href}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-accent transition-colors"
-                >
+            {steps.map((step) => {
+              const cls = "flex items-center gap-3 rounded-md px-3 py-2 hover:bg-accent transition-colors";
+              const children = (
+                <>
                   {step.done ? (
                     <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
                   ) : (
                     <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
-                  <span
-                    className={
-                      step.done
-                        ? "text-sm line-through text-muted-foreground"
-                        : "text-sm"
-                    }
-                  >
+                  <span className={step.done ? "text-sm line-through text-muted-foreground" : "text-sm"}>
                     {step.label}
                   </span>
-                </Link>
-              </li>
-            ))}
+                </>
+              );
+              // OAuth routes redirect to external providers — use <a> for full
+              // page navigation. <Link> does client-side fetch which gets
+              // CORS-blocked by the OAuth provider.
+              return (
+                <li key={step.label}>
+                  {step.href.startsWith("/api/auth/") ? (
+                    <a href={step.href} className={cls}>{children}</a>
+                  ) : (
+                    <Link href={step.href} className={cls}>{children}</Link>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
