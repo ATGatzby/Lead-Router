@@ -56,6 +56,15 @@ export async function getOrgHubSpotClient(orgId: string): Promise<CachedClient> 
     refreshToken: org.oauthRefreshToken ?? undefined,
     clientId: process.env.HUBSPOT_CLIENT_ID,
     clientSecret: process.env.HUBSPOT_CLIENT_SECRET,
+    onTokenRefresh: (accessToken, refreshToken) => {
+      // Persist refreshed tokens to DB and evict cache so next call uses fresh tokens
+      prisma.organization.update({
+        where: { id: orgId },
+        data: { oauthAccessToken: accessToken, oauthRefreshToken: refreshToken },
+      })
+        .then(() => console.log(`[hubspot] Persisted refreshed tokens for org ${orgId}`))
+        .catch((err) => console.error(`[hubspot] Failed to persist refreshed tokens for org ${orgId}:`, err));
+    },
   });
 
   const entry: CachedClient = {

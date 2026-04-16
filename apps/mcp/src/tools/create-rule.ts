@@ -423,9 +423,34 @@ matchConfig enables lead-to-lead/contact/account matching (deduplication). Examp
   },
 };
 
+// Map Salesforce ↔ HubSpot object types
+const SFDC_TO_HUBSPOT: Record<string, string> = { LEAD: "CONTACT", ACCOUNT: "COMPANY" };
+const HUBSPOT_TO_SFDC: Record<string, string> = { COMPANY: "ACCOUNT", DEAL: "LEAD" };
+
+async function autoMapObjectType(web: WebClient, objectType: string): Promise<string> {
+  try {
+    const license = await web.getLicenseInfo() as any;
+    const crmType = license?.crmType ?? "SALESFORCE";
+    if (crmType === "HUBSPOT" && SFDC_TO_HUBSPOT[objectType]) {
+      return SFDC_TO_HUBSPOT[objectType];
+    }
+    if (crmType === "SALESFORCE" && HUBSPOT_TO_SFDC[objectType]) {
+      return HUBSPOT_TO_SFDC[objectType];
+    }
+  } catch {
+    // ignore — use original objectType
+  }
+  return objectType;
+}
+
 export async function handleCreateRule(web: WebClient, logger: Logger, args: any) {
   const start = Date.now();
   const { confirm, ...data } = args;
+
+  // Auto-map objectType based on CRM (e.g. ACCOUNT → COMPANY for HubSpot)
+  if (data.objectType) {
+    data.objectType = await autoMapObjectType(web, data.objectType);
+  }
 
   // Convert tree → branches+steps if tree parameter is provided
   if (data.tree?.length) {

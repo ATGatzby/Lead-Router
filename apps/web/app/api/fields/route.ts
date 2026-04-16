@@ -13,8 +13,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid object type" }, { status: 400 });
     }
 
+    // Auto-map Salesforce ↔ HubSpot object types based on org's CRM type
+    let resolvedObjectType = objectParam;
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { crmType: true } });
+    if (org?.crmType === "HUBSPOT") {
+      if (objectParam === "ACCOUNT") resolvedObjectType = "COMPANY";
+      if (objectParam === "LEAD") resolvedObjectType = "CONTACT";
+    } else {
+      if (objectParam === "COMPANY") resolvedObjectType = "ACCOUNT";
+      if (objectParam === "DEAL") resolvedObjectType = "LEAD";
+    }
+
     const where: Record<string, unknown> = { orgId };
-    where.objectType = objectParam as "LEAD" | "CONTACT" | "ACCOUNT" | "USER" | "COMPANY" | "DEAL";
+    where.objectType = resolvedObjectType;
 
     if (customOnly) {
       where.fieldApiName = { endsWith: "__c" };

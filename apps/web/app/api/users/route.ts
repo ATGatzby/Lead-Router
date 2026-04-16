@@ -100,6 +100,12 @@ export async function POST(req: NextRequest) {
         refreshToken: org.oauthRefreshToken ?? undefined,
         clientId: process.env.HUBSPOT_CLIENT_ID,
         clientSecret: process.env.HUBSPOT_CLIENT_SECRET,
+        onTokenRefresh: (accessToken, refreshToken) => {
+          prisma.organization.update({
+            where: { id: orgId },
+            data: { oauthAccessToken: accessToken, oauthRefreshToken: refreshToken },
+          }).catch((err) => console.error(`[hubspot] Failed to persist refreshed tokens:`, err));
+        },
       });
       const ownersApi = new OwnersApi(client);
       const owners = await ownersApi.listAllOwners();

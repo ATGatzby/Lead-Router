@@ -42,12 +42,20 @@ class RateLimiter {
 // Client options
 // ---------------------------------------------------------------------------
 
+/**
+ * Called after a successful token refresh with the new access and refresh tokens.
+ * Use this to persist the new tokens back to the database.
+ */
+export type OnTokenRefresh = (accessToken: string, refreshToken: string) => void | Promise<void>;
+
 export interface HubSpotClientOptions {
   accessToken: string;
   /** Supply these three to enable automatic token refresh on 401. */
   refreshToken?: string;
   clientId?: string;
   clientSecret?: string;
+  /** Called after successful token refresh — persist new tokens to DB. */
+  onTokenRefresh?: OnTokenRefresh;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +74,7 @@ export class HubSpotClient {
   private refreshToken: string | undefined;
   private clientId: string | undefined;
   private clientSecret: string | undefined;
+  private onTokenRefresh: OnTokenRefresh | undefined;
   private rateLimiter = new RateLimiter();
   private refreshing: Promise<void> | null = null;
   private _lastRateLimitInfo: RateLimitInfo = {
@@ -79,6 +88,7 @@ export class HubSpotClient {
     this.refreshToken = options.refreshToken;
     this.clientId = options.clientId;
     this.clientSecret = options.clientSecret;
+    this.onTokenRefresh = options.onTokenRefresh;
   }
 
   /**
@@ -267,6 +277,14 @@ export class HubSpotClient {
           );
           this.accessToken = tokens.access_token;
           this.refreshToken = tokens.refresh_token;
+          // Persist new tokens to DB via callback
+          if (this.onTokenRefresh) {
+            try {
+              await this.onTokenRefresh(tokens.access_token, tokens.refresh_token);
+            } catch (err) {
+              console.error('[hubspot] Failed to persist refreshed tokens:', err);
+            }
+          }
         } finally {
           this.refreshing = null;
         }
