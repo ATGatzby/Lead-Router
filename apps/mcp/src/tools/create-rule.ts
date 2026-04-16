@@ -21,11 +21,42 @@ CONDITION LOGIC: conditions with the SAME groupId are AND'd together, different 
 
 ASSIGNMENT TYPES: USER (assigneeUserId), ROUND_ROBIN (assigneeTeamId), QUEUE (assigneeQueueId)
 
-STEPS (V2 branches): For advanced routing with field updates, nested splits, and multi-level logic, use the "steps" array on branches. Step types:
-- "filter" — conditions to match (same as branch conditions but inside steps)
+NESTED ROUTING (CRITICAL — read carefully):
+When the user asks for multi-level routing (e.g. "split by region, then by size, then by industry"),
+you MUST use the "steps" array with nested "split" steps. DO NOT flatten into separate branches —
+that loses the hierarchical decision tree and field updates at each level.
+
+WRONG (flat branches — loses nesting):
+  branches: [
+    { label: "US/Enterprise/Tech", conditions: [...3 conditions...], assignmentType: "USER" },
+    { label: "US/SMB", conditions: [...2 conditions...], assignmentType: "ROUND_ROBIN" }
+  ]
+
+RIGHT (nested steps with splits — preserves hierarchy):
+  branches: [{
+    label: "US", steps: [
+      { type: "filter", conditions: [{fieldApiName: "country", operator: "equals", value: "US"}] },
+      { type: "updateField", fieldUpdates: [{fieldApiName: "region", fieldValue: "Americas"}] },
+      { type: "split", paths: [
+        { label: "Enterprise", steps: [
+          { type: "filter", conditions: [{fieldApiName: "employees", operator: "gte", value: "500"}] },
+          { type: "split", paths: [
+            { label: "Tech", steps: [...filter + assign...] },
+            { label: "Other", steps: [...assign...] }
+          ]}
+        ]},
+        { label: "SMB", steps: [...filter + assign...] }
+      ]}
+    ]
+  }]
+
+Step types:
+- "filter" — conditions to match: { "type": "filter", "conditions": [{ "fieldApiName": "field", "operator": "op", "value": "val" }] }
 - "updateField" — update CRM fields: { "type": "updateField", "fieldUpdates": [{ "fieldApiName": "field", "fieldValue": "value" }] }
 - "assign" — assign to user/team: { "type": "assign", "assignmentType": "USER"|"ROUND_ROBIN", "assigneeId": "id" or "teamId": "id" }
-- "split" — nested decision split: { "type": "split", "paths": [...], "defaultOwner": { "assignmentType": "...", "assigneeId": "..." } }
+- "split" — nested decision split: { "type": "split", "paths": [{ "label": "...", "steps": [...] }, ...], "defaultOwner": { "assignmentType": "...", "assigneeId": "..." } }
+
+When using steps on a branch, ALSO set the branch-level conditions and assignmentType as fallback.
 
 ────────────────────────────────────────────────
 EXAMPLE 1: Simple — Revenue-tiered with field updates
