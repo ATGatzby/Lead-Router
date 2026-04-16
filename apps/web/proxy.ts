@@ -21,6 +21,7 @@ const PUBLIC_PREFIXES = [
   "/register",
   "/api/auth/",        // covers /api/auth/sfdc/ and /api/auth/hubspot/ OAuth flows
   "/api/cli-auth/",    // CLI OAuth bridge — request + poll endpoints (no user session)
+  "/api/mcp-auth/",    // MCP OAuth — authorize + token endpoints (called by MCP server, no session)
   "/api/setup/",       // /api/setup/status + /api/setup/onboarding-done (Apex callouts, no session)
   "/api/fields/sync",  // Called by OnboardingController.syncFieldSchema — X-Sfdc-Org-Id auth
   "/_next/",
