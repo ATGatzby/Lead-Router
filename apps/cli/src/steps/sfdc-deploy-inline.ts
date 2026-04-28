@@ -212,7 +212,8 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
  * `sfdcOrgId` is included if Phase 1 web app is deployed (added to poll response).
  */
 export async function loginViaAppBridge(
-  rawAppUrl: string
+  rawAppUrl: string,
+  apiToken?: string
 ): Promise<{ accessToken: string; instanceUrl: string; sfdcOrgId?: string }> {
   // Strip trailing slash so URLs like "https://example.com/" don't produce double-slashes
   const appUrl = rawAppUrl.replace(/\/+$/, '')
@@ -223,7 +224,12 @@ export async function loginViaAppBridge(
   let authUrl: string
 
   try {
-    const res = await fetch(`${appUrl}/api/cli-auth/request`, { method: 'POST' })
+    // Pass Bearer token if available so the web app can bind the session to
+    // the correct Organization (required for OAuth tokens to persist to DB).
+    const headers: Record<string, string> = {}
+    if (apiToken) headers.Authorization = `Bearer ${apiToken}`
+
+    const res = await fetch(`${appUrl}/api/cli-auth/request`, { method: 'POST', headers })
     if (!res.ok) {
       s.stop('Failed to start auth session')
       throw new Error(

@@ -9,7 +9,7 @@ import {
 } from "@lead-routing/sfdc";
 import { prisma } from "@lead-routing/db";
 import { getSession } from "@/lib/session";
-import { completeCliAuthSession, getCliAuthCodeVerifier } from "@/lib/cli-auth-store";
+import { completeCliAuthSession, getCliAuthCodeVerifier, getCliAuthOrgId } from "@/lib/cli-auth-store";
 
 /**
  * Parse the state parameter which may be a compound base64url-encoded JSON
@@ -123,6 +123,38 @@ export async function GET(req: NextRequest) {
           }
         } catch (idErr) {
           console.error("[cli-auth] Identity fetch error:", idErr);
+        }
+      }
+
+      // Persist OAuth tokens to the Organization if the CLI session was
+      // initiated with a Bearer token (so subsequent /api/fields/sync and
+      // /api/setup/* calls can find the org).
+      const cliOrgId = getCliAuthOrgId(sessionId);
+      if (cliOrgId && sfdcOrgId) {
+        try {
+          // Check for SFDC-org conflict (already connected to another LR org)
+          const conflict = await prisma.organization.findUnique({
+            where: { sfdcOrgId },
+            select: { id: true },
+          });
+          if (conflict && conflict.id !== cliOrgId) {
+            console.error(
+              `[cli-auth] Salesforce org ${sfdcOrgId} already connected to LR org ${conflict.id}, refusing to reassign to ${cliOrgId}`
+            );
+          } else {
+            await prisma.organization.update({
+              where: { id: cliOrgId },
+              data: {
+                sfdcOrgId,
+                sfdcInstanceUrl: data.instance_url,
+                oauthAccessToken: data.access_token,
+                oauthRefreshToken: data.refresh_token,
+              },
+            });
+            console.log(`[cli-auth] Persisted SFDC tokens for LR org ${cliOrgId} (sfdcOrgId=${sfdcOrgId})`);
+          }
+        } catch (persistErr) {
+          console.error("[cli-auth] Failed to persist SFDC tokens to Organization:", persistErr);
         }
       }
 

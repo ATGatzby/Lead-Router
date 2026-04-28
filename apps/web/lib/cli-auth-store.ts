@@ -5,6 +5,8 @@ interface CliAuthEntry {
   instanceUrl?: string;
   sfdcOrgId?: string;
   codeVerifier?: string;
+  /** Org that initiated the CLI auth — used to persist OAuth tokens after callback */
+  orgId?: string;
   expiresAt: number;
 }
 
@@ -12,7 +14,7 @@ interface CliAuthEntry {
 // TTL: 10 minutes. Consumed and deleted on first successful poll.
 const store = new Map<string, CliAuthEntry>();
 
-export function createCliAuthSession(sessionId: string, codeVerifier: string): void {
+export function createCliAuthSession(sessionId: string, codeVerifier: string, orgId?: string): void {
   const now = Date.now();
   // Prune expired sessions
   for (const [k, v] of store) {
@@ -21,8 +23,13 @@ export function createCliAuthSession(sessionId: string, codeVerifier: string): v
   store.set(sessionId, {
     status: "pending",
     codeVerifier,
+    orgId,
     expiresAt: now + 10 * 60 * 1000,
   });
+}
+
+export function getCliAuthOrgId(sessionId: string): string | undefined {
+  return store.get(sessionId)?.orgId;
 }
 
 export function getCliAuthCodeVerifier(sessionId: string): string | undefined {

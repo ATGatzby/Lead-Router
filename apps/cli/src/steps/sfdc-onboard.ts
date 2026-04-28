@@ -210,7 +210,7 @@ export async function sfdcOnboard(params: SfdcOnboardParams): Promise<SfdcOnboar
   let accessToken: string
   let instanceUrl: string
   try {
-    const auth = await loginViaAppBridge(appUrl)
+    const auth = await loginViaAppBridge(appUrl, apiToken)
     accessToken = auth.accessToken
     instanceUrl = auth.instanceUrl
     result.sfdcOrgId = auth.sfdcOrgId

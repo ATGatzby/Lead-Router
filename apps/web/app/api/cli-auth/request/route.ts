@@ -1,5 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
+import { NextRequest } from "next/server";
 import { createCliAuthSession } from "@/lib/cli-auth-store";
+import { resolveBearerOrgId } from "@/lib/bearer-auth";
 import { MANAGED_PACKAGE_CLIENT_ID, OAUTH_REDIRECT_URL } from "@lead-routing/sfdc";
 
 // POST /api/cli-auth/request
@@ -7,7 +9,13 @@ import { MANAGED_PACKAGE_CLIENT_ID, OAUTH_REDIRECT_URL } from "@lead-routing/sfd
 // Returns a sessionId and the Salesforce OAuth URL the CLI should open.
 // Uses PKCE (S256) so the Connected App's "Require Secret for Web Server Flow"
 // setting is satisfied without needing a client secret in the browser redirect.
-export async function POST() {
+//
+// Optional Bearer auth: if the CLI sends `Authorization: Bearer lr_...`, we
+// resolve the orgId and bind it to the session so the OAuth callback can
+// persist tokens to the correct Organization in the DB. Without this, tokens
+// only land in the in-memory cli-auth-store and never reach the database,
+// breaking subsequent /api/fields/sync and /api/setup/* calls.
+export async function POST(req: NextRequest) {
   const sessionId = randomBytes(16).toString("hex");
 
   // PKCE: generate verifier + challenge
@@ -16,7 +24,15 @@ export async function POST() {
     .update(codeVerifier)
     .digest("base64url");
 
-  createCliAuthSession(sessionId, codeVerifier);
+  // Try to resolve org from Bearer token (optional — backward compat with old CLI)
+  let orgId: string | undefined;
+  try {
+    orgId = (await resolveBearerOrgId(req)) ?? undefined;
+  } catch {
+    // No Bearer token or invalid — proceed without orgId (legacy flow)
+  }
+
+  createCliAuthSession(sessionId, codeVerifier, orgId);
 
   const loginUrl =
     process.env.SFDC_LOGIN_URL ?? "https://login.salesforce.com";
