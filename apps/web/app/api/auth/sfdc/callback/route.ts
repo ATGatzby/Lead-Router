@@ -96,10 +96,42 @@ export async function GET(req: NextRequest) {
 
       const data = (await tokenRes.json()) as {
         access_token: string;
+        refresh_token?: string;
         instance_url: string;
+        id?: string; // identity URL — used to extract organization_id
       };
 
-      completeCliAuthSession(sessionId, data.access_token, data.instance_url);
+      // Fetch identity to extract sfdcOrgId so the CLI can use it as a
+      // lookup key for subsequent server-to-server calls (e.g. /api/fields/sync).
+      let sfdcOrgId: string | undefined;
+      if (data.id) {
+        try {
+          const idRes = await fetch(data.id, {
+            headers: { Authorization: `Bearer ${data.access_token}` },
+          });
+          if (idRes.ok) {
+            const identity = (await idRes.json()) as {
+              organization_id?: string;
+            };
+            sfdcOrgId = identity.organization_id;
+          } else {
+            console.error(
+              "[cli-auth] Identity fetch failed:",
+              idRes.status,
+              await idRes.text()
+            );
+          }
+        } catch (idErr) {
+          console.error("[cli-auth] Identity fetch error:", idErr);
+        }
+      }
+
+      completeCliAuthSession(sessionId, {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        instanceUrl: data.instance_url,
+        sfdcOrgId,
+      });
 
       return new Response(cliResultHtml(true), {
         headers: { "Content-Type": "text/html" },

@@ -84,16 +84,19 @@ npx @lead-routing/cli@latest init
 The wizard will prompt you for:
 1. VPS SSH credentials (host, user, key or password)
 2. Your app URL and engine URL
-3. Salesforce Connected App client ID and secret
-4. Admin email and password
+3. Which CRM to connect (Salesforce or HubSpot)
+4. Salesforce Connected App client ID and secret (Salesforce only)
+5. Admin email and password
 
 It then:
 - SSHes into your VPS and installs Docker if needed
 - Uploads `docker-compose.yml`, `.env` files, and a `Caddyfile`
 - Starts all services (web app, routing engine, Postgres, Redis, Caddy)
 - Runs database migrations and seeds your admin account
-- Deploys the Salesforce package (Apex triggers, custom settings, permission sets) via REST API
-- Guides you through the in-app onboarding wizard
+- **Drives CRM onboarding from the CLI itself** — opens your browser for the managed-package install (Salesforce only) and the OAuth Allow click, then deploys the Salesforce package, syncs field schemas, fires a test event, and marks onboarding complete
+- All without you ever logging into the self-hosted web app
+
+**Manual clicks during onboarding: 2 on Salesforce (package install + OAuth Allow), 1 on HubSpot (OAuth Allow). Everything else is programmatic.**
 
 **Total time: ~10 minutes on a fresh VPS.**
 
@@ -103,7 +106,8 @@ It then:
 
 | Command | Description |
 |---------|-------------|
-| `lead-routing init` | Full interactive setup wizard |
+| `lead-routing init` | Full interactive setup wizard — deploys the stack and runs the agentic CRM onboarding flow |
+| `lead-routing init --skip-crm` | Infrastructure-only deploy — skips the CRM connect / field sync step |
 | `lead-routing init --dry-run` | Generate config files locally without deploying |
 | `lead-routing init --resume` | Resume an interrupted install from the health-check step |
 | `lead-routing init --sandbox` | Use Salesforce sandbox (`test.salesforce.com`) |
@@ -115,7 +119,8 @@ It then:
 | `lead-routing logs [service]` | Stream logs (`web`, `engine`, `postgres`, `redis`) |
 | `lead-routing config show` | Print admin secret, app URL, and Salesforce client ID |
 | `lead-routing config sfdc` | Update Salesforce Connected App credentials |
-| `lead-routing sfdc deploy` | Redeploy the Salesforce package |
+| `lead-routing sfdc deploy` | Redeploy the Salesforce package and run the agentic onboarding flow |
+| `lead-routing sfdc connect` | Alias of `sfdc deploy` — emphasises the connect-and-onboard intent |
 | `lead-routing login` | Authenticate with your Lead Routing instance |
 | `lead-routing signup` | Create a new account |
 | `lead-routing uninstall` | Full teardown — stops containers, wipes data, removes remote directory |
@@ -176,6 +181,11 @@ Before running `init`, create a Salesforce Connected App:
 5. Note the **Consumer Key** (client ID) and **Consumer Secret**
 
 The CLI wizard will prompt you for these values. The Salesforce package (Apex triggers, custom objects, permission sets) is deployed automatically during `init` — no Salesforce CLI required.
+
+During onboarding the CLI:
+1. Opens the managed-package install URL in your browser (one click — Salesforce requires this; there is no install API).
+2. Opens the OAuth consent screen (one click — `Allow`). Tokens are captured via the CLI auth bridge so you never see the self-hosted web UI.
+3. Deploys the package, patches Remote Site Settings + the Named Credential, writes `Routing_Settings__c`, syncs field schemas for Lead/Contact/Account, fires a test event, and marks onboarding complete — all programmatically.
 
 ---
 

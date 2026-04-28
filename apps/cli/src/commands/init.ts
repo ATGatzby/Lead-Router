@@ -21,6 +21,8 @@ import { SshConnection } from '../utils/ssh.js'
 import { findInstallDir, readConfig } from '../utils/config.js'
 import { requireAuth, saveCredentials, apiLogin, apiSignup, apiResendVerification, type StoredCredentials } from '../utils/auth.js'
 import { formatTierBadge } from '../utils/license.js'
+import { sfdcOnboard } from '../steps/sfdc-onboard.js'
+import { hubspotOnboard } from '../steps/hubspot-onboard.js'
 
 export interface InitOptions {
   dryRun?: boolean
@@ -31,6 +33,8 @@ export interface InitOptions {
   remoteDir?: string
   externalDb?: string
   externalRedis?: string
+  /** Skip the agentic CRM onboarding step at the end of init. */
+  skipCrm?: boolean
 }
 
 /** Open a URL in the user's default browser. */
@@ -470,14 +474,14 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     }
 
     // Write ~/.lead-routing/mcp.json for zero-config MCP server
+    let apiToken = ''
+    let webhookSecret = ''
     try {
-      let webhookSecret = ''
       const envEngineContent = readFileSync(join(dir, '.env.engine'), 'utf-8')
       const wsMatch = envEngineContent.match(/^(?:ENGINE_)?WEBHOOK_SECRET=(.+)$/m)
       if (wsMatch) webhookSecret = wsMatch[1].trim()
 
       // Auto-generate API token by logging into the web app
-      let apiToken = ''
       if (webhookSecret) {
         try {
           log.step('Generating MCP API token...')
@@ -549,6 +553,60 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
       }
     } catch { /* non-fatal */ }
 
+    // ── CRM Onboarding (agentic) ───────────────────────────────────────────
+    // After VPS deploy succeeds, drive the full Salesforce/HubSpot flow from
+    // the CLI so the user doesn't have to visit the web UI. Skipped when
+    // --skip-crm is passed or when no apiToken was generated above.
+    let onboardSummary = ''
+    if (!options.skipCrm && apiToken) {
+      try {
+        if (crmType === 'salesforce') {
+          log.step('Connecting Salesforce')
+          const result = await sfdcOnboard({
+            appUrl: cfg.appUrl,
+            engineUrl: cfg.engineUrl,
+            apiToken,
+            webhookSecret,
+            installDir: dir,
+            licenseTier: licenseResult.tier,
+          })
+          const synced = Object.entries(result.fieldsSynced)
+            .map(([obj, r]) => {
+              if (!r) return `${obj}: (skipped)`
+              if (r.skipped) return `${obj}: (Pro tier)`
+              if (r.ok) return `${obj}: ${r.synced ?? 0}`
+              return `${obj}: failed`
+            })
+            .join(', ')
+          onboardSummary =
+            `  Salesforce:     ${result.onboardingDone ? chalk.green('Connected') : chalk.yellow('Partial — see warnings above')}\n` +
+            `  Fields:         ${synced}\n`
+        } else {
+          log.step('Connecting HubSpot')
+          const result = await hubspotOnboard({
+            appUrl: cfg.appUrl,
+            apiToken,
+          })
+          const fields = result.fieldsSynced
+          onboardSummary =
+            `  HubSpot:        ${result.onboardingDone ? chalk.green('Connected') : chalk.yellow('Partial — see warnings above')}\n` +
+            `  Fields:         ${
+              fields.skipped ? '(license tier)' : fields.ok ? `${fields.synced ?? 0} synced` : 'failed'
+            }\n`
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.warn(
+          `CRM onboarding did not complete: ${message}\n` +
+            `Re-run later with: ${chalk.cyan(crmType === 'salesforce' ? 'lead-routing sfdc deploy' : 'open the HubSpot integration page')}`
+        )
+      }
+    } else if (options.skipCrm) {
+      log.info('Skipping CRM onboarding (--skip-crm)')
+    } else if (!apiToken) {
+      log.warn('Skipping CRM onboarding — no API token was generated. Connect from the web UI later.')
+    }
+
     // Done
     const crmSteps = crmType === 'salesforce'
       ? `  ${chalk.cyan('2.')} Go to Integrations → Salesforce → Connect\n` +
@@ -572,6 +630,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
         `  Dashboard:      ${chalk.cyan(cfg.appUrl)}\n` +
         `  Engine:         ${chalk.cyan(cfg.engineUrl)}\n` +
         agentApiLines +
+        onboardSummary +
         '\n' +
         `  Admin email:    ${chalk.white(cfg.adminEmail)}\n` +
         dnsLine +

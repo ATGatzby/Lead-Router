@@ -227,15 +227,16 @@ lead-routing/
 | POST | `/api/queues/license` | Session | License queues as routing targets `{ queueIds: string[] }` — sets `isLicensed = true` |
 | POST | `/api/queues/de-license` | Session | De-license queues `{ queueIds: string[] }` — sets `isLicensed = false` |
 | GET | `/api/fields?object=LEAD` | Session | List field schemas |
-| POST | `/api/fields/sync` | X-Sfdc-Org-Id | Sync field schemas (called by Apex) |
+| POST | `/api/fields/sync` | X-Sfdc-Org-Id **or** Bearer (CLI) | Sync field schemas. Apex sends `X-Sfdc-Org-Id` (+ HMAC); CLI sends `Authorization: Bearer lr_...` resolved per-route via `resolveBearerOrgId()` (route is under `PUBLIC_PREFIX` so proxy does NOT inject `x-org-id`). |
 | POST | `/api/settings/sync-sfdc` | Session | Push settings to Salesforce |
 | POST | `/api/settings/notifications` | Session | Configure webhook notifications |
 
-#### Setup & Onboarding (3 routes)
+#### Setup & Onboarding (4 routes)
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/setup/status` | X-Sfdc-Org-Id | Check org connection (Apex polling) |
-| POST | `/api/setup/onboarding-done` | X-Sfdc-Org-Id | Mark onboarding complete |
+| POST | `/api/setup/onboarding-done` | X-Sfdc-Org-Id **or** Bearer (CLI) | Mark onboarding complete + re-push Routing_Settings. Both auth paths resolve via `resolveBearerOrgId()` for the CLI flow. |
+| POST | `/api/setup/test-event` | X-Sfdc-Org-Id **or** Bearer (CLI) | Fires a synthetic Lead event at the engine `/route` (HMAC-signed with `webhookSecret`). Returns `{ ok, recordId, objectType, engineStatus, engineResponse, elapsedMs }` so the CLI can confirm the web→engine→DB roundtrip end-to-end. |
 | GET | `/api/onboarding/status` | Session | Sidebar checklist progress (5 items with clickable links: Connect CRM → /integrations/salesforce, Deploy Package → /integrations/salesforce, Sync Fields → /integrations/salesforce, License Users → /license-users, Create Routing Rule → /routing-rules/new) |
 
 #### Salesforce Integration Management (6 routes)
@@ -509,7 +510,8 @@ POST /route/batch → bulk idempotency → enqueue N jobs
 
 | Command | Purpose |
 |---------|---------|
-| `lead-routing init` | Interactive 7-step deployment wizard |
+| `lead-routing init` | Interactive deployment + agentic CRM onboarding wizard |
+| `lead-routing init --skip-crm` | Infra-only deploy (no CRM connect / field sync) |
 | `lead-routing deploy` | Update live installation (pull + restart + migrate) |
 | `lead-routing doctor` | Health check (Docker, containers, HTTP endpoints) |
 | `lead-routing logs [service]` | Stream container logs |
@@ -517,23 +519,24 @@ POST /route/batch → bulk idempotency → enqueue N jobs
 | `lead-routing config show` | Display installation config |
 | `lead-routing config sfdc` | Update SFDC OAuth credentials |
 | `lead-routing sfdc deploy` | Deploy/redeploy Salesforce package |
+| `lead-routing sfdc connect` | Alias of `sfdc deploy` — runs the full agentic Salesforce onboarding flow |
 | `lead-routing uninstall` | Full teardown |
 
 ### 6.2 Init Flow
 
 ```
-                    LOCAL MACHINE                              REMOTE VPS
-                    ─────────────                              ──────────
+                    LOCAL MACHINE                              REMOTE VPS / CRM
+                    ─────────────                              ────────────────
 Step 1: Prerequisites
-  ├─ Check Node 20+
-  └─ Check sf CLI installed
+  └─ Check Node 20+
 
 Step 2: Collect SSH Config
   └─ host, port, user, password/key, remoteDir
 
 Step 3: Collect App Config
   ├─ App URL, Engine URL
-  ├─ SFDC client ID/secret/login URL
+  ├─ CRM choice (Salesforce / HubSpot)
+  ├─ SFDC client ID/secret/login URL  (if Salesforce)
   ├─ Admin email + password
   └─ Auto-generate: dbPassword, sessionSecret,
      engineWebhookSecret, internalApiKey
@@ -558,10 +561,42 @@ Step 7: Verify Health
   ├─ Poll GET {appUrl}/api/health (24 × 5s)
   └─ Poll GET {engineUrl}/health
 
-  ▸ Note: "Next: Connect Salesforce" — directs user
-    to Integrations → Salesforce in the web UI
-    (SFDC deploy moved out of CLI init)
+Step 8: Agentic CRM Onboarding (NEW — runs in CLI)
+  ├─ IF Salesforce  → sfdcOnboard()
+  │     ├─ Prompt user to install managed package (1 click in browser)
+  │     ├─ OAuth bridge — opens consent, captures tokens (1 click)
+  │     ├─ sfdcDeployInline() — deploy settings + Remote Sites + permset
+  │     ├─ POST /api/fields/sync × {Lead, Contact, Account}
+  │     ├─ POST /api/setup/test-event — confirms Apex→engine roundtrip
+  │     └─ POST /api/setup/onboarding-done
+  └─ IF HubSpot     → hubspotOnboard()
+        ├─ OAuth bridge — opens consent, captures tokens (1 click)
+        ├─ POST /api/integrations/hubspot/fields
+        └─ POST /api/setup/onboarding-done
+
+Step 9: MCP Setup (optional)
+  └─ Offer to register MCP server with Claude Code / Desktop
 ```
+
+**Manual clicks left:** exactly 2 — Salesforce package install + OAuth Allow.
+On HubSpot: 1 click (OAuth Allow). All other steps run programmatically from the CLI; no web-app visit is required to finish onboarding.
+
+### 6.2.1 Agentic Onboarding
+
+After health-check passes, the CLI orchestrates CRM connection itself instead of pointing the user at the web UI. The two new step files live under `apps/cli/src/steps/`:
+
+| Step file | Responsibility |
+|-----------|----------------|
+| `sfdc-onboard.ts` | Salesforce flow: managed-package install prompt → CLI auth bridge (`/api/cli-auth/request` + `/api/cli-auth/poll`) → `sfdcDeployInline()` → `/api/fields/sync` per object → `/api/setup/test-event` → `/api/setup/onboarding-done`. Detects already-connected orgs (skips OAuth, refreshes fields only). Catches 402 from field sync to honour Free-tier `LEAD`-only gating. |
+| `hubspot-onboard.ts` | HubSpot flow: CLI auth bridge (with manual fallback when bridge endpoints aren't deployed) → `/api/integrations/hubspot/fields` → `/api/setup/onboarding-done`. |
+| `utils/field-sync-client.ts` | Typed wrapper around `/api/fields/sync` and `/api/integrations/hubspot/fields` — sends Bearer API token (CLI) with `X-Sfdc-Org-Id` fallback (Apex). Returns structured `{ ok, synced?, skipped?, error? }`; `skipped: true` is emitted on HTTP 402 (license-tier gate). |
+| `steps/sfdc-onboard.test.ts`, `steps/hubspot-onboard.test.ts`, `utils/field-sync-client.test.ts` | Vitest mocks for `@clack/prompts`, `loginViaAppBridge`, `sfdcDeployInline`, and global `fetch`. Cover happy path, idempotency (already-onboarded org), license-tier gating, OAuth/deploy/field-sync failures, manual-fallback HubSpot flow, and `skipTestEvent`. |
+
+The CLI authenticates to the web app with the API token generated in step 6 (also injected into `docker-compose.yml` for the MCP container). Only the OAuth provider (Salesforce or HubSpot) requires a real browser session; everything else is plain HTTPS POST calls from Node.
+
+**Idempotency:** `init` is safe to re-run. The CLI checks `GET /api/setup/status` first; if `sfdcOrgId` is already set, OAuth is skipped and only field sync + test event re-run.
+
+**Flag:** `--skip-crm` short-circuits step 8 entirely for users who only want the infrastructure stood up.
 
 ### 6.3 Generated Files
 
@@ -1160,6 +1195,12 @@ Tab layout at `/analytics` with shared filter bar (date range, object type, rule
 27. **`yaml.dump` can break `docker-compose.yml` formatting** — Python's `yaml.dump` re-serializes the entire file, potentially reordering keys and stripping comments. Use Python string replacement (e.g., `re.sub`) for targeted edits to docker-compose files.
 
 28. **Marketing site at `/root/marketing-site/` is independent from `/root/lead-routing/`** — safe to wipe `lead-routing/` without losing the marketing site. They share the same Caddy instance but are separate directory trees.
+
+29. **Managed package install cannot be automated** — Salesforce only allows package install via the UI at `/packaging/installPackage.apexp`. There is no Subscriber Package API for install. The agentic CLI flow opens the install URL in the user's browser and polls until the package is detected; the click itself is unavoidable.
+
+30. **OAuth consent requires a browser visit** — Salesforce and HubSpot both require the user to be present at the provider's consent screen. The CLI uses the auth-bridge pattern (`/api/cli-auth/request` returns an `authUrl`, the CLI opens it, and `/api/cli-auth/poll/{sessionId}` long-polls until the web app's OAuth callback finishes and stashes tokens in the in-memory CLI auth store) so the customer never has to log into the self-hosted web app — they only see their CRM's consent screen.
+
+31. **`PUBLIC_PREFIXES` short-circuits the proxy's Bearer-token branch** — any route under `/api/setup/`, `/api/fields/sync`, `/api/cli-auth/`, etc. is matched BEFORE the `Bearer lr_*` resolution in `proxy.ts`, so the proxy does **not** inject `x-org-id` for those routes. Handlers that need to support both Apex callouts (`X-Sfdc-Org-Id`) and CLI callers (Bearer) must call `resolveBearerOrgId(req.headers.get("authorization"))` themselves. This is the pattern used by `/api/fields/sync`, `/api/setup/onboarding-done`, and `/api/setup/test-event`.
 
 ---
 

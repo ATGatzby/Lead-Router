@@ -12,6 +12,7 @@ const mockPrisma = vi.hoisted(() => ({
 const mockSyncFieldSchema = vi.hoisted(() => vi.fn());
 const mockCreateConnection = vi.hoisted(() => vi.fn());
 const mockValidateSfdcHmac = vi.hoisted(() => vi.fn());
+const mockResolveBearerOrgId = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/license", () => ({
   getTierLimits: mockGetTierLimits,
@@ -32,6 +33,9 @@ vi.mock("@lead-routing/sfdc", () => ({
 }));
 vi.mock("@/lib/validate-sfdc-hmac", () => ({
   validateSfdcHmac: mockValidateSfdcHmac,
+}));
+vi.mock("@/lib/bearer-auth", () => ({
+  resolveBearerOrgId: mockResolveBearerOrgId,
 }));
 // next/headers mock — returns headers from the request
 const mockHeaders = vi.hoisted(() => vi.fn());
@@ -73,6 +77,9 @@ beforeEach(() => {
   mockHeaders.mockResolvedValue(
     new Headers({ "x-sfdc-org-id": "00D000000000001" }),
   );
+
+  // Default: no Bearer token
+  mockResolveBearerOrgId.mockResolvedValue(null);
 
   // Default: org exists with valid tokens
   mockPrisma.organization.findUnique.mockResolvedValue(fakeOrg);
@@ -176,14 +183,15 @@ describe("POST /api/fields/sync — authentication", () => {
     });
   });
 
-  it("returns 401 when x-sfdc-org-id header is missing", async () => {
+  it("returns 401 when both x-sfdc-org-id header and Bearer token are missing", async () => {
     mockHeaders.mockResolvedValue(new Headers());
+    mockResolveBearerOrgId.mockResolvedValue(null);
 
     const res = await POST(makeRequest("LEAD"));
     const body = await res.json();
 
     expect(res.status).toBe(401);
-    expect(body.error).toBe("Missing X-Sfdc-Org-Id header");
+    expect(body.error).toBe("Missing X-Sfdc-Org-Id header or Bearer token");
   });
 
   it("returns 404 when org not found", async () => {
@@ -202,5 +210,107 @@ describe("POST /api/fields/sync — authentication", () => {
 
     expect(res.status).toBe(400);
     expect(body.error).toBe("Invalid object type");
+  });
+});
+
+// ─── Bearer Token Auth Tests ────────────────────────────────────────────────
+
+describe("POST /api/fields/sync — Bearer token auth", () => {
+  beforeEach(() => {
+    mockGetTierLimits.mockReturnValue({
+      allowedTriggers: ["LEAD", "CONTACT", "ACCOUNT"],
+    });
+  });
+
+  it("syncs successfully when Bearer token resolves to an org (no x-sfdc-org-id)", async () => {
+    // Simulate proxy behaviour for /api/fields/sync (a public prefix):
+    //   proxy short-circuits → does NOT inject x-org-id;
+    //   route handler must call resolveBearerOrgId() itself.
+    mockHeaders.mockResolvedValue(
+      new Headers({ authorization: "Bearer lr_abc123" }),
+    );
+    mockResolveBearerOrgId.mockResolvedValue("org-1");
+
+    mockPrisma.organization.findUnique.mockResolvedValue({
+      id: "org-1",
+      sfdcOrgId: "00D000000000099",
+      oauthAccessToken: "token",
+      oauthRefreshToken: "refresh",
+      sfdcInstanceUrl: "https://test.salesforce.com",
+    });
+
+    const req = new NextRequest(
+      "http://localhost/api/fields/sync?object=LEAD",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: "Bearer lr_abc123",
+        },
+        body: JSON.stringify({}),
+      },
+    );
+
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.synced).toBe(42);
+    expect(body.objectType).toBe("LEAD");
+    // findUnique should be called with id (Bearer path), not sfdcOrgId
+    expect(mockPrisma.organization.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "org-1" } }),
+    );
+  });
+
+  it("returns 400 when Bearer org has no Salesforce connection", async () => {
+    mockHeaders.mockResolvedValue(
+      new Headers({ authorization: "Bearer lr_abc123" }),
+    );
+    mockResolveBearerOrgId.mockResolvedValue("org-1");
+
+    mockPrisma.organization.findUnique.mockResolvedValue({
+      id: "org-1",
+      sfdcOrgId: null,
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      sfdcInstanceUrl: null,
+    });
+
+    const req = new NextRequest(
+      "http://localhost/api/fields/sync?object=LEAD",
+      {
+        method: "POST",
+        headers: { authorization: "Bearer lr_abc123" },
+        body: JSON.stringify({}),
+      },
+    );
+
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("Salesforce org not connected");
+  });
+
+  it("prefers x-sfdc-org-id over Bearer when both are present (Apex parity)", async () => {
+    // Apex caller has BOTH the header and (theoretically) some authz.
+    // The route must take the Apex path so HMAC validation can run.
+    mockHeaders.mockResolvedValue(
+      new Headers({
+        "x-sfdc-org-id": "00D000000000001",
+        authorization: "Bearer lr_should_be_ignored",
+      }),
+    );
+    mockResolveBearerOrgId.mockResolvedValue("some-other-org");
+
+    const res = await POST(makeRequest("LEAD"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.synced).toBe(42);
+    expect(mockPrisma.organization.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sfdcOrgId: "00D000000000001" } }),
+    );
   });
 });

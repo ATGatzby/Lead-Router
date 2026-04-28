@@ -22,8 +22,8 @@ const PUBLIC_PREFIXES = [
   "/api/auth/",        // covers /api/auth/sfdc/ and /api/auth/hubspot/ OAuth flows
   "/api/cli-auth/",    // CLI OAuth bridge — request + poll endpoints (no user session)
   "/api/mcp-auth/",    // MCP OAuth — authorize + token endpoints (called by MCP server, no session)
-  "/api/setup/",       // /api/setup/status + /api/setup/onboarding-done (Apex callouts, no session)
-  "/api/fields/sync",  // Called by OnboardingController.syncFieldSchema — X-Sfdc-Org-Id auth
+  "/api/setup/",       // /api/setup/status, /api/setup/onboarding-done, /api/setup/test-event — Apex callouts (X-Sfdc-Org-Id) + CLI Bearer (resolved per-route via resolveBearerOrgId)
+  "/api/fields/sync",  // OnboardingController.syncFieldSchema (X-Sfdc-Org-Id) + CLI Bearer (resolved via resolveBearerOrgId)
   "/_next/",
   "/favicon",
   "/suspended",

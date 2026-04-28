@@ -29,14 +29,17 @@ program
   .option('--remote-dir <path>', 'Remote install directory (default: ~/lead-routing)')
   .option('--external-db <url>', 'Use external PostgreSQL URL instead of managed Docker container')
   .option('--external-redis <url>', 'Use external Redis URL instead of managed Docker container')
+  .option('--skip-crm', 'Skip the agentic Salesforce/HubSpot onboarding step (infra-only deploy)')
   .action((opts: {
     dryRun?: boolean; resume?: boolean
     sshPort?: number; sshUser?: string; sshKey?: string; remoteDir?: string
     externalDb?: string; externalRedis?: string
+    skipCrm?: boolean
   }) => runInit({
     dryRun: opts.dryRun, resume: opts.resume,
     sshPort: opts.sshPort, sshUser: opts.sshUser, sshKey: opts.sshKey,
     remoteDir: opts.remoteDir, externalDb: opts.externalDb, externalRedis: opts.externalRedis,
+    skipCrm: opts.skipCrm,
   }))
 
 program

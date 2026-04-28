@@ -1,7 +1,9 @@
 interface CliAuthEntry {
   status: "pending" | "ok";
   accessToken?: string;
+  refreshToken?: string;
   instanceUrl?: string;
+  sfdcOrgId?: string;
   codeVerifier?: string;
   expiresAt: number;
 }
@@ -27,17 +29,34 @@ export function getCliAuthCodeVerifier(sessionId: string): string | undefined {
   return store.get(sessionId)?.codeVerifier;
 }
 
+/**
+ * Mark a CLI auth session as successfully authenticated.
+ * The CLI polls /api/cli-auth/poll/:sessionId and receives all four fields
+ * (accessToken, refreshToken, instanceUrl, sfdcOrgId) so it can subsequently
+ * call APIs that require either Bearer auth (lr_*) or org-scoped lookups.
+ */
 export function completeCliAuthSession(
   sessionId: string,
-  accessToken: string,
-  instanceUrl: string
+  payload: {
+    accessToken: string;
+    refreshToken?: string;
+    instanceUrl: string;
+    sfdcOrgId?: string;
+  }
 ): boolean {
   const entry = store.get(sessionId);
   if (!entry || entry.expiresAt < Date.now()) {
     store.delete(sessionId);
     return false;
   }
-  store.set(sessionId, { ...entry, status: "ok", accessToken, instanceUrl });
+  store.set(sessionId, {
+    ...entry,
+    status: "ok",
+    accessToken: payload.accessToken,
+    refreshToken: payload.refreshToken,
+    instanceUrl: payload.instanceUrl,
+    sfdcOrgId: payload.sfdcOrgId,
+  });
   return true;
 }
 

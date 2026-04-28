@@ -22,6 +22,8 @@ export interface SfdcDeployParams {
   installDir?: string
   /** Webhook secret for HMAC validation — written to Routing_Settings__c.Webhook_Secret__c */
   webhookSecret?: string
+  /** Pre-fetched OAuth tokens — skips loginViaAppBridge if provided. */
+  auth?: { accessToken: string; instanceUrl: string }
 }
 
 /**
@@ -29,13 +31,18 @@ export interface SfdcDeployParams {
  * standalone `sfdc deploy` command.
  *
  * Uses the Salesforce REST API directly — no `sf` CLI required.
+ *
+ * If `params.auth` is provided, the OAuth bridge step is skipped (callers like
+ * `sfdcOnboard` reuse the tokens captured during their own bridge call).
  */
 export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> {
   const { appUrl, engineUrl, installDir } = params
   const s = spinner()
 
-  // ── 1. Web login via app bridge ────────────────────────────────────────────
-  const { accessToken, instanceUrl } = await loginViaAppBridge(appUrl)
+  // ── 1. Web login via app bridge (or reuse) ─────────────────────────────────
+  const { accessToken, instanceUrl } = params.auth
+    ? params.auth
+    : await loginViaAppBridge(appUrl)
   const sf = new SalesforceApi(instanceUrl, accessToken)
 
   // ── 2. Copy + patch sfdc-package ───────────────────────────────────────────
@@ -201,11 +208,12 @@ export async function sfdcDeployInline(params: SfdcDeployParams): Promise<void> 
  *  3. Web app exchanges code, stores token under sessionId
  *  4. Poll {appUrl}/api/cli-auth/poll/{sessionId} until token arrives
  *
- * Returns { accessToken, instanceUrl } for direct REST API usage.
+ * Returns { accessToken, instanceUrl, sfdcOrgId? } for direct REST API usage.
+ * `sfdcOrgId` is included if Phase 1 web app is deployed (added to poll response).
  */
-async function loginViaAppBridge(
+export async function loginViaAppBridge(
   rawAppUrl: string
-): Promise<{ accessToken: string; instanceUrl: string }> {
+): Promise<{ accessToken: string; instanceUrl: string; sfdcOrgId?: string }> {
   // Strip trailing slash so URLs like "https://example.com/" don't produce double-slashes
   const appUrl = rawAppUrl.replace(/\/+$/, '')
   const s = spinner()
@@ -253,6 +261,7 @@ async function loginViaAppBridge(
   const maxPolls = 150
   let accessToken: string | undefined
   let instanceUrl: string | undefined
+  let sfdcOrgId: string | undefined
 
   for (let i = 0; i < maxPolls; i++) {
     await new Promise<void>((r) => setTimeout(r, 2000))
@@ -266,10 +275,12 @@ async function loginViaAppBridge(
         status: 'pending' | 'ok' | 'expired'
         accessToken?: string
         instanceUrl?: string
+        sfdcOrgId?: string
       }
       if (data.status === 'ok') {
         accessToken = data.accessToken
         instanceUrl = data.instanceUrl
+        sfdcOrgId = data.sfdcOrgId
         break
       }
     } catch (err) {
@@ -288,5 +299,5 @@ async function loginViaAppBridge(
 
   s.stop('Authenticated with Salesforce')
 
-  return { accessToken, instanceUrl }
+  return { accessToken, instanceUrl, sfdcOrgId }
 }

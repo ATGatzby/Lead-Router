@@ -26,11 +26,10 @@ describe("cli-auth-store", () => {
     const mod = await import("./cli-auth-store");
     mod.createCliAuthSession("sess-2", "verifier-xyz");
 
-    const ok = mod.completeCliAuthSession(
-      "sess-2",
-      "access-token-123",
-      "https://login.salesforce.com"
-    );
+    const ok = mod.completeCliAuthSession("sess-2", {
+      accessToken: "access-token-123",
+      instanceUrl: "https://login.salesforce.com",
+    });
     expect(ok).toBe(true);
 
     // Poll should return the completed session
@@ -43,18 +42,17 @@ describe("cli-auth-store", () => {
 
   it("completeCliAuthSession returns false for unknown session", async () => {
     const mod = await import("./cli-auth-store");
-    const ok = mod.completeCliAuthSession(
-      "nonexistent",
-      "tok",
-      "https://login.salesforce.com"
-    );
+    const ok = mod.completeCliAuthSession("nonexistent", {
+      accessToken: "tok",
+      instanceUrl: "https://login.salesforce.com",
+    });
     expect(ok).toBe(false);
   });
 
   it("pollCliAuthSession returns and deletes completed session (consumed on first poll)", async () => {
     const mod = await import("./cli-auth-store");
     mod.createCliAuthSession("sess-3", "v");
-    mod.completeCliAuthSession("sess-3", "tok", "https://sf.com");
+    mod.completeCliAuthSession("sess-3", { accessToken: "tok", instanceUrl: "https://sf.com" });
 
     // First poll: returns the entry and deletes it
     const first = mod.pollCliAuthSession("sess-3");
@@ -107,7 +105,7 @@ describe("cli-auth-store", () => {
     const now = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(now + 11 * 60 * 1000);
 
-    const ok = mod.completeCliAuthSession("sess-6", "tok", "https://sf.com");
+    const ok = mod.completeCliAuthSession("sess-6", { accessToken: "tok", instanceUrl: "https://sf.com" });
     expect(ok).toBe(false);
   });
 
