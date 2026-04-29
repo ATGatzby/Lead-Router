@@ -27,11 +27,12 @@ export async function POST(req: NextRequest) {
   // Try to resolve org from Bearer token (optional — backward compat with old CLI)
   let orgId: string | undefined;
   try {
-    orgId = (await resolveBearerOrgId(req)) ?? undefined;
+    const authHeader = req.headers.get('authorization');
+    orgId = (await resolveBearerOrgId(authHeader)) ?? undefined;
   } catch {
     // No Bearer token or invalid — proceed without orgId (legacy flow)
   }
-  console.log(`[cli-auth] REQUEST_REACHED_v2 sessionId=${sessionId} orgId=${orgId ?? 'null'} hasBearer=${!!req.headers.get('authorization')}`);
+  console.log(`[cli-auth] REQUEST_REACHED_v3 sessionId=${sessionId} orgId=${orgId ?? 'null'} hasBearer=${!!req.headers.get('authorization')}`);
 
   createCliAuthSession(sessionId, codeVerifier, orgId);
 
