@@ -72,11 +72,16 @@ export async function GET(req: NextRequest) {
   // Check if user has an active session
   const session = await getSession();
   if (!session?.orgId) {
-    // Redirect to login, preserving the full authorize URL as return target
-    const returnUrl = req.nextUrl.toString();
-    const loginUrl = new URL("/login", req.nextUrl.origin);
+    // Redirect to login, preserving the full authorize URL as return target.
+    // Use APP_URL (public) as base — req.nextUrl reflects the Docker container's
+    // internal hostname when running behind a reverse proxy, leaking that into
+    // the browser redirect ("DNS_PROBE_FINISHED_NXDOMAIN" on something like
+    // db69fb5c41cb:3000/login...).
+    const publicAppUrl = process.env.APP_URL ?? req.nextUrl.origin;
+    const returnUrl = new URL(req.nextUrl.pathname + req.nextUrl.search, publicAppUrl).toString();
+    const loginUrl = new URL("/login", publicAppUrl);
     loginUrl.searchParams.set("next", returnUrl);
-    console.log(`[MCP OAuth] No session, redirecting to login`);
+    console.log(`[MCP OAuth] No session, redirecting to login at ${loginUrl.toString()}`);
     return NextResponse.redirect(loginUrl);
   }
 
