@@ -130,6 +130,7 @@ export async function GET(req: NextRequest) {
       // initiated with a Bearer token (so subsequent /api/fields/sync and
       // /api/setup/* calls can find the org).
       const cliOrgId = getCliAuthOrgId(sessionId);
+      console.log(`[cli-auth] CALLBACK_REACHED_v2 sessionId=${sessionId} cliOrgId=${cliOrgId ?? 'null'} sfdcOrgId=${sfdcOrgId ?? 'null'}`);
       if (cliOrgId && sfdcOrgId) {
         try {
           // Check for SFDC-org conflict (already connected to another LR org)

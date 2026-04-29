@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   } catch {
     // No Bearer token or invalid — proceed without orgId (legacy flow)
   }
+  console.log(`[cli-auth] REQUEST_REACHED_v2 sessionId=${sessionId} orgId=${orgId ?? 'null'} hasBearer=${!!req.headers.get('authorization')}`);
 
   createCliAuthSession(sessionId, codeVerifier, orgId);
 
